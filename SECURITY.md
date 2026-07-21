@@ -1,7 +1,7 @@
 # Security
 
 If you discover a security issue in the Caraer CLI or related developer APIs,
-please report it privately to **security@caraer.com** (or your Caraer account
+please report it privately to **sem@caraer.com** (or your Caraer account
 contact). Do not open a public GitHub issue for vulnerabilities.
 
 Please include:

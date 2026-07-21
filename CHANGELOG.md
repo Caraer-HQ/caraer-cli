@@ -18,8 +18,14 @@
 - Removed `caraer config` command group (use `caraer profile` instead)
 - Removed `caraer completion` command group; shell completion is installed by `scripts/install.sh`
 - Public packaging polish: LICENSE, SECURITY, CONTRIBUTING; example defaults to `2026.2`
-- Developer sandboxes clone the selected company Neo4j DB; activate with
-  `X-Caraer-Sandbox-Uuid` (`caraer sandbox use` / `clear`)
+- Developer sandboxes clone the selected company Neo4j DB only (same company
+  identity; `X-Caraer-Sandbox-Uuid` overrides `databaseid`). Recreate sandboxes
+  after upgrading past the old clone-company model
+  (`caraer sandbox use` / `clear`)
+- `caraer apps add-function` / `add-webhook` scaffold local function folders and
+  webhook JSON files
+- Missing required args/options prompt interactively (questionary) instead of
+  failing with Typer usage errors; non-TTY still fails clearly
 
 ## 0.1.0
 

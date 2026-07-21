@@ -66,20 +66,23 @@ Headers:
 ## Developer sandboxes
 
 - `POST /api/v2/developer-sandboxes` — clones the selected company's Neo4j database
-  (max **3** active sandboxes per owner company)
+  (max **3** active sandboxes per owner company). Does **not** create a Company node;
+  stores `databaseId` on `DeveloperSandbox` linked via `OWNED_BY` to the owner.
 - `GET /api/v2/developer-sandboxes`
 - `GET /api/v2/developer-sandboxes/{uuid}`
 
 Headers:
 
-- `X-Caraer-Company-Uuid` — owning (production) company; required
-- `X-Caraer-Sandbox-Uuid` — optional; when set, routes Neo4j to that sandbox clone
+- `X-Caraer-Company-Uuid` — owning (production) company; required (identity stays this company)
+- `X-Caraer-Sandbox-Uuid` — optional; when set, overrides the company `databaseid` for Neo4j routing
 
 Access rules:
 
 - Sandbox must be owned by the company in `X-Caraer-Company-Uuid`
 - Caller must have `HAS_ACCESS_TO` that owner company
-- Sandbox company UUIDs cannot be selected via `X-Caraer-Company-Uuid`
+- Company identity and roles are unchanged; only the Neo4j database is swapped for the request
+
+DTO fields: `ownerCompanyUuid`, `databaseId` (no sandbox `companyUuid`).
 
 ## Response envelope assumptions
 

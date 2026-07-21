@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from typing import Any, Sequence
 
 import questionary
@@ -42,6 +43,26 @@ def ask_text(message: str, *, default: str = "", required: bool = False) -> str:
         if text or not required:
             return text
         print("This field is required.")
+
+
+def require_text(
+    value: str | None,
+    message: str,
+    *,
+    default: str = "",
+    flag: str | None = None,
+) -> str:
+    """Return a stripped value, or interactively ask when missing.
+
+    In non-interactive environments (no TTY), raises ``ValueError`` instead of
+    prompting so CI/scripts still fail clearly.
+    """
+    if value is not None and str(value).strip():
+        return str(value).strip()
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        hint = flag or message
+        raise ValueError(f"Missing required value: {hint}")
+    return ask_text(message, default=default, required=True)
 
 
 def ask_confirm(message: str, *, default: bool = False) -> bool:

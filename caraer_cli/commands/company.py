@@ -37,14 +37,17 @@ def list_companies(ctx: typer.Context) -> None:
 @app.command("select")
 def select_company(
     ctx: typer.Context,
-    company_uuid: str = typer.Argument(
-        ...,
-        help="Company UUID to use for API calls.",
+    company_uuid: str | None = typer.Argument(
+        None,
+        help="Company UUID to use for API calls. Prompted if omitted.",
         autocompletion=complete_company,
     ),
 ) -> None:
     """Select a company for the active profile."""
+    from caraer_cli.wizard.prompts import require_text
+
     app_ctx: AppContext = ctx.obj
+    company_uuid = require_text(company_uuid, "Company UUID", flag="company-uuid")
     cfg = app_ctx.config
     profile = cfg.profiles[app_ctx.profile_name]
     profile.company_uuid = company_uuid

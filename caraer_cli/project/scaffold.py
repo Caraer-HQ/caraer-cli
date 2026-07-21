@@ -23,22 +23,58 @@ def scaffold_webhook(
     config: ProjectConfig,
     *,
     topic: str = "record.created",
-    function_name: str,
+    function_name: str | None = None,
+    delivery_mode: str = "SERVERLESS",
+    url: str | None = None,
     webhook_format: str = "USER_FRIENDLY",
+    description: str | None = None,
+    filename: str | None = None,
+    force: bool = False,
 ) -> Path:
-    """Write an example SERVERLESS webhook linked to a local function by name."""
+    """Write a webhook JSON under ``src/app/webhooks/``."""
+    mode = (delivery_mode or "SERVERLESS").strip().upper()
+    if mode not in {"SERVERLESS", "HTTP"}:
+        raise ValueError("delivery_mode must be SERVERLESS or HTTP")
+    if mode == "SERVERLESS" and (not function_name or not function_name.strip()):
+        raise ValueError("function_name is required for SERVERLESS webhooks")
+    if mode == "HTTP" and (not url or not url.strip()):
+        raise ValueError("url is required for HTTP webhooks")
+
     base = webhooks_dir(root, config.srcDir)
     base.mkdir(parents=True, exist_ok=True)
-    slug = topic.strip().lower().replace(".", "-")
-    path = base / f"{slug}-serverless.json"
-    payload = {
-        "topic": topic,
-        "deliveryMode": "SERVERLESS",
-        "webhookFormat": webhook_format,
-        "description": f"Example webhook: invoke {function_name} on {topic}",
-        "enabled": True,
-        "serverlessFunction": {"name": function_name},
-    }
+    if filename:
+        stem = filename.strip()
+        if stem.endswith(".json"):
+            stem = stem[: -len(".json")]
+        path = base / f"{stem}.json"
+    else:
+        slug = topic.strip().lower().replace(".", "-").replace("_", "-")
+        suffix = "serverless" if mode == "SERVERLESS" else "http"
+        path = base / f"{slug}-{suffix}.json"
+
+    if path.exists() and not force:
+        raise FileExistsError(f"Webhook file already exists: {path}. Use --force to overwrite.")
+
+    if mode == "SERVERLESS":
+        resolved_description = description or f"Invoke {function_name} on {topic}"
+        payload: dict[str, Any] = {
+            "topic": topic,
+            "deliveryMode": "SERVERLESS",
+            "webhookFormat": webhook_format,
+            "description": resolved_description,
+            "enabled": True,
+            "serverlessFunction": {"name": function_name},
+        }
+    else:
+        resolved_description = description or f"HTTP webhook for {topic}"
+        payload = {
+            "topic": topic,
+            "deliveryMode": "HTTP",
+            "webhookFormat": webhook_format,
+            "description": resolved_description,
+            "enabled": True,
+            "url": url.strip(),
+        }
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return path
 
@@ -154,10 +190,17 @@ def scaffold_app_project(
     webhook_file: Path | None = None
     if sample_function:
         function_folder = scaffold_function(
-            project_root, config, sample_function, runtime=runtime
+            project_root,
+            config,
+            sample_function,
+            runtime=runtime,
+            force=force,
         )
         webhook_file = scaffold_webhook(
-            project_root, config, function_name=sample_function
+            project_root,
+            config,
+            function_name=sample_function,
+            force=force,
         )
 
     return {

@@ -66,6 +66,14 @@ legacy per-function Cloud Functions model. See [docs/platform_versioning.md](doc
 `apps push` syncs the full app: marketplace manifest (including pricing + app bars),
 functions, and webhooks. There is no separate upload command.
 
+Add local scaffolds inside an app folder:
+
+```bash
+caraer apps add-function my-action
+caraer apps add-webhook --topic record.created --function my-action
+caraer apps add-webhook --topic app.bar.triggered --mode HTTP --url https://example.com/hook
+```
+
 Only the **app creator company** (or super-admin) can push builds for an app.
 
 ## Platform versions
@@ -90,7 +98,7 @@ until `runtimeStatus=READY`, then updates local `caraer.json` to `2026.2`.
 - `apps` — local folder lifecycle + full sync (`pull` / `push`), builds, logs, local dev
 - `webhooks` — formats, events, and test helpers
 - `publish` — submit / status for marketplace review
-- `sandbox` — clone the selected company DB and activate it with `X-Caraer-Sandbox-Uuid`
+- `sandbox` — clone the company Neo4j DB (same company; `X-Caraer-Sandbox-Uuid` overrides `databaseid`)
 
 ## Local app layout
 
@@ -126,20 +134,20 @@ caraer profile set --base-url http://localhost:8080
 
 ## Developer sandboxes
 
-Create a Neo4j clone of the selected company, then activate it per request:
+Create a Neo4j DB clone of the selected company, then activate it per request.
+Company identity stays the same; only the Neo4j `databaseid` is overridden:
 
 ```bash
 caraer company select <owner-company-uuid>
 caraer sandbox create --name my-test
 caraer sandbox list
-caraer sandbox use <sandbox-uuid>   # keeps owner company; sends X-Caraer-Sandbox-Uuid
-# … test against the clone …
-caraer sandbox clear                # back to the owner company database
+caraer sandbox use <sandbox-uuid>   # same company; sends X-Caraer-Sandbox-Uuid
+# … test against the clone DB …
+caraer sandbox clear                # back to the company production database
 ```
 
-Sandbox companies are not selectable via `X-Caraer-Company-Uuid`. The backend
-only honors a sandbox when the caller has access to its owner company.
-Each company may have at most **3** active sandboxes.
+Each company may have at most **3** active sandboxes. After a backend deploy that
+changed the sandbox model, recreate sandboxes (old clone-company sandboxes are invalid).
 
 ## Documentation
 

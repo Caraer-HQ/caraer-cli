@@ -13,30 +13,35 @@ app = typer.Typer(help="Developer sandbox commands.", no_args_is_help=True)
 @app.command("create")
 def create_sandbox(
     ctx: typer.Context,
-    name: str = typer.Option(..., "--name", help="Sandbox name (slug)."),
+    name: str | None = typer.Option(None, "--name", help="Sandbox name (slug). Prompted if omitted."),
     label: str = typer.Option("", "--label", help="Display label (defaults to --name)."),
 ) -> None:
     """Clone the selected company's Neo4j database into a developer sandbox."""
+    from caraer_cli.wizard.prompts import require_text
+
     app_ctx: AppContext = ctx.obj
     if not app_ctx.profile.company_uuid:
         raise ValueError("Select a company first with 'caraer company select <uuid>'.")
+    name = require_text(name, "Sandbox name", flag="--name")
     response = sandboxes_api.create_sandbox(
         app_ctx.api_client(),
         {"name": name, "label": label or name},
     )
     data = response.get("data") or {}
     print_success(
-        "Created sandbox clone of the selected company. "
+        "Created sandbox DB clone for the selected company. "
         "Activate with 'caraer sandbox use <sandbox-uuid>' "
-        "(sends X-Caraer-Sandbox-Uuid; keeps X-Caraer-Company-Uuid as the owner)."
+        "(sends X-Caraer-Sandbox-Uuid; company identity stays the owner)."
     )
     print_data(data, app_ctx.output)
 
 
 @app.command("list")
 def list_sandboxes(ctx: typer.Context) -> None:
-    """List developer sandboxes owned by the selected company."""
+    """List sandboxes for the owner company (ignores active sandbox override)."""
     app_ctx: AppContext = ctx.obj
+    if not app_ctx.profile.company_uuid:
+        raise ValueError("Select a company first with 'caraer company select <uuid>'.")
     response = sandboxes_api.list_sandboxes(app_ctx.api_client())
     print_data(response.get("data"), app_ctx.output)
 
@@ -44,12 +49,18 @@ def list_sandboxes(ctx: typer.Context) -> None:
 @app.command("use")
 def use_sandbox(
     ctx: typer.Context,
-    sandbox_uuid: str = typer.Argument(..., help="Sandbox UUID (DeveloperSandbox uuid)."),
+    sandbox_uuid: str | None = typer.Argument(
+        None,
+        help="Sandbox UUID (DeveloperSandbox uuid). Prompted if omitted.",
+    ),
 ) -> None:
-    """Activate a sandbox via X-Caraer-Sandbox-Uuid (owner company stays selected)."""
+    """Activate a sandbox via X-Caraer-Sandbox-Uuid (overrides Neo4j databaseid only)."""
+    from caraer_cli.wizard.prompts import require_text
+
     app_ctx: AppContext = ctx.obj
     if not app_ctx.profile.company_uuid:
         raise ValueError("Select the owner company first with 'caraer company select <uuid>'.")
+    sandbox_uuid = require_text(sandbox_uuid, "Sandbox UUID", flag="sandbox-uuid")
     response = sandboxes_api.get_sandbox(app_ctx.api_client(), sandbox_uuid)
     data = response.get("data") or {}
     owner = data.get("ownerCompanyUuid")
@@ -64,7 +75,7 @@ def use_sandbox(
     save_config(cfg)
     print_success(
         f"Using sandbox {profile.sandbox_uuid} "
-        f"(owner company {profile.company_uuid}). "
+        f"(company {profile.company_uuid}, db override). "
         "API calls will send X-Caraer-Sandbox-Uuid."
     )
     print_data(data, app_ctx.output)

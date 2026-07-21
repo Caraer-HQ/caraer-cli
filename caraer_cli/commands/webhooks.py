@@ -41,15 +41,26 @@ def events(
 @app.command("test")
 def test(
     ctx: typer.Context,
-    webhook_uuid: str = typer.Argument(..., help="Remote webhook UUID."),
-    record: str = typer.Option(..., "--record", help="Record UUID to include in the test payload."),
+    webhook_uuid: str | None = typer.Argument(
+        None,
+        help="Remote webhook UUID. Prompted if omitted.",
+    ),
+    record: str | None = typer.Option(
+        None,
+        "--record",
+        help="Record UUID to include in the test payload. Prompted if omitted.",
+    ),
     event: str = typer.Option("created", "--event", help="Record event type, e.g. created|updated."),
     app_uuid: str | None = typer.Option(
         None, "--app", "--app-uuid", help="App UUID (defaults to selected app)."
     ),
 ) -> None:
     """Fire a test webhook delivery for a record event."""
+    from caraer_cli.wizard.prompts import require_text
+
     app_ctx: AppContext = ctx.obj
+    webhook_uuid = require_text(webhook_uuid, "Webhook UUID", flag="webhook-uuid")
+    record = require_text(record, "Record UUID", flag="--record")
     resolved = resolve_app_uuid(app_ctx, app_uuid)
     response = webhook_api.test_webhook(
         app_ctx.api_client(), resolved, webhook_uuid, record, event

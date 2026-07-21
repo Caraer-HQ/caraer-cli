@@ -15,7 +15,11 @@ app = typer.Typer(help="Authentication commands.", no_args_is_help=True)
 @app.command("login")
 def login(
     ctx: typer.Context,
-    email: str = typer.Option(..., "--email", help="Account email address."),
+    email: str | None = typer.Option(
+        None,
+        "--email",
+        help="Account email address. Prompted if omitted.",
+    ),
     password: str = typer.Option(
         None,
         "--password",
@@ -25,7 +29,10 @@ def login(
     ),
 ) -> None:
     """Log in and store a session token for the active profile."""
+    from caraer_cli.wizard.prompts import require_text
+
     app_ctx: AppContext = ctx.obj
+    email = require_text(email, "Email", flag="--email")
     resolved_password = password or getpass.getpass("Password: ")
     client = app_ctx.api_client()
     response = auth_api.login(client, email, resolved_password)

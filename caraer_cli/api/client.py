@@ -35,6 +35,7 @@ class CaraerApiClient:
         json_body: dict[str, Any] | None = None,
         allow_unauthenticated: bool = False,
         send_company_header: bool = True,
+        send_sandbox_header: bool = True,
         timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         headers: dict[str, str] = {"Content-Type": "application/json"}
@@ -42,7 +43,8 @@ class CaraerApiClient:
             headers["Authorization"] = f"Bearer {self.context.token}"
         if send_company_header and self.context.company_uuid:
             headers["X-Caraer-Company-Uuid"] = self.context.company_uuid
-        if send_company_header and self.context.sandbox_uuid:
+        # Sandbox management APIs must hit the owner company, not the clone.
+        if send_company_header and send_sandbox_header and self.context.sandbox_uuid:
             headers["X-Caraer-Sandbox-Uuid"] = self.context.sandbox_uuid
 
         if not allow_unauthenticated and "Authorization" not in headers:

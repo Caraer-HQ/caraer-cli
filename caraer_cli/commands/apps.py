@@ -666,6 +666,136 @@ def push_public(
     print_data(result, app_ctx.output)
 
 
+def normalize_function_name(value: str) -> str:
+    import re
+
+    normalized = value.strip().lower()
+    normalized = re.sub(r"[^a-z0-9]+", "-", normalized)
+    normalized = re.sub(r"-+", "-", normalized).strip("-")
+    return normalized
+
+
+@app.command("add-function")
+def add_function(
+    ctx: typer.Context,
+    name: str | None = typer.Argument(
+        None,
+        help="Function name / folder (e.g. hello-world). Prompted if omitted.",
+    ),
+    runtime: str | None = typer.Option(
+        None,
+        "--runtime",
+        help="nodejs22 or python312 (defaults to caraer.json runtime or nodejs22).",
+        autocompletion=complete_runtime,
+    ),
+    description: str = typer.Option("", "--description", help="Function description."),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing scaffold files."),
+) -> None:
+    """Scaffold a local function folder under src/app/functions/<name>/."""
+    from caraer_cli.app_sync import resolve_app_root
+    from caraer_cli.project.schema import load_workspace
+    from caraer_cli.project.sync import scaffold_function
+    from caraer_cli.wizard.prompts import require_text
+
+    app_ctx: AppContext = ctx.obj
+    name = require_text(name, "Function name", flag="name")
+    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    config = load_workspace(root)
+    normalized = normalize_function_name(name)
+    if not normalized:
+        raise ValueError("Function name must contain letters or digits.")
+    resolved_runtime = (runtime or config.resolved_runtime("nodejs22")).strip().lower()
+    if resolved_runtime not in {"nodejs22", "python312"}:
+        raise ValueError("runtime must be nodejs22 or python312")
+    try:
+        folder = scaffold_function(
+            root,
+            config,
+            normalized,
+            resolved_runtime,
+            description=description or normalized,
+            force=force,
+        )
+    except FileExistsError as exc:
+        raise ValueError(str(exc)) from None
+    print_success(f"Created function scaffold at {folder}")
+
+
+@app.command("add-webhook")
+def add_webhook(
+    ctx: typer.Context,
+    topic: str | None = typer.Option(
+        None,
+        "--topic",
+        "-t",
+        help="Webhook topic (e.g. record.created, app.bar.triggered). Prompted if omitted.",
+    ),
+    function: str | None = typer.Option(
+        None,
+        "--function",
+        "-f",
+        help="Local function name for SERVERLESS delivery.",
+        autocompletion=complete_local_function,
+    ),
+    mode: str = typer.Option(
+        "SERVERLESS",
+        "--mode",
+        help="SERVERLESS (default) or HTTP.",
+    ),
+    url: str | None = typer.Option(None, "--url", help="Destination URL when --mode HTTP."),
+    webhook_format: str = typer.Option(
+        "USER_FRIENDLY",
+        "--format",
+        help="Webhook payload format (e.g. USER_FRIENDLY, RAW).",
+    ),
+    description: str = typer.Option("", "--description", help="Webhook description."),
+    filename: str | None = typer.Option(
+        None,
+        "--filename",
+        help="Output file name under webhooks/ (default: <topic>-serverless.json).",
+    ),
+    force: bool = typer.Option(False, "--force", help="Overwrite an existing webhook file."),
+) -> None:
+    """Scaffold a local webhook JSON under src/app/webhooks/."""
+    from caraer_cli.app_sync import resolve_app_root
+    from caraer_cli.project.scaffold import scaffold_webhook
+    from caraer_cli.project.schema import load_workspace
+    from caraer_cli.wizard.prompts import require_text
+
+    app_ctx: AppContext = ctx.obj
+    topic = require_text(topic, "Webhook topic", flag="--topic")
+    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    config = load_workspace(root)
+    resolved_mode = mode.strip().upper()
+    function_name = normalize_function_name(function) if function else None
+    if resolved_mode == "SERVERLESS" and not function_name:
+        function_name = normalize_function_name(
+            require_text(None, "Function name", flag="--function")
+        )
+    if resolved_mode == "HTTP" and not (url and url.strip()):
+        url = require_text(None, "Webhook URL", flag="--url")
+    if resolved_mode == "SERVERLESS" and not function_name:
+        raise ValueError("SERVERLESS webhooks require --function <name>.")
+    if resolved_mode == "HTTP" and not (url and url.strip()):
+        raise ValueError("HTTP webhooks require --url <https://...>.")
+    try:
+        path = scaffold_webhook(
+            root,
+            config,
+            topic=topic.strip(),
+            function_name=function_name,
+            delivery_mode=resolved_mode,
+            url=url,
+            webhook_format=webhook_format.strip() or "USER_FRIENDLY",
+            description=description or None,
+            filename=filename,
+            force=force,
+        )
+    except FileExistsError as exc:
+        raise ValueError(str(exc)) from None
+    print_success(f"Created webhook scaffold at {path}")
+
+
 @app.command("status")
 def app_status(ctx: typer.Context) -> None:
     """Show local↔remote function drift for the current app folder."""

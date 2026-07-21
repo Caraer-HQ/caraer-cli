@@ -67,14 +67,17 @@ def current_profile(ctx: typer.Context) -> None:
 @app.command("use")
 def use_profile(
     ctx: typer.Context,
-    name: str = typer.Argument(
-        ...,
-        help="Profile name to activate.",
+    name: str | None = typer.Argument(
+        None,
+        help="Profile name to activate. Prompted if omitted.",
         autocompletion=complete_profile,
     ),
 ) -> None:
     """Switch the active profile."""
+    from caraer_cli.wizard.prompts import require_text
+
     app_ctx: AppContext = ctx.obj
+    name = require_text(name, "Profile name", flag="name")
     _require_profile(app_ctx, name)
     app_ctx.config.active_profile = name
     save_config(app_ctx.config)
@@ -84,11 +87,11 @@ def use_profile(
 @app.command("create")
 def create_profile(
     ctx: typer.Context,
-    name: str = typer.Argument(..., help="New profile name."),
-    base_url: str = typer.Option(
+    name: str | None = typer.Argument(None, help="New profile name. Prompted if omitted."),
+    base_url: str | None = typer.Option(
         None,
         "--base-url",
-        help="API base URL (required unless --from is set).",
+        help="API base URL (required unless --from is set; prompted if omitted).",
     ),
     from_profile: str | None = typer.Option(
         None,
@@ -99,10 +102,10 @@ def create_profile(
     use: bool = typer.Option(False, "--use", help="Make this the active profile."),
 ) -> None:
     """Create a new profile, optionally copied from an existing one."""
+    from caraer_cli.wizard.prompts import require_text
+
     app_ctx: AppContext = ctx.obj
-    name = name.strip()
-    if not name:
-        raise typer.BadParameter("Profile name cannot be empty.")
+    name = require_text(name, "Profile name", flag="name")
     if name in app_ctx.config.profiles:
         raise typer.BadParameter(f"Profile '{name}' already exists.")
 
@@ -112,8 +115,7 @@ def create_profile(
         if base_url:
             profile.base_url = base_url
     else:
-        if not base_url:
-            raise typer.BadParameter("--base-url is required when not using --from.")
+        base_url = require_text(base_url, "API base URL", flag="--base-url")
         profile = ProfileConfig(base_url=base_url)
 
     app_ctx.config.profiles[name] = profile
@@ -129,15 +131,18 @@ def create_profile(
 @app.command("delete")
 def delete_profile(
     ctx: typer.Context,
-    name: str = typer.Argument(
-        ...,
-        help="Profile name to delete.",
+    name: str | None = typer.Argument(
+        None,
+        help="Profile name to delete. Prompted if omitted.",
         autocompletion=complete_profile,
     ),
     force: bool = typer.Option(False, "--force", help="Allow deleting the active profile."),
 ) -> None:
     """Delete a profile."""
+    from caraer_cli.wizard.prompts import require_text
+
     app_ctx: AppContext = ctx.obj
+    name = require_text(name, "Profile name", flag="name")
     _require_profile(app_ctx, name)
     if len(app_ctx.config.profiles) <= 1:
         raise typer.BadParameter("Cannot delete the last remaining profile.")

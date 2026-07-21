@@ -223,25 +223,44 @@ def status_summary(client: CaraerApiClient, root: Path, config: ProjectConfig) -
     return summary
 
 
-def scaffold_function(root: Path, config: ProjectConfig, name: str, runtime: str = "nodejs22") -> Path:
+def scaffold_function(
+    root: Path,
+    config: ProjectConfig,
+    name: str,
+    runtime: str = "nodejs22",
+    *,
+    description: str | None = None,
+    force: bool = False,
+) -> Path:
+    """Create ``src/app/functions/<name>/`` with manifest + entry source."""
     folder = functions_dir(root, config.srcDir) / name
+    manifest_path = folder / "function.caraer.json"
+    if folder.exists() and any(folder.iterdir()) and not force:
+        raise FileExistsError(
+            f"Function folder already exists: {folder}. Use --force to overwrite scaffold files."
+        )
     folder.mkdir(parents=True, exist_ok=True)
-    manifest = FunctionManifest(name=name, runtime=runtime, description=name)
-    save_function_manifest(folder / "function.caraer.json", manifest)
+    manifest = FunctionManifest(
+        name=name,
+        runtime=runtime,
+        description=description if description is not None else name,
+    )
+    save_function_manifest(manifest_path, manifest)
     entry = folder / manifest.resolved_entry()
-    if runtime.startswith("python"):
-        entry.write_text(
-            'def handler(request):\n'
-            '    """Caraer serverless entrypoint."""\n'
-            '    return {"statusCode": 200, "body": {"ok": True}}\n',
-            encoding="utf-8",
-        )
-    else:
-        entry.write_text(
-            "/**\n * Caraer serverless entrypoint.\n */\n"
-            "exports.handler = async (req, res) => {\n"
-            "  res.status(200).json({ ok: true });\n"
-            "};\n",
-            encoding="utf-8",
-        )
+    if force or not entry.exists():
+        if runtime.startswith("python"):
+            entry.write_text(
+                'def handler(request):\n'
+                '    """Caraer serverless entrypoint."""\n'
+                '    return {"statusCode": 200, "body": {"ok": True}}\n',
+                encoding="utf-8",
+            )
+        else:
+            entry.write_text(
+                "/**\n * Caraer serverless entrypoint.\n */\n"
+                "exports.handler = async (req, res) => {\n"
+                "  res.status(200).json({ ok: true });\n"
+                "};\n",
+                encoding="utf-8",
+            )
     return folder
