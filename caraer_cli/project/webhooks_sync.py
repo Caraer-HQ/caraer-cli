@@ -1,0 +1,233 @@
+"""Sync webhooks between src/app/webhooks/*.json and the remote API."""
+
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+from typing import Any
+
+from caraer_cli.api import webhooks as webhook_api
+from caraer_cli.api.client import CaraerApiClient
+from caraer_cli.project.paths import webhooks_dir
+from caraer_cli.project.schema import ProjectConfig
+from caraer_cli.project.state import load_state, save_state
+
+LOCAL_WEBHOOK_KEYS = (
+    "uuid",
+    "topic",
+    "deliveryMode",
+    "webhookFormat",
+    "description",
+    "url",
+    "serverlessFunction",
+    "enabled",
+)
+
+
+def _slug(value: str) -> str:
+    text = value.strip().lower()
+    text = re.sub(r"[^a-z0-9]+", "-", text)
+    return text.strip("-") or "webhook"
+
+
+def webhook_filename(item: dict[str, Any]) -> str:
+    topic = str(item.get("topic") or "webhook")
+    mode = str(item.get("deliveryMode") or "").lower()
+    uuid = str(item.get("uuid") or "")[:8]
+    parts = [_slug(topic)]
+    if mode:
+        parts.append(_slug(mode))
+    if uuid:
+        parts.append(uuid)
+    return "-".join(parts) + ".json"
+
+
+def discover_local_webhooks(root: Path, config: ProjectConfig) -> list[tuple[Path, dict[str, Any]]]:
+    base = webhooks_dir(root, config.srcDir)
+    if not base.is_dir():
+        return []
+    found: list[tuple[Path, dict[str, Any]]] = []
+    for path in sorted(base.glob("*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            found.append((path, data))
+    return found
+
+
+def _sanitize_local_webhook(item: dict[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for key in LOCAL_WEBHOOK_KEYS:
+        if key in item and item[key] is not None:
+            payload[key] = item[key]
+    # Prefer portable function name over uuid in local files.
+    sf = payload.get("serverlessFunction")
+    if isinstance(sf, dict):
+        name = sf.get("name")
+        uuid = sf.get("uuid")
+        cleaned: dict[str, Any] = {}
+        if name:
+            cleaned["name"] = name
+        elif uuid:
+            cleaned["uuid"] = uuid
+        if cleaned:
+            payload["serverlessFunction"] = cleaned
+        else:
+            payload.pop("serverlessFunction", None)
+    return payload
+
+
+def _resolve_serverless_for_api(
+    payload: dict[str, Any],
+    *,
+    fn_by_name: dict[str, str],
+) -> dict[str, Any]:
+    out = dict(payload)
+    out.pop("uuid", None)  # never send local uuid as create identity unless updating
+    sf = out.get("serverlessFunction")
+    if not isinstance(sf, dict):
+        return out
+    if sf.get("uuid"):
+        out["serverlessFunction"] = {"uuid": sf["uuid"]}
+        return out
+    name = sf.get("name")
+    if name and name in fn_by_name:
+        out["serverlessFunction"] = {"uuid": fn_by_name[name]}
+        return out
+    if name:
+        raise ValueError(
+            f"Webhook references function '{name}' but no UUID is known. "
+            "Push functions first or set serverlessFunction.uuid."
+        )
+    return out
+
+
+def _match_key(item: dict[str, Any]) -> str:
+    topic = str(item.get("topic") or "")
+    mode = str(item.get("deliveryMode") or "")
+    return f"{topic}|{mode}"
+
+
+def push_webhooks(
+    client: CaraerApiClient,
+    root: Path,
+    config: ProjectConfig,
+    *,
+    delete_missing: bool = False,
+) -> dict[str, Any]:
+    if not config.appUuid:
+        raise ValueError("App has no remote UUID. Run 'caraer apps select' or 'caraer apps push'.")
+
+    remote = webhook_api.list_webhooks(client, config.appUuid, page=1, limit=200)
+    remote_items = [i for i in (remote.get("data") or []) if isinstance(i, dict)]
+    by_uuid = {str(i.get("uuid")): i for i in remote_items if i.get("uuid")}
+    by_key = {_match_key(i): i for i in remote_items}
+
+    state = load_state(root)
+    fn_state = state.get("functions") or {}
+    fn_by_name = {
+        name: str(meta["uuid"])
+        for name, meta in fn_state.items()
+        if isinstance(meta, dict) and meta.get("uuid")
+    }
+    wh_state: dict[str, Any] = state.setdefault("webhooks", {})
+
+    results: list[dict[str, Any]] = []
+    local_uuids: set[str] = set()
+    local_keys: set[str] = set()
+
+    for path, raw in discover_local_webhooks(root, config):
+        local = _sanitize_local_webhook(raw)
+        key = _match_key(local)
+        local_keys.add(key)
+        tracked = wh_state.get(path.stem) or {}
+        existing_uuid = str(local.get("uuid") or tracked.get("uuid") or "")
+        remote_item = by_uuid.get(existing_uuid) if existing_uuid else by_key.get(key)
+
+        api_payload = _resolve_serverless_for_api(local, fn_by_name=fn_by_name)
+
+        if remote_item and remote_item.get("uuid"):
+            uuid = str(remote_item["uuid"])
+            local_uuids.add(uuid)
+            response = webhook_api.update_webhook(client, config.appUuid, uuid, api_payload)
+            data = response.get("data") or {}
+            results.append({"file": path.name, "uuid": data.get("uuid", uuid), "action": "updated"})
+            wh_state[path.stem] = {"uuid": data.get("uuid", uuid), "topic": local.get("topic")}
+        else:
+            create_payload = {k: v for k, v in api_payload.items() if k != "uuid"}
+            response = webhook_api.create_webhook(client, config.appUuid, create_payload)
+            data = response.get("data") or {}
+            uuid = data.get("uuid")
+            if uuid:
+                local_uuids.add(str(uuid))
+            results.append({"file": path.name, "uuid": uuid, "action": "created"})
+            if uuid:
+                wh_state[path.stem] = {"uuid": uuid, "topic": local.get("topic")}
+            # Persist uuid back into the local file for stable future matches.
+            if uuid and not raw.get("uuid"):
+                raw["uuid"] = uuid
+                path.write_text(json.dumps(_sanitize_local_webhook(raw), indent=2) + "\n", encoding="utf-8")
+
+    deleted: list[dict[str, Any]] = []
+    if delete_missing:
+        for item in remote_items:
+            uuid = str(item.get("uuid") or "")
+            if not uuid or uuid in local_uuids:
+                continue
+            if _match_key(item) in local_keys:
+                continue
+            webhook_api.delete_webhook(client, config.appUuid, uuid)
+            deleted.append({"uuid": uuid, "topic": item.get("topic"), "action": "deleted"})
+            for stem, meta in list(wh_state.items()):
+                if isinstance(meta, dict) and meta.get("uuid") == uuid:
+                    wh_state.pop(stem, None)
+
+    save_state(root, state)
+    return {"webhooks": results, "deleted": deleted}
+
+
+def pull_webhooks(
+    client: CaraerApiClient,
+    root: Path,
+    config: ProjectConfig,
+) -> dict[str, Any]:
+    if not config.appUuid:
+        raise ValueError("App has no remote UUID. Run 'caraer apps select' or 'caraer apps push'.")
+
+    remote = webhook_api.list_webhooks(client, config.appUuid, page=1, limit=200)
+    remote_items = [i for i in (remote.get("data") or []) if isinstance(i, dict)]
+    base = webhooks_dir(root, config.srcDir)
+    base.mkdir(parents=True, exist_ok=True)
+
+    # Clear previous webhook files for a clean export.
+    for existing in base.glob("*.json"):
+        existing.unlink()
+
+    state = load_state(root)
+    fn_state = state.get("functions") or {}
+    uuid_to_name = {
+        str(meta["uuid"]): name
+        for name, meta in fn_state.items()
+        if isinstance(meta, dict) and meta.get("uuid")
+    }
+    wh_state: dict[str, Any] = {}
+    pulled: list[dict[str, Any]] = []
+
+    for item in remote_items:
+        local = _sanitize_local_webhook(item)
+        sf = local.get("serverlessFunction")
+        if isinstance(sf, dict) and sf.get("uuid"):
+            name = uuid_to_name.get(str(sf["uuid"]))
+            if name:
+                local["serverlessFunction"] = {"name": name}
+        filename = webhook_filename(item)
+        path = base / filename
+        path.write_text(json.dumps(local, indent=2) + "\n", encoding="utf-8")
+        stem = path.stem
+        if item.get("uuid"):
+            wh_state[stem] = {"uuid": item["uuid"], "topic": item.get("topic")}
+        pulled.append({"file": filename, "uuid": item.get("uuid"), "topic": item.get("topic")})
+
+    state["webhooks"] = wh_state
+    save_state(root, state)
+    return {"webhooks": pulled}
