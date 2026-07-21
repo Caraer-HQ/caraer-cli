@@ -14,7 +14,7 @@ from caraer_cli.completion_callbacks import (
     complete_runtime,
 )
 from caraer_cli.context import AppContext
-from caraer_cli.formatters.output import print_app_detail, print_data, print_success, project_rows
+from caraer_cli.formatters.output import print_app_detail, print_data, print_logs, print_success, project_rows
 from caraer_cli.local_app import (
     discover_local_app_files,
     load_local_app,
@@ -1233,6 +1233,8 @@ def app_logs(
 
     client = app_ctx.api_client()
     print_success(f"Fetching logs for '{function_name}'…")
+    seen: set[str] = set()
+    first = True
     while True:
         response = projects_api.get_function_logs(
             client,
@@ -1241,11 +1243,15 @@ def app_logs(
             since=since,
             limit=limit,
         )
-        print_data(response.get("data"), app_ctx.output)
+        payload = response.get("data")
+        if (app_ctx.output or "table").lower() in {"json", "yaml"}:
+            print_data(payload, app_ctx.output)
+        else:
+            print_logs(payload, seen=seen, show_header=first or not follow)
+        first = False
         if not follow:
             break
         time.sleep(3)
-
 
 @app.command("dev")
 def app_dev(

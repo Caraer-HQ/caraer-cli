@@ -50,6 +50,105 @@ def print_data(data: Any, output: str = "table") -> None:
     print_table(data)
 
 
+def print_logs(
+    data: Any,
+    *,
+    seen: set[str] | None = None,
+    show_header: bool = True,
+) -> None:
+    """Render Cloud Logging payloads: summary table, then one line per entry.
+
+    When ``seen`` is provided (follow mode), only newly observed entries are
+    printed so polls don't reprint the same window.
+    """
+    data = normalize_payload(data)
+    if not isinstance(data, dict):
+        print_data(data, "table")
+        return
+
+    entries = data.get("entries")
+    if not isinstance(entries, list):
+        entries = []
+
+    readable_entries = [
+        entry for entry in entries if isinstance(entry, dict) and _log_message(entry)
+    ]
+
+    if show_header:
+        summary = {key: value for key, value in data.items() if key != "entries"}
+        summary["entries"] = len(readable_entries)
+        # Hide empty / error-only message noise in the summary.
+        if not summary.get("message"):
+            summary.pop("message", None)
+        _print_kv(summary)
+        if readable_entries:
+            console.print(Text("Logs", style="bold magenta"))
+
+    if not readable_entries:
+        if show_header:
+            console.print(Text("(no log entries)", style="dim"))
+        return
+
+    ordered = list(reversed(readable_entries))
+    printed = 0
+    for entry in ordered:
+        ts = _format_log_timestamp(entry.get("timestamp"))
+        severity = str(entry.get("severity") or "")
+        message = _log_message(entry) or ""
+        line = f"{ts}  {severity:<7}  {message}".rstrip()
+        key = f"{entry.get('timestamp')}|{severity}|{message}"
+
+        if seen is not None:
+            if key in seen:
+                continue
+            seen.add(key)
+
+        severity_upper = severity.upper()
+        style = None
+        if severity_upper in {"ERROR", "CRITICAL", "ALERT", "EMERGENCY"}:
+            style = "red"
+        elif severity_upper == "WARNING":
+            style = "yellow"
+        console.print(line, style=style, soft_wrap=True)
+        printed += 1
+
+    if show_header and printed == 0 and seen is not None:
+        console.print(Text("(no new log entries)", style="dim"))
+
+
+def _log_message(entry: dict[str, Any]) -> str | None:
+    raw = entry.get("message")
+    if raw is None or raw == "":
+        raw = entry.get("textPayload")
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    # Drop protobuf Any dumps that older backends still return.
+    if text.startswith("type_url:") or '\nvalue: "' in text or "\\nvalue:" in text:
+        return None
+    if len(text) > 2000:
+        return text[:1999] + "…"
+    return text
+
+
+def _format_log_timestamp(value: Any) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    # 2026-07-21T21:16:34.931628Z → 21:16:34
+    if "T" in text:
+        try:
+            time_part = text.split("T", 1)[1]
+            return time_part[:8]
+        except Exception:
+            return text[:19]
+    return text[:19]
+
+
 def print_success(message: str) -> None:
     console.print(f"[green]{message}[/green]")
 

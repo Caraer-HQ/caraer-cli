@@ -26,6 +26,8 @@
   webhook JSON files
 - Missing required args/options prompt interactively (questionary) instead of
   failing with Typer usage errors; non-TTY still fails clearly
+- `caraer apps logs` prints log lines below the summary table; `--follow`
+  streams only new entries; skips unreadable Cloud Audit protobuf dumps
 
 ## 0.1.0
 
