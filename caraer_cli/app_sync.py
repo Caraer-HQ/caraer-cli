@@ -30,6 +30,8 @@ from caraer_cli.project.schema import (
 from caraer_cli.project.state import load_state, save_state
 from caraer_cli.project.sync import pull_functions, upload_functions
 from caraer_cli.project.webhooks_sync import pull_webhooks, push_webhooks
+from caraer_cli.project.schedules_sync import pull_schedules, push_schedules
+from caraer_cli.project.inbound_sync import pull_inbound, push_inbound
 from caraer_cli.utils import deep_merge
 
 
@@ -395,6 +397,20 @@ def push_app(
         config,
         delete_missing=delete_missing,
     )
+    print_success("Syncing schedules…")
+    schedules_result = push_schedules(
+        client,
+        root,
+        config,
+        delete_missing=delete_missing,
+    )
+    print_success("Syncing inbound routes…")
+    inbound_result = push_inbound(
+        client,
+        root,
+        config,
+        delete_missing=delete_missing,
+    )
     return {
         "appUuid": config.appUuid,
         "manifest": {
@@ -404,6 +420,8 @@ def push_app(
         },
         "functions": functions_result,
         "webhooks": webhooks_result,
+        "schedules": schedules_result,
+        "inbound": inbound_result,
     }
 
 
@@ -435,6 +453,8 @@ def pull_app_full(
 
     functions_result: dict[str, Any] = {"functions": [], "error": None}
     webhooks_result: dict[str, Any] = {"webhooks": [], "error": None}
+    schedules_result: dict[str, Any] = {"schedules": [], "error": None}
+    inbound_result: dict[str, Any] = {"inbound": [], "error": None}
     try:
         functions_result = pull_functions(client, root, config)
     except Exception as exc:  # noqa: BLE001
@@ -443,6 +463,14 @@ def pull_app_full(
         webhooks_result = pull_webhooks(client, root, config)
     except Exception as exc:  # noqa: BLE001
         webhooks_result = {"webhooks": [], "error": str(exc)}
+    try:
+        schedules_result = {"count": pull_schedules(client, root, config)}
+    except Exception as exc:  # noqa: BLE001
+        schedules_result = {"schedules": [], "error": str(exc)}
+    try:
+        inbound_result = {"count": pull_inbound(client, root, config)}
+    except Exception as exc:  # noqa: BLE001
+        inbound_result = {"inbound": [], "error": str(exc)}
     return {
         "appUuid": linked_uuid,
         "app_file": str(app_file),
@@ -454,4 +482,6 @@ def pull_app_full(
         },
         "functions": functions_result,
         "webhooks": webhooks_result,
+        "schedules": schedules_result,
+        "inbound": inbound_result,
     }

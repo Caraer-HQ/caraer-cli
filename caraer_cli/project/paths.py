@@ -62,6 +62,14 @@ def webhooks_dir(root: Path, src_dir: str = "src") -> Path:
     return app_dir(root, src_dir) / "webhooks"
 
 
+def schedules_dir(root: Path, src_dir: str = "src") -> Path:
+    return app_dir(root, src_dir) / "schedules"
+
+
+def inbound_dir(root: Path, src_dir: str = "src") -> Path:
+    return app_dir(root, src_dir) / "inbound"
+
+
 APP_MANIFEST_YAML = "app.caraer.yaml"
 APP_MANIFEST_JSON = "app.caraer.json"
 

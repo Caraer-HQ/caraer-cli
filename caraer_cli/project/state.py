@@ -12,6 +12,8 @@ def _default_state() -> dict[str, Any]:
         "projectUuid": None,
         "functions": {},
         "webhooks": {},
+        "schedules": {},
+        "inbound": {},
         "lastBuildUuid": None,
         "lastBuildVersion": None,
         "lastDeployUuid": None,

@@ -796,6 +796,101 @@ def add_webhook(
     print_success(f"Created webhook scaffold at {path}")
 
 
+@app.command("add-schedule")
+def add_schedule(
+    ctx: typer.Context,
+    name: str | None = typer.Argument(None, help="Schedule name (e.g. renew-gmail-watch)."),
+    function: str | None = typer.Option(
+        None,
+        "--function",
+        "-f",
+        help="Local function name to invoke.",
+        autocompletion=complete_local_function,
+    ),
+    schedule: str = typer.Option(
+        "0 0 */6 * * *",
+        "--cron",
+        help="Spring 6-field cron expression.",
+    ),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing file."),
+) -> None:
+    """Scaffold a local schedule JSON under src/app/schedules/."""
+    import json
+    from caraer_cli.app_sync import resolve_app_root
+    from caraer_cli.project.paths import schedules_dir
+    from caraer_cli.project.schema import load_workspace
+    from caraer_cli.wizard.prompts import require_text
+
+    app_ctx: AppContext = ctx.obj
+    name = require_text(name, "Schedule name", flag="name")
+    function_name = normalize_function_name(
+        require_text(function, "Function name", flag="--function")
+    )
+    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    config = load_workspace(root)
+    base = schedules_dir(root, config.srcDir)
+    base.mkdir(parents=True, exist_ok=True)
+    path = base / f"{normalize_function_name(name)}.json"
+    if path.exists() and not force:
+        raise ValueError(f"Schedule file already exists: {path}")
+    payload = {
+        "name": normalize_function_name(name).replace("-", "_"),
+        "schedule": schedule,
+        "enabled": True,
+        "serverlessFunction": {"name": function_name},
+    }
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    print_success(f"Created schedule scaffold at {path}")
+
+
+@app.command("add-inbound")
+def add_inbound(
+    ctx: typer.Context,
+    name: str | None = typer.Argument(None, help="Inbound route name (e.g. gmail-push)."),
+    function: str | None = typer.Option(
+        None,
+        "--function",
+        "-f",
+        help="Local function name to invoke.",
+        autocompletion=complete_local_function,
+    ),
+    auth: str = typer.Option(
+        "SHARED_SECRET",
+        "--auth",
+        help="NONE, SHARED_SECRET, or GOOGLE_OIDC.",
+    ),
+    enqueue: bool = typer.Option(True, "--enqueue/--sync", help="Enqueue as app job (default) or sync invoke."),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing file."),
+) -> None:
+    """Scaffold a local inbound route JSON under src/app/inbound/."""
+    import json
+    from caraer_cli.app_sync import resolve_app_root
+    from caraer_cli.project.paths import inbound_dir
+    from caraer_cli.project.schema import load_workspace
+    from caraer_cli.wizard.prompts import require_text
+
+    app_ctx: AppContext = ctx.obj
+    name = require_text(name, "Inbound route name", flag="name")
+    function_name = normalize_function_name(
+        require_text(function, "Function name", flag="--function")
+    )
+    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    config = load_workspace(root)
+    base = inbound_dir(root, config.srcDir)
+    base.mkdir(parents=True, exist_ok=True)
+    path = base / f"{normalize_function_name(name)}.json"
+    if path.exists() and not force:
+        raise ValueError(f"Inbound file already exists: {path}")
+    payload = {
+        "name": normalize_function_name(name),
+        "authMode": auth.strip().upper(),
+        "enqueue": enqueue,
+        "serverlessFunction": {"name": function_name},
+    }
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    print_success(f"Created inbound scaffold at {path}")
+
+
 @app.command("status")
 def app_status(ctx: typer.Context) -> None:
     """Show local↔remote function drift for the current app folder."""

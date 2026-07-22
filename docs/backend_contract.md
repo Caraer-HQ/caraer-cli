@@ -39,6 +39,23 @@ Headers:
 - `POST /api/v2/apps/{appUuid}/webhooks/test`
 - `POST /api/v2/apps/{appUuid}/webhooks/test/{webhookUuid}/{recordUuid}/{eventType}`
 
+## App integration runtime
+
+- `GET/PUT /api/v2/apps/{appUuid}/installation/state`
+- `GET/PUT/DELETE /api/v2/apps/{appUuid}/installation/state/{key}`
+- `GET /api/v2/apps/{appUuid}/installation/secrets`
+- `PUT/DELETE /api/v2/apps/{appUuid}/installation/secrets/{name}`
+- `POST /api/v2/apps/{appUuid}/installation/jobs`
+- `GET /api/v2/apps/{appUuid}/installation/jobs/{jobId}`
+- `GET /api/v2/apps/{appUuid}/installation/connections`
+- `DELETE /api/v2/apps/{appUuid}/installation/connections/{provider}`
+- CRUD `/api/v2/apps/{appUuid}/schedules`
+- CRUD `/api/v2/apps/{appUuid}/inbound-routes`
+- CRUD `/api/v2/apps/{appUuid}/external-oauth-providers`
+- `POST /api/v2/public/apps/{appUuid}/inbound/{routeName}`
+- `GET /api/v2/public/apps/{appUuid}/oauth/{provider}/authorize`
+- `GET /api/v2/public/apps/{appUuid}/oauth/{provider}/callback`
+
 ## App serverless functions
 
 - `POST /api/v2/apps/{appUuid}/serverless-functions/index`

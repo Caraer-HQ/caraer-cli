@@ -71,6 +71,8 @@ Add local scaffolds inside an app folder:
 ```bash
 caraer apps add-function my-action
 caraer apps add-webhook --topic record.created --function my-action
+caraer apps add-schedule renew-watch --function my-action --cron "0 0 */6 * * *"
+caraer apps add-inbound gmail-push --function my-action --auth SHARED_SECRET
 caraer apps add-webhook --topic app.bar.triggered --mode HTTP --url https://example.com/hook
 ```
 
@@ -109,6 +111,8 @@ my_app/
     app.caraer.yaml           # marketplace definition (scopes, pricing, app bars, …)
     functions/<name>/         # function.caraer.json + entry source
     webhooks/*.json           # one webhook definition per file
+    schedules/*.json          # cron → function (integration runtime)
+    inbound/*.json            # public inbound routes → function
 ```
 
 See [`examples/hello-function`](examples/hello-function) for a minimal sample.

@@ -36,11 +36,13 @@ LOCAL_APP_KEYS = (
     "pricingPlans",
     "appBars",
     "webhookRateLimitPerMinute",
+    "jobRateLimitPerMinute",
     "billFailedWebhookRequests",
     "installWebhook",
     "uninstallWebhook",
     "rotateWebhook",
     "updateWebhook",
+    "externalOAuthProviders",
 )
 
 
