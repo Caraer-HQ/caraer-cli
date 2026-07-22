@@ -25,3 +25,15 @@ caraer apps dev
 For the legacy per-function Cloud Functions model, use
 `caraer apps init --platform 2026.1` (or set `"platformVersion": "2026.1"` in
 `caraer.json`) instead of this example’s default.
+
+## gmail-sync
+
+One-way Gmail → Caraer sync example (OAuth provider, inbound Pub/Sub route,
+watch renewal schedule, history sync job). See `gmail-sync/README.md`.
+
+```bash
+export GMAIL_OAUTH_CLIENT_ID=...
+export GMAIL_OAUTH_CLIENT_SECRET=...
+caraer apps select examples/gmail-sync
+caraer apps push --deploy
+```

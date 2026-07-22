@@ -14,6 +14,7 @@ def _default_state() -> dict[str, Any]:
         "webhooks": {},
         "schedules": {},
         "inbound": {},
+        "externalOAuthProviders": {},
         "lastBuildUuid": None,
         "lastBuildVersion": None,
         "lastDeployUuid": None,

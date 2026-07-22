@@ -32,6 +32,7 @@ from caraer_cli.project.sync import pull_functions, upload_functions
 from caraer_cli.project.webhooks_sync import pull_webhooks, push_webhooks
 from caraer_cli.project.schedules_sync import pull_schedules, push_schedules
 from caraer_cli.project.inbound_sync import pull_inbound, push_inbound
+from caraer_cli.project.oauth_providers_sync import push_external_oauth_providers
 from caraer_cli.utils import deep_merge
 
 
@@ -411,6 +412,13 @@ def push_app(
         config,
         delete_missing=delete_missing,
     )
+    print_success("Syncing external OAuth providers…")
+    oauth_result = push_external_oauth_providers(
+        client,
+        root,
+        config,
+        delete_missing=delete_missing,
+    )
     return {
         "appUuid": config.appUuid,
         "manifest": {
@@ -422,6 +430,7 @@ def push_app(
         "webhooks": webhooks_result,
         "schedules": schedules_result,
         "inbound": inbound_result,
+        "externalOAuthProviders": oauth_result,
     }
 
 
