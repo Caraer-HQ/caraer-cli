@@ -159,7 +159,7 @@ changed the sandbox model, recreate sandboxes (old clone-company sandboxes are i
 ## Related
 
 - API / platform: Caraer backend
-- Docs site: https://docs.caraer.com
+- Docs site: https://developer.caraer.com
 - Example app: [`examples/hello-function`](examples/hello-function)
 
 ## Development / CI
