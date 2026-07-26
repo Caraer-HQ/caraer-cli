@@ -15,6 +15,14 @@ jobs:
     environment: pypi
     steps:
       - uses: actions/checkout@v4
+      - name: Require API_TOKEN secret
+        env:
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+        run: |
+          if [ -z "$API_TOKEN" ]; then
+            echo "::error::Missing secrets.API_TOKEN. Add a PyPI API token (pypi-...) as repository or 'pypi' environment secret named API_TOKEN, then re-run."
+            exit 1
+          fi
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
