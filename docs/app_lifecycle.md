@@ -119,7 +119,9 @@ exports.handler = async (req, res) => {
 
 OAuth **Connect** / **Disconnect** (`ConnectionConnected` / `ConnectionRevoked`) refresh
 company config over websockets but are **not** delivered to `installWebhook` /
-`updateWebhook`. Use the Connections card + installation secrets
+`updateWebhook`. That includes Connect during the post-install dialog (or Skip):
+install still fires `app.installed` only for the install itself, not for OAuth.
+Use the Connections card + installation secrets
 (`{provider}_access_token`) from your functions instead.
 
 ## Related marketplace modules
