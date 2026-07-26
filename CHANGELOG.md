@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.2
 
 - Cursor Agent Skill `caraer-apps` under `skills/caraer-apps`, installable via
   `caraer skill install` / `caraer skill install --project`
