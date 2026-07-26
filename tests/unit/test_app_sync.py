@@ -79,7 +79,15 @@ def test_push_app_pipeline_order(tmp_path: Path) -> None:
 
         result = push_app(client, root, app_uuid="app-1", legacy_functions=True)
 
-    assert calls == ["manifest", "functions", "webhooks", "schedules", "inbound", "oauth"]
+    assert calls == [
+        "manifest",
+        "functions",
+        "manifest",
+        "webhooks",
+        "schedules",
+        "inbound",
+        "oauth",
+    ]
     assert result["appUuid"] == "app-1"
     assert "schedules" in result
     assert "inbound" in result

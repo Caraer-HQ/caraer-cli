@@ -36,6 +36,10 @@ from caraer_cli.project.oauth_providers_sync import (
     pull_external_oauth_providers,
     push_external_oauth_providers,
 )
+from caraer_cli.project.marketplace_assemble import (
+    assemble_local_manifest,
+    split_marketplace_to_disk,
+)
 from caraer_cli.project.schema import PLATFORM_VERSION, PLATFORM_VERSION_V1
 from caraer_cli.utils import deep_merge
 
@@ -134,6 +138,7 @@ def push_manifest(
     config: ProjectConfig,
     *,
     patch: dict[str, Any] | None = None,
+    strict_function_refs: bool = True,
 ) -> dict[str, Any]:
     if not config.appUuid:
         raise ValueError("App is not linked.")
@@ -141,6 +146,13 @@ def push_manifest(
     if not manifest_path.is_file():
         raise FileNotFoundError(f"Missing app manifest: {manifest_path}")
     local = load_local_app(manifest_path)
+    local = assemble_local_manifest(
+        root,
+        config,
+        local,
+        resolve_functions=True,
+        strict_function_refs=strict_function_refs,
+    )
     current = apps_api.get_public_app(client, config.appUuid).get("data", {})
     if not isinstance(current, dict):
         current = {}
@@ -149,10 +161,11 @@ def push_manifest(
         merged = deep_merge(merged, patch)
     response = apps_api.update_public_app(client, config.appUuid, merged)
     data = response.get("data") or {}
-    # Keep local uuid in sync.
+    # Keep local uuid in sync (do not rewrite modular files from push response).
     if data.get("uuid") and local.get("uuid") != data.get("uuid"):
-        local["uuid"] = data["uuid"]
-        write_pulled_app(sanitize_remote_app_payload(local), manifest_path, force=True)
+        raw = load_local_app(manifest_path)
+        raw["uuid"] = data["uuid"]
+        write_pulled_app(sanitize_remote_app_payload(raw), manifest_path, force=True)
     return data
 
 
@@ -163,6 +176,7 @@ def create_app_from_manifest(
 ) -> dict[str, Any]:
     manifest_path = app_manifest_path(root, config.srcDir)
     payload = load_local_app(manifest_path)
+    payload = assemble_local_manifest(root, config, payload, resolve_functions=False)
     payload["platformVersion"] = config.api_platform_version()
     if config.is_app_platform_v2():
         runtime = _resolve_app_runtime(root, config)
@@ -179,7 +193,9 @@ def create_app_from_manifest(
         sanitized = sanitize_remote_app_payload(data if isinstance(data, dict) else payload)
         if not sanitized.get("uuid"):
             sanitized["uuid"] = created_uuid
-        write_pulled_app(sanitized, manifest_path, force=True)
+        # Prefer keeping modular disk layout: split remote into files.
+        split_payload = split_marketplace_to_disk(root, config, sanitized)
+        write_pulled_app(split_payload, manifest_path, force=True)
     return data
 
 
@@ -379,7 +395,10 @@ def push_app(
     else:
         config = ensure_linked(client, root, config, app_uuid=app_uuid)
         print_success("Pushing app manifest…")
-        manifest_result = push_manifest(client, root, config, patch=patch)
+        # Soft resolve: settings/pricing always; lifecycle/app-bars wait for function UUIDs.
+        manifest_result = push_manifest(
+            client, root, config, patch=patch, strict_function_refs=False
+        )
 
     config = ensure_linked(client, root, config)
     functions_result = push_functions(
@@ -395,6 +414,13 @@ def push_app(
         release_notes=release_notes,
         interactive=interactive,
     )
+    print_success("Refreshing app manifest (lifecycle / app bars)…")
+    try:
+        manifest_result = push_manifest(
+            client, root, config, patch=patch, strict_function_refs=True
+        )
+    except ValueError as exc:
+        print_success(f"Manifest refresh deferred: {exc}")
     print_success("Syncing webhooks…")
     webhooks_result = push_webhooks(
         client,

@@ -70,6 +70,22 @@ def inbound_dir(root: Path, src_dir: str = "src") -> Path:
     return app_dir(root, src_dir) / "inbound"
 
 
+def settings_dir(root: Path, src_dir: str = "src") -> Path:
+    return app_dir(root, src_dir) / "settings"
+
+
+def pricing_dir(root: Path, src_dir: str = "src") -> Path:
+    return app_dir(root, src_dir) / "pricing"
+
+
+def app_bars_dir(root: Path, src_dir: str = "src") -> Path:
+    return app_dir(root, src_dir) / "app-bars"
+
+
+def lifecycle_dir(root: Path, src_dir: str = "src") -> Path:
+    return app_dir(root, src_dir) / "lifecycle"
+
+
 APP_MANIFEST_YAML = "app.caraer.yaml"
 APP_MANIFEST_JSON = "app.caraer.json"
 

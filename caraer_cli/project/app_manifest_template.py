@@ -18,39 +18,21 @@ _EXAMPLE_REQUIRED_SCOPES = """\
 """
 
 _EXAMPLE_SETTINGS_SCHEMA = """\
-# Example installation settings (uncomment and edit):
-# settingsSchema:
-#   - name: api_base_url
-#     label: API base URL
-#     type: SINGLE_LINE
-#     required: false
-#     defaultValue: https://api.example.com
+# Prefer modular files: src/app/settings/<name>.json
+# (caraer apps add-setting <name>)
+# Inline settingsSchema: [] is fine when using files.
 """
 
 _EXAMPLE_PRICING_PLANS = """\
-# Example pricing (uncomment and edit):
-# pricingPlans:
-#   - title: Starter
-#     description: Good for trying the app
-#     pricingType: FLAT
-#     pricePerUnit: "0.00"
-#     unit: month
-#     freeUnits: "100"
-#     freeUnitsPeriod: month
+# Prefer modular files: src/app/pricing/<slug>.json
+# (caraer apps add-pricing-plan "Starter")
 """
 
 _EXAMPLE_APP_BARS = """\
-# Example app bars (uncomment and edit):
-# appBars:
-#   - location: RECORD_PREVIEW
-#     label: Run action
-#     tooltipLabel: Trigger the app action
-#     description: Sends the record to your serverless function
-#     webhook:
-#       topic: app.bar.triggered
-#       deliveryMode: SERVERLESS
-#       serverlessFunction:
-#         name: hello-world
+# Prefer modular files: src/app/app-bars/<slug>.json
+# (caraer apps add-app-bar "Run action" --location RECORD_PREVIEW --function hello-world)
+# Lifecycle hooks are scaffolded on init under src/app/lifecycle/ + functions/on-*
+# (see docs/app_lifecycle.md; recreate with: caraer apps add-lifecycle-hook install)
 """
 
 

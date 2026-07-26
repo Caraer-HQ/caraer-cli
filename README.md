@@ -79,8 +79,16 @@ caraer apps add-function my-action
 caraer apps add-webhook --topic record.created --function my-action
 caraer apps add-schedule renew-watch --function my-action --cron "0 0 */6 * * *"
 caraer apps add-inbound gmail-push --function my-action --auth SHARED_SECRET
+caraer apps add-setting api_base_url --label "API base URL" --type SINGLE_LINE
+caraer apps add-pricing-plan Free --type FLAT --price 0 --unit installations
+caraer apps add-app-bar "Sync now" --location RECORD_PREVIEW --function my-action
+caraer apps add-lifecycle-hook uninstall   # recreate one hook if deleted
 caraer apps add-webhook --topic app.bar.triggered --mode HTTP --url https://example.com/hook
 ```
+
+Lifecycle hooks (`install` / `uninstall` / `rotate` / `update`) and matching
+`functions/on-*` folders are created automatically by `caraer apps init`.
+
 
 Only the **app creator company** (or super-admin) can push builds for an app.
 
@@ -114,14 +122,23 @@ until `runtimeStatus=READY`, then updates local `caraer.json` to `2026.2`.
 my_app/
   caraer.json                 # workspace metadata (platformVersion, appUuid, …)
   src/app/
-    app.caraer.yaml           # marketplace definition (scopes, pricing, app bars, …)
+    app.caraer.yaml           # identity, auth, OAuth, rate limits
+    settings/*.json           # installation settingsSchema fields
+    pricing/*.json            # marketplace pricing plans
+    app-bars/*.json           # app bars (actions / iframes)
+    lifecycle/*.json          # install|uninstall|rotate|update hooks
     functions/<name>/         # function.caraer.json + entry source
     webhooks/*.json           # one webhook definition per file
     schedules/*.json          # cron → function (integration runtime)
     inbound/*.json            # public inbound routes → function
 ```
 
-See [`examples/hello-function`](examples/hello-function) for a minimal sample.
+Marketplace arrays may still be inlined in `app.caraer.yaml`; modular files win on
+name conflict. `apps init` always creates all four lifecycle hooks + `on-*`
+functions. See [docs/app_lifecycle.md](docs/app_lifecycle.md) for payloads.
+
+See [`examples/hello-function`](examples/hello-function) for a minimal sample and
+[`examples/gmail-sync`](examples/gmail-sync) for settings + lifecycle hooks.
 
 ## Profiles
 

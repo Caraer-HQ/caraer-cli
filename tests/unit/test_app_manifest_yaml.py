@@ -22,8 +22,8 @@ def test_render_app_manifest_yaml_with_examples(tmp_path: Path) -> None:
     )
     path = tmp_path / "app.caraer.yaml"
     path.write_text(text, encoding="utf-8")
-    assert "# Example pricing" in text
-    assert "# Example app bars" in text
+    assert "# Prefer modular files: src/app/pricing/" in text
+    assert "# Prefer modular files: src/app/app-bars/" in text
     loaded = load_local_app(path)
     assert loaded["name"] == "demo"
     assert loaded["pricingPlans"] == []

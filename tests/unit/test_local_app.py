@@ -65,6 +65,22 @@ def test_scaffold_app_project_layout(tmp_path: Path) -> None:
     assert webhook_json["serverlessFunction"]["name"] == "hello-world"
     assert (root / ".gitignore").is_file()
 
+    lifecycle = root / "src" / "app" / "lifecycle"
+    assert result["lifecycle_dir"].resolve() == lifecycle.resolve()
+    assert len(result["lifecycle_hooks"]) == 4
+    for stem, topic in (
+        ("install", "app.installed"),
+        ("uninstall", "app.uninstalled"),
+        ("rotate", "app.rotated"),
+        ("update", "app.updated"),
+    ):
+        hook = lifecycle / f"{stem}.json"
+        assert hook.is_file()
+        hook_json = json.loads(hook.read_text(encoding="utf-8"))
+        assert hook_json["topic"] == topic
+        assert hook_json["serverlessFunction"]["name"] == f"on-{stem}"
+        assert (root / "src" / "app" / "functions" / f"on-{stem}" / "main.py").is_file()
+
     workspace = json.loads((root / "caraer.json").read_text(encoding="utf-8"))
     assert "projectUuid" not in workspace
     assert workspace["platformVersion"] == "2026.2"
@@ -75,10 +91,11 @@ def test_scaffold_app_project_layout(tmp_path: Path) -> None:
     assert "authMethod: OAUTH2" in text
     assert "oauthRedirectUris:" in text
     assert "http://localhost:3000/oauth/callback" in text
-    assert "# Example pricing" in text
-    assert "# Example app bars" in text
+    assert "# Prefer modular files: src/app/pricing/" in text
+    assert "# Prefer modular files: src/app/app-bars/" in text
     assert "# Example scopes" in text
-    assert "# Example installation settings" in text
+    assert "caraer apps add-setting" in text
+    assert "add-lifecycle-hook" in text
 
     app_json = load_local_app(manifest)
     assert app_json["name"] == "my_app"

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Modular marketplace files: `src/app/settings/`, `pricing/`, `app-bars/`, `lifecycle/`
+  (merged into the manifest on push; split on pull). Scaffolds:
+  `apps add-setting|add-pricing-plan|add-app-bar|add-lifecycle-hook`
+- `apps validate` covers settings, pricing, app bars, and lifecycle hooks
+- `apps init` always scaffolds all four lifecycle hooks + `on-*` functions
+- Function sync includes sidecar `sourceFiles` so multi-file handlers deploy correctly
+- Docs: [docs/app_lifecycle.md](docs/app_lifecycle.md); gmail-sync includes all
+  lifecycle hooks (install/uninstall/rotate/update)
 - V2 local `apps dev` matches container contract: `POST /functions/{name}`,
   `X-Caraer-Function` header, and `body.functionName` (legacy `POST /{name}` kept)
 - `apps dev` emulates installation state/secrets/jobs/connections + inbound routes;

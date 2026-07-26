@@ -495,13 +495,21 @@ def init_app(
             "app_file": str(app_file),
             "functions_dir": str(result["functions_dir"]),
             "webhooks_dir": str(result["webhooks_dir"]),
+            "lifecycle_dir": str(result["lifecycle_dir"]),
+            "lifecycle_hooks": [
+                h["event"] for h in (result.get("lifecycle_hooks") or [])
+            ],
             "sample_function": str(result["sample_function"]) if result["sample_function"] else None,
         },
         app_ctx.output,
     )
     if select:
         _select_local_file(app_ctx, app_file)
-    print_success("Edit files under src/app/, then run: caraer apps push")
+    print_success(
+        "Lifecycle hooks (install/uninstall/rotate/update) are under "
+        "src/app/lifecycle/ + functions/on-*. Edit files under src/app/, "
+        "then run: caraer apps push"
+    )
 
 
 @app.command("wizard")
@@ -899,6 +907,174 @@ def add_inbound(
     print_success(f"Created inbound scaffold at {path}")
 
 
+@app.command("add-setting")
+def add_setting(
+    ctx: typer.Context,
+    name: str | None = typer.Argument(None, help="Setting field name (e.g. pubsub_topic)."),
+    label: str | None = typer.Option(None, "--label", help="Display label."),
+    field_type: str = typer.Option("SINGLE_LINE", "--type", help="Setting field type."),
+    required: bool = typer.Option(False, "--required/--optional", help="Mark as required."),
+    help_text: str | None = typer.Option(None, "--help-text", help="Help text for installers."),
+    default: str | None = typer.Option(None, "--default", help="Default value."),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing file."),
+) -> None:
+    """Scaffold a settingsSchema field under src/app/settings/."""
+    from caraer_cli.app_sync import resolve_app_root
+    from caraer_cli.project.scaffold import scaffold_setting
+    from caraer_cli.project.schema import load_workspace
+    from caraer_cli.wizard.prompts import require_text
+
+    app_ctx: AppContext = ctx.obj
+    name = require_text(name, "Setting name", flag="name")
+    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    config = load_workspace(root)
+    try:
+        path = scaffold_setting(
+            root,
+            config,
+            name=name,
+            label=label,
+            field_type=field_type,
+            required=required,
+            help_text=help_text,
+            default_value=default,
+            force=force,
+        )
+    except FileExistsError as exc:
+        raise ValueError(str(exc)) from None
+    print_success(f"Created setting scaffold at {path}")
+
+
+@app.command("add-pricing-plan")
+def add_pricing_plan(
+    ctx: typer.Context,
+    title: str | None = typer.Argument(None, help="Plan title (e.g. Free)."),
+    pricing_type: str = typer.Option("FLAT", "--type", help="FLAT or TIERED."),
+    price_per_unit: float = typer.Option(0.0, "--price", help="FLAT pricePerUnit."),
+    unit: str = typer.Option("installations", "--unit", help="FLAT unit label."),
+    description: str | None = typer.Option(None, "--description"),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing file."),
+) -> None:
+    """Scaffold a pricing plan under src/app/pricing/."""
+    from caraer_cli.app_sync import resolve_app_root
+    from caraer_cli.project.scaffold import scaffold_pricing_plan
+    from caraer_cli.project.schema import load_workspace
+    from caraer_cli.wizard.prompts import require_text
+
+    app_ctx: AppContext = ctx.obj
+    title = require_text(title, "Plan title", flag="title")
+    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    config = load_workspace(root)
+    try:
+        path = scaffold_pricing_plan(
+            root,
+            config,
+            title=title,
+            pricing_type=pricing_type,
+            price_per_unit=price_per_unit,
+            unit=unit,
+            description=description,
+            force=force,
+        )
+    except FileExistsError as exc:
+        raise ValueError(str(exc)) from None
+    print_success(f"Created pricing plan scaffold at {path}")
+
+
+@app.command("add-app-bar")
+def add_app_bar(
+    ctx: typer.Context,
+    label: str | None = typer.Argument(None, help="App bar label."),
+    location: str = typer.Option(
+        "RECORD_PREVIEW",
+        "--location",
+        help="RECORD_PREVIEW|RECORD_OVERVIEW|RECORD_DETAIL|TOOL_BAR|TRAIT_BAR.",
+    ),
+    function: str | None = typer.Option(
+        None,
+        "--function",
+        "-f",
+        help="Local function for action bars (SERVERLESS webhook).",
+        autocompletion=complete_local_function,
+    ),
+    iframe_url: str | None = typer.Option(
+        None, "--iframe-url", help="Required for iframe locations."
+    ),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing file."),
+) -> None:
+    """Scaffold an app bar under src/app/app-bars/."""
+    from caraer_cli.app_sync import resolve_app_root
+    from caraer_cli.project.scaffold import scaffold_app_bar
+    from caraer_cli.project.schema import load_workspace
+    from caraer_cli.wizard.prompts import require_text
+
+    app_ctx: AppContext = ctx.obj
+    label = require_text(label, "App bar label", flag="label")
+    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    config = load_workspace(root)
+    function_name = normalize_function_name(function) if function else None
+    try:
+        path = scaffold_app_bar(
+            root,
+            config,
+            location=location,
+            label=label,
+            iframe_url=iframe_url,
+            function_name=function_name,
+            force=force,
+        )
+    except (FileExistsError, ValueError) as exc:
+        raise ValueError(str(exc)) from None
+    print_success(f"Created app bar scaffold at {path}")
+
+
+@app.command("add-lifecycle-hook")
+def add_lifecycle_hook(
+    ctx: typer.Context,
+    event: str | None = typer.Argument(
+        None, help="install | uninstall | rotate | update"
+    ),
+    function: str | None = typer.Option(
+        None,
+        "--function",
+        "-f",
+        help="Function name (default: on-<event>).",
+        autocompletion=complete_local_function,
+    ),
+    no_function: bool = typer.Option(
+        False,
+        "--no-function",
+        help="Only write lifecycle/<event>.json (do not scaffold a function).",
+    ),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing files."),
+) -> None:
+    """Scaffold a lifecycle hook under src/app/lifecycle/ (+ optional function)."""
+    from caraer_cli.app_sync import resolve_app_root
+    from caraer_cli.project.scaffold import scaffold_lifecycle_hook
+    from caraer_cli.project.schema import load_workspace
+    from caraer_cli.wizard.prompts import require_text
+
+    app_ctx: AppContext = ctx.obj
+    event = require_text(event, "Lifecycle event", flag="event").strip().lower()
+    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    config = load_workspace(root)
+    function_name = normalize_function_name(function) if function else None
+    try:
+        result = scaffold_lifecycle_hook(
+            root,
+            config,
+            event=event,
+            function_name=function_name,
+            create_function=not no_function,
+            force=force,
+        )
+    except (FileExistsError, ValueError) as exc:
+        raise ValueError(str(exc)) from None
+    print_success(f"Created lifecycle hook at {result['lifecycleFile']}")
+    if result.get("functionFolder"):
+        print_success(f"Created function scaffold at {result['functionFolder']}")
+
+
 @app.command("status")
 def app_status(ctx: typer.Context) -> None:
     """Show local↔remote function drift for the current app folder."""
@@ -927,7 +1103,7 @@ def validate_app(
         help="Treat warnings as failures (non-zero exit).",
     ),
 ) -> None:
-    """Validate the local app manifest, functions, webhooks, schedules, and inbound (no API calls)."""
+    """Validate the local app (manifest, functions, marketplace modules, lifecycle)."""
     from caraer_cli.app_sync import resolve_app_root
     from caraer_cli.formatters.output import print_error
     from caraer_cli.project.validate_app import validate_local_app
@@ -958,7 +1134,9 @@ def validate_app(
             )
         summary = (
             f"Validated {report.root} — "
-            f"{payload['functions']} function(s), {payload['webhooks']} webhook(s), "
+            f"{payload['functions']} function(s), {payload['settings']} setting(s), "
+            f"{payload['pricingPlans']} pricing plan(s), {payload['appBars']} app bar(s), "
+            f"{payload['lifecycleHooks']} lifecycle hook(s), "
             f"{payload['errors']} error(s), {payload['warnings']} warning(s)."
         )
         if report.ok:

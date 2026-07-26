@@ -27,6 +27,7 @@ def _sanitize_provider(raw: dict[str, Any]) -> dict[str, Any]:
     for key in (
         "uuid",
         "name",
+        "logo",
         "authorizeUrl",
         "tokenUrl",
         "clientId",

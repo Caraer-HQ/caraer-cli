@@ -21,11 +21,13 @@ def _hash_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def discover_local_functions(root: Path, config: ProjectConfig) -> list[tuple[FunctionManifest, Path, str]]:
+def discover_local_functions(
+    root: Path, config: ProjectConfig
+) -> list[tuple[FunctionManifest, Path, str, dict[str, str]]]:
     base = functions_dir(root, config.srcDir)
     if not base.is_dir():
         return []
-    found: list[tuple[FunctionManifest, Path, str]] = []
+    found: list[tuple[FunctionManifest, Path, str, dict[str, str]]] = []
     for child in sorted(base.iterdir()):
         if not child.is_dir():
             continue
@@ -37,12 +39,31 @@ def discover_local_functions(root: Path, config: ProjectConfig) -> list[tuple[Fu
         if not entry_path.is_file():
             raise FileNotFoundError(f"Missing entry file for function '{manifest.name}': {entry_path}")
         code = entry_path.read_text(encoding="utf-8")
-        found.append((manifest, entry_path, code))
+        source_files = _collect_source_files(child, entry_path)
+        found.append((manifest, entry_path, code, source_files))
     return found
 
 
+def _collect_source_files(folder: Path, entry_path: Path) -> dict[str, str]:
+    """All non-manifest files in the function folder except the entry file."""
+    files: dict[str, str] = {}
+    entry_resolved = entry_path.resolve()
+    for path in sorted(folder.rglob("*")):
+        if not path.is_file():
+            continue
+        if path.name == "function.caraer.json":
+            continue
+        if path.resolve() == entry_resolved:
+            continue
+        relative = path.relative_to(folder).as_posix()
+        if ".." in relative.split("/"):
+            continue
+        files[relative] = path.read_text(encoding="utf-8")
+    return files
+
+
 def list_local_function_names(root: Path, config: ProjectConfig) -> list[str]:
-    return [manifest.name for manifest, _, _ in discover_local_functions(root, config)]
+    return [manifest.name for manifest, _, _, _ in discover_local_functions(root, config)]
 
 
 def resolve_local_function_name(
@@ -103,24 +124,34 @@ def upload_functions(
     results: list[dict[str, Any]] = []
     local_names: set[str] = set()
 
-    for manifest, _entry_path, code in discover_local_functions(root, config):
+    for manifest, _entry_path, code, source_files in discover_local_functions(root, config):
         local_names.add(manifest.name)
-        content_hash = _hash_text(f"{manifest.runtime}\n{manifest.description}\n{code}")
+        extras_blob = json.dumps(source_files, sort_keys=True) if source_files else ""
+        content_hash = _hash_text(
+            f"{manifest.runtime}\n{manifest.description}\n{code}\n{extras_blob}"
+        )
         existing_state = fn_state.get(manifest.name) or {}
         existing_uuid = existing_state.get("uuid")
         remote_item = by_uuid.get(existing_uuid) if existing_uuid else by_name.get(manifest.name)
 
-        payload = {
+        payload: dict[str, Any] = {
             "name": manifest.name,
             "label": manifest.name,
             "runtime": manifest.runtime,
             "code": code,
             "description": manifest.description or manifest.name,
+            "sourceFiles": source_files,
         }
 
+        remote_code = remote_item.get("code") if remote_item else None
+        remote_files = remote_item.get("sourceFiles") if remote_item else None
         if remote_item and remote_item.get("uuid"):
             uuid = str(remote_item["uuid"])
-            if existing_state.get("hash") == content_hash and remote_item.get("code") == code:
+            if (
+                existing_state.get("hash") == content_hash
+                and remote_code == code
+                and (remote_files or {}) == source_files
+            ):
                 results.append({"name": manifest.name, "uuid": uuid, "action": "unchanged"})
             else:
                 response = functions_api.update_function(client, config.appUuid, uuid, payload)
@@ -169,6 +200,7 @@ def pull_functions(client: CaraerApiClient, root: Path, config: ProjectConfig) -
         runtime = str(item.get("runtime") or "nodejs22")
         description = str(item.get("description") or "")
         code = str(item.get("code") or "")
+        source_files = item.get("sourceFiles") if isinstance(item.get("sourceFiles"), dict) else {}
         uuid = str(item.get("uuid") or "")
         folder = base / name
         folder.mkdir(parents=True, exist_ok=True)
@@ -176,7 +208,17 @@ def pull_functions(client: CaraerApiClient, root: Path, config: ProjectConfig) -
         save_function_manifest(folder / "function.caraer.json", manifest)
         entry = folder / manifest.resolved_entry()
         entry.write_text(code, encoding="utf-8")
-        fn_state[name] = {"uuid": uuid, "hash": _hash_text(f"{runtime}\n{description}\n{code}")}
+        for relative, content in source_files.items():
+            if not isinstance(relative, str) or not relative.strip() or ".." in relative.split("/"):
+                continue
+            target = folder / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(str(content or ""), encoding="utf-8")
+        extras_blob = json.dumps(source_files, sort_keys=True) if source_files else ""
+        fn_state[name] = {
+            "uuid": uuid,
+            "hash": _hash_text(f"{runtime}\n{description}\n{code}\n{extras_blob}"),
+        }
         pulled.append({"name": name, "uuid": uuid, "path": str(folder)})
 
     save_state(root, state)
@@ -185,7 +227,7 @@ def pull_functions(client: CaraerApiClient, root: Path, config: ProjectConfig) -
 
 def status_summary(client: CaraerApiClient, root: Path, config: ProjectConfig) -> dict[str, Any]:
     local = discover_local_functions(root, config)
-    local_names = {m.name for m, _, _ in local}
+    local_names = {m.name for m, _, _, _ in local}
     remote_items: list[dict[str, Any]] = []
     remote_app: dict[str, Any] = {}
     if config.appUuid:

@@ -249,6 +249,21 @@ def pull_remote_app(
         directory=directory,
         existing_app_file=existing_app_file,
     )
+    # Prefer modular files on disk; keep empty arrays in YAML.
+    from caraer_cli.project.marketplace_assemble import split_marketplace_to_disk
+    from caraer_cli.project.schema import load_workspace
+
+    project_root = (
+        target.parents[2]
+        if target.parent.name == "app" and len(target.parents) >= 3
+        else target.parent
+    )
+    try:
+        config = load_workspace(project_root)
+        payload = split_marketplace_to_disk(project_root, config, payload)
+    except (FileNotFoundError, ValueError, OSError):
+        pass
+
     written = write_pulled_app(
         payload,
         target,
