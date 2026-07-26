@@ -27,7 +27,6 @@ def _sanitize_provider(raw: dict[str, Any]) -> dict[str, Any]:
     for key in (
         "uuid",
         "name",
-        "preset",
         "authorizeUrl",
         "tokenUrl",
         "clientId",
@@ -37,6 +36,7 @@ def _sanitize_provider(raw: dict[str, Any]) -> dict[str, Any]:
     ):
         if key in raw and raw[key] is not None:
             out[key] = _env_expand(raw[key])
+    # Ignore deprecated preset if present in older manifests.
     if isinstance(out.get("scopes"), list):
         out["scopes"] = [_env_expand(s) for s in out["scopes"]]
     return out

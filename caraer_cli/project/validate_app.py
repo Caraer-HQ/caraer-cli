@@ -31,7 +31,6 @@ UUID_RE = re.compile(
 # 5–6 field cron (backend accepts both); keep loose.
 CRON_RE = re.compile(r"^(\S+\s+){4,5}\S+$")
 INBOUND_AUTH_MODES = frozenset({"NONE", "SHARED_SECRET", "INSTALLATION_TOKEN"})
-OAUTH_PRESETS = frozenset({"GOOGLE", "MICROSOFT", "CUSTOM", ""})
 
 # Mirrors AppCategoryCatalog main keys + legacy aliases accepted by the backend.
 MAIN_CATEGORIES: dict[str, frozenset[str]] = {
@@ -741,19 +740,29 @@ def _validate_oauth_providers(
         name = str(item.get("name") or "").strip()
         if not name:
             _issue(issues, "error", f"{rel}:name", "name is required.")
-        preset = str(item.get("preset") or "").strip().upper()
-        if preset and preset not in OAUTH_PRESETS:
+        if item.get("preset") is not None and str(item.get("preset") or "").strip():
             _issue(
                 issues,
                 "warning",
                 f"{rel}:preset",
-                f"Unknown preset '{preset}' (expected GOOGLE, MICROSOFT, or CUSTOM).",
+                "preset is deprecated and ignored; set authorizeUrl and tokenUrl explicitly.",
             )
-        if preset in {"", "CUSTOM"}:
-            for url_key in ("authorizeUrl", "tokenUrl"):
-                url = str(item.get(url_key) or "").strip()
-                if url and not _looks_like_url(url) and not url.startswith("${"):
-                    _issue(issues, "error", f"{rel}:{url_key}", f"{url_key} must be an http(s) URL.")
+        for url_key in ("authorizeUrl", "tokenUrl"):
+            url = str(item.get(url_key) or "").strip()
+            if not url:
+                _issue(
+                    issues,
+                    "error",
+                    f"{rel}:{url_key}",
+                    f"{url_key} is required.",
+                )
+            elif not url.startswith("${") and not _looks_like_url(url):
+                _issue(
+                    issues,
+                    "error",
+                    f"{rel}:{url_key}",
+                    f"{url_key} must be an http(s) URL.",
+                )
         client_id = str(item.get("clientId") or "").strip()
         if not client_id:
             _issue(
@@ -761,6 +770,14 @@ def _validate_oauth_providers(
                 "warning",
                 f"{rel}:clientId",
                 "clientId is empty; provider will be skipped on push.",
+            )
+        scopes = item.get("scopes")
+        if scopes is not None and not isinstance(scopes, list):
+            _issue(
+                issues,
+                "error",
+                f"{rel}:scopes",
+                "scopes must be a list of strings.",
             )
         uuid = str(item.get("uuid") or "").strip()
         if uuid and not UUID_RE.match(uuid):
