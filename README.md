@@ -20,6 +20,10 @@ pipx install caraer-cli
 # or: pip install caraer-cli
 ```
 
+Publishing (maintainers): tag `v*` runs [`.github/workflows/publish.yml`](.github/workflows/publish.yml).
+Add a PyPI API token as the `API_TOKEN` secret on the GitHub `pypi` environment
+(or as a repository secret with the same name).
+
 ### From source (development)
 
 ```bash
