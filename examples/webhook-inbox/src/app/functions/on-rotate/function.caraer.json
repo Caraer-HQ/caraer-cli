@@ -1,0 +1,5 @@
+{
+  "name": "on-rotate",
+  "runtime": "nodejs22",
+  "description": "Acknowledge installation token rotation"
+}

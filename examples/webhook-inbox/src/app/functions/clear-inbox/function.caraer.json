@@ -1,0 +1,5 @@
+{
+  "name": "clear-inbox",
+  "runtime": "nodejs22",
+  "description": "Clear stored webhook events from installation state"
+}

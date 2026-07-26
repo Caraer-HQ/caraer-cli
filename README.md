@@ -141,8 +141,8 @@ Optional modular JSON files (`settings/`, `pricing/`, `app-bars/`) still merge o
 push when present (`--modular`). `apps init` always creates all four lifecycle
 hooks + `on-*` functions. See [docs/app_lifecycle.md](docs/app_lifecycle.md).
 
-See [`examples/hello-function`](examples/hello-function) for a minimal sample and
-[`examples/gmail-sync`](examples/gmail-sync) for settings + lifecycle hooks.
+See [`examples/webhook-inbox`](examples/webhook-inbox) for a minimal sample
+(inbound route, settings, lifecycle, app bar).
 
 ## Profiles
 
@@ -195,7 +195,7 @@ production. Prefer `caraer apps push --dry-run` to preview changes, and treat
 
 - API / platform: Caraer backend
 - Docs site: https://developer.caraer.com
-- Example app: [`examples/hello-function`](examples/hello-function)
+- Example app: [`examples/webhook-inbox`](examples/webhook-inbox)
 
 ## Development / CI
 

@@ -1,0 +1,5 @@
+{
+  "name": "on-uninstall",
+  "runtime": "nodejs22",
+  "description": "Acknowledge uninstall"
+}

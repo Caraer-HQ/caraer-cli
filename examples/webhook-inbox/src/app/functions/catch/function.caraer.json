@@ -1,0 +1,5 @@
+{
+  "name": "catch",
+  "runtime": "nodejs22",
+  "description": "Append an inbound webhook payload to installation state"
+}

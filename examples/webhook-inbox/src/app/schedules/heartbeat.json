@@ -1,0 +1,8 @@
+{
+  "name": "heartbeat",
+  "schedule": "0 0 */12 * * *",
+  "enabled": true,
+  "serverlessFunction": {
+    "name": "heartbeat"
+  }
+}

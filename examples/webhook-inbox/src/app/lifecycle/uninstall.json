@@ -1,0 +1,8 @@
+{
+  "topic": "app.uninstalled",
+  "deliveryMode": "SERVERLESS",
+  "enabled": true,
+  "serverlessFunction": {
+    "name": "on-uninstall"
+  }
+}

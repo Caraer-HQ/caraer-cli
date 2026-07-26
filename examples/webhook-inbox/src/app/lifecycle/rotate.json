@@ -1,0 +1,8 @@
+{
+  "topic": "app.rotated",
+  "deliveryMode": "SERVERLESS",
+  "enabled": true,
+  "serverlessFunction": {
+    "name": "on-rotate"
+  }
+}

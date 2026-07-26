@@ -1,0 +1,5 @@
+{
+  "name": "heartbeat",
+  "runtime": "nodejs22",
+  "description": "Periodic heartbeat that updates installation state"
+}

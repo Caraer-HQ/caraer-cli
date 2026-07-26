@@ -6,7 +6,7 @@
   inbound / lifecycle configs (IDE `$schema` + optional `caraer-cli[schemas]`)
 - `caraer apps typegen` writes `src/types/caraer.d.ts` (Node) or
   `caraer_types.py` (Python) payload helpers
-- Example app `examples/todo-sync-python` (Python 3.12 runtime)
+- Example app `examples/webhook-inbox` (inbound catch → installation state)
 - Modular marketplace files: `src/app/settings/`, `pricing/`, `app-bars/`, `lifecycle/`
   (merged into the manifest on push; split on pull). Scaffolds:
   `apps add-setting|add-pricing-plan|add-app-bar|add-lifecycle-hook`
@@ -15,7 +15,7 @@
   `app.caraer.yaml` by default (`--modular` for separate JSON files)
 - `apps init` always scaffolds all four lifecycle hooks + `on-*` functions
 - Function sync includes sidecar `sourceFiles` so multi-file handlers deploy correctly
-- Docs: [docs/app_lifecycle.md](docs/app_lifecycle.md); gmail-sync includes all
+- Docs: [docs/app_lifecycle.md](docs/app_lifecycle.md); webhook-inbox includes all
   lifecycle hooks (install/uninstall/rotate/update)
 - V2 local `apps dev` matches container contract: `POST /functions/{name}`,
   `X-Caraer-Function` header, and `body.functionName` (legacy `POST /{name}` kept)
@@ -67,5 +67,5 @@
 - Build/deploy/logs/dev commands wired to developer-project APIs
 - `caraer functions delete`
 - `caraer sandbox` commands
-- Example project under `examples/hello-function`
+- Example project under `examples/webhook-inbox`
 - CI workflow and `scripts/ci.sh`

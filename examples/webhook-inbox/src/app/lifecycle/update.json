@@ -1,0 +1,8 @@
+{
+  "topic": "app.updated",
+  "deliveryMode": "SERVERLESS",
+  "enabled": true,
+  "serverlessFunction": {
+    "name": "on-update"
+  }
+}
