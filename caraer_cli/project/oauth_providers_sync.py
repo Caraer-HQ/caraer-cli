@@ -50,6 +50,71 @@ def discover_local_providers(root, config: ProjectConfig) -> list[dict[str, Any]
     return [_sanitize_provider(p) for p in providers if isinstance(p, dict) and p.get("name")]
 
 
+def pull_external_oauth_providers(
+    client: CaraerApiClient,
+    root,
+    config: ProjectConfig,
+) -> int:
+    """Refresh externalOAuthProviders on the local app manifest from the remote API.
+
+    Secrets are never returned by the API; local clientSecret values are preserved
+    when the provider name/uuid still matches.
+    """
+    if not config.appUuid:
+        raise ValueError("App is not linked.")
+    remote = api.list_external_oauth_providers(client, config.appUuid).get("data") or []
+    if not isinstance(remote, list):
+        remote = []
+
+    manifest_path = app_manifest_path(root, config.srcDir)
+    try:
+        manifest = load_local_app(manifest_path)
+    except (FileNotFoundError, ValueError, OSError):
+        manifest = {}
+    existing = manifest.get("externalOAuthProviders") or []
+    existing_by_uuid: dict[str, dict[str, Any]] = {}
+    existing_by_name: dict[str, dict[str, Any]] = {}
+    if isinstance(existing, list):
+        for item in existing:
+            if not isinstance(item, dict):
+                continue
+            if item.get("uuid"):
+                existing_by_uuid[str(item["uuid"])] = item
+            if item.get("name"):
+                existing_by_name[str(item["name"])] = item
+
+    providers: list[dict[str, Any]] = []
+    providers_map: dict[str, str] = {}
+    for item in remote:
+        if not isinstance(item, dict) or not item.get("name"):
+            continue
+        sanitized = _sanitize_provider(item)
+        # API never returns clientSecret; keep local value when present.
+        prior = existing_by_uuid.get(str(item.get("uuid") or "")) or existing_by_name.get(
+            str(item.get("name") or "")
+        )
+        if prior and prior.get("clientSecret") and not sanitized.get("clientSecret"):
+            sanitized["clientSecret"] = prior["clientSecret"]
+        # Drop empty secret keys so YAML stays clean.
+        if not sanitized.get("clientSecret"):
+            sanitized.pop("clientSecret", None)
+        providers.append(sanitized)
+        if sanitized.get("uuid") and sanitized.get("name"):
+            providers_map[str(sanitized["name"])] = str(sanitized["uuid"])
+
+    from caraer_cli.project.app_manifest_template import render_app_manifest
+
+    manifest["externalOAuthProviders"] = providers
+    manifest_path.write_text(
+        render_app_manifest(manifest, include_examples=False),
+        encoding="utf-8",
+    )
+    state = load_state(root)
+    state["externalOAuthProviders"] = providers_map
+    save_state(root, state)
+    return len(providers)
+
+
 def push_external_oauth_providers(
     client: CaraerApiClient,
     root,

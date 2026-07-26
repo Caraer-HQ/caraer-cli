@@ -21,7 +21,6 @@ Headers:
 - `POST /api/v2/apps/public`
 - `GET /api/v2/apps/public/{uuid}`
 - `PUT /api/v2/apps/public/{uuid}`
-- `POST /api/v2/apps/{uuid}/migrate-v2` — body `{runtime?}`; V1 → V2 in-place migration
 
 ## Publish and review
 
@@ -33,11 +32,17 @@ Headers:
 - `POST /api/v2/apps/{appUuid}/webhooks/index`
 - `GET /api/v2/apps/{appUuid}/webhooks/formats`
 - `GET /api/v2/apps/{appUuid}/webhooks/events`
+- `GET /api/v2/apps/{appUuid}/webhooks/{webhookUuid}`
 - `POST /api/v2/apps/{appUuid}/webhooks`
 - `PUT /api/v2/apps/{appUuid}/webhooks/{webhookUuid}`
 - `DELETE /api/v2/apps/{appUuid}/webhooks/{webhookUuid}`
 - `POST /api/v2/apps/{appUuid}/webhooks/test`
 - `POST /api/v2/apps/{appUuid}/webhooks/test/{webhookUuid}/{recordUuid}/{eventType}`
+
+## App runtime (V2)
+
+- `GET /api/v2/apps/{appUuid}/runtime/logs?since=&limit=` — shared container logs
+- `POST /api/v2/apps/{uuid}/migrate-v2` — body `{runtime?}`
 
 ## App integration runtime
 
@@ -77,6 +82,7 @@ Headers:
   - Build DTO includes `version`, `releaseNotes`
   - Project DTO includes `activeVersion` (set when a build is deployed)
 - `GET /api/v2/developer-projects/{projectUuid}/builds`
+- `GET /api/v2/developer-projects/{projectUuid}/builds/{buildUuid}`
 - `POST /api/v2/developer-projects/{projectUuid}/builds/{buildUuid}/deploy` — body `{target}`
 - `GET /api/v2/developer-projects/{projectUuid}/deploys`
 

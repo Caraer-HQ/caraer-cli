@@ -72,6 +72,12 @@ def list_builds(client: CaraerApiClient, project_uuid: str) -> dict[str, Any]:
     return client.request("GET", f"/api/v2/developer-projects/{project_uuid}/builds")
 
 
+def get_build(client: CaraerApiClient, project_uuid: str, build_uuid: str) -> dict[str, Any]:
+    return client.request(
+        "GET", f"/api/v2/developer-projects/{project_uuid}/builds/{build_uuid}"
+    )
+
+
 def deploy_build(
     client: CaraerApiClient,
     project_uuid: str,
@@ -101,6 +107,21 @@ def get_function_logs(
     return client.request(
         "GET",
         f"/api/v2/apps/{app_uuid}/serverless-functions/{function_uuid}/logs",
+        params={"since": since, "limit": limit},
+    )
+
+
+def get_runtime_logs(
+    client: CaraerApiClient,
+    app_uuid: str,
+    *,
+    since: str = "1h",
+    limit: int = 100,
+) -> dict[str, Any]:
+    """Fetch app-level V2 container logs (no function UUID required)."""
+    return client.request(
+        "GET",
+        f"/api/v2/apps/{app_uuid}/runtime/logs",
         params={"since": since, "limit": limit},
     )
 

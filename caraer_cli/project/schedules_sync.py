@@ -126,7 +126,12 @@ def push_schedules(
     if not config.appUuid:
         raise ValueError("App is not linked.")
     state = load_state(root)
-    fn_by_name = {k: str(v) for k, v in (state.get("functions") or {}).items()}
+    fn_state = state.get("functions") or {}
+    fn_by_name = {
+        name: str(meta["uuid"])
+        for name, meta in fn_state.items()
+        if isinstance(meta, dict) and meta.get("uuid")
+    }
     remote = api.list_schedules(client, config.appUuid).get("data") or []
     remote_by_uuid = {
         str(i["uuid"]): i for i in remote if isinstance(i, dict) and i.get("uuid")

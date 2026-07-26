@@ -53,16 +53,34 @@ def test_push_app_pipeline_order(tmp_path: Path) -> None:
         calls.append("webhooks")
         return {"webhooks": [{"action": "created"}], "deleted": []}
 
+    def track_schedules(*_a, **_k):
+        calls.append("schedules")
+        return {"pushed": 0}
+
+    def track_inbound(*_a, **_k):
+        calls.append("inbound")
+        return {"pushed": 0}
+
+    def track_oauth(*_a, **_k):
+        calls.append("oauth")
+        return {"pushed": 0, "skipped": True}
+
     client = MagicMock()
     with (
         patch("caraer_cli.app_sync.ensure_linked", side_effect=lambda c, r, cfg, **k: cfg),
         patch("caraer_cli.app_sync.push_manifest", side_effect=track_manifest),
         patch("caraer_cli.app_sync.push_functions", side_effect=track_functions),
         patch("caraer_cli.app_sync.push_webhooks", side_effect=track_webhooks),
+        patch("caraer_cli.app_sync.push_schedules", side_effect=track_schedules),
+        patch("caraer_cli.app_sync.push_inbound", side_effect=track_inbound),
+        patch("caraer_cli.app_sync.push_external_oauth_providers", side_effect=track_oauth),
     ):
         from caraer_cli.app_sync import push_app
 
         result = push_app(client, root, app_uuid="app-1", legacy_functions=True)
 
-    assert calls == ["manifest", "functions", "webhooks"]
+    assert calls == ["manifest", "functions", "webhooks", "schedules", "inbound", "oauth"]
     assert result["appUuid"] == "app-1"
+    assert "schedules" in result
+    assert "inbound" in result
+    assert "externalOAuthProviders" in result

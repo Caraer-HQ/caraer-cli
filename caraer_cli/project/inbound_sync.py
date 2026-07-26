@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import secrets
 from pathlib import Path
 from typing import Any
 
@@ -136,7 +137,12 @@ def push_inbound(
     if not config.appUuid:
         raise ValueError("App is not linked.")
     state = load_state(root)
-    fn_by_name = {k: str(v) for k, v in (state.get("functions") or {}).items()}
+    fn_state = state.get("functions") or {}
+    fn_by_name = {
+        name: str(meta["uuid"])
+        for name, meta in fn_state.items()
+        if isinstance(meta, dict) and meta.get("uuid")
+    }
     remote = api.list_inbound_routes(client, config.appUuid).get("data") or []
     remote_by_uuid = {
         str(i["uuid"]): i for i in remote if isinstance(i, dict) and i.get("uuid")
@@ -153,6 +159,17 @@ def push_inbound(
         name = str(sanitized.get("name") or "")
         uuid = str(sanitized.get("uuid") or "")
         existing = remote_by_uuid.get(uuid) or remote_by_name.get(name)
+        auth_mode = str(payload.get("authMode") or "SHARED_SECRET").upper()
+        if (
+            not existing
+            and auth_mode == "SHARED_SECRET"
+            and not str(payload.get("sharedSecret") or "").strip()
+        ):
+            generated = secrets.token_urlsafe(24)
+            payload["sharedSecret"] = generated
+            # Keep locally so Pub/Sub can be configured; not written back after create.
+            sanitized["sharedSecret"] = generated
+            path.write_text(json.dumps(sanitized, indent=2) + "\n", encoding="utf-8")
         if existing and existing.get("uuid"):
             resp = api.update_inbound_route(client, config.appUuid, str(existing["uuid"]), payload)
             data = resp.get("data") or existing

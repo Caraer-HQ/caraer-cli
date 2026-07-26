@@ -56,7 +56,12 @@ caraer apps push --deploy       # prompts for version (> previous) + release not
 caraer apps version             # live semver + recent builds
 caraer apps status
 caraer apps logs                # uses the only local function (or prompts)
-caraer apps dev                 # local server: POST /<function_name>
+caraer apps logs --all          # V2 app container logs
+caraer apps dev                 # local server: POST /functions/<name>
+caraer apps test --record <uuid>
+caraer apps state get
+caraer apps secrets list
+caraer apps rollback            # redeploy prior READY build
 ```
 
 New apps default to workspace `platformVersion: 2026.2` (App platform V2: one async
@@ -64,7 +69,8 @@ container runtime per app). Use `caraer apps init --platform 2026.1` only for th
 legacy per-function Cloud Functions model. See [docs/platform_versioning.md](docs/platform_versioning.md).
 
 `apps push` syncs the full app: marketplace manifest (including pricing + app bars),
-functions, and webhooks. There is no separate upload command.
+functions, webhooks, schedules, inbound routes, and external OAuth providers.
+There is no separate upload command.
 
 Add local scaffolds inside an app folder:
 

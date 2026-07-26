@@ -28,6 +28,14 @@ from caraer_cli.utils import parse_patch
 
 app = typer.Typer(help="App lifecycle commands.", no_args_is_help=True)
 
+# Nested installation runtime command groups.
+from caraer_cli.commands import installation as installation_cmds  # noqa: E402
+
+app.add_typer(installation_cmds.state_app, name="state")
+app.add_typer(installation_cmds.secrets_app, name="secrets")
+app.add_typer(installation_cmds.jobs_app, name="jobs")
+app.add_typer(installation_cmds.connections_app, name="connections")
+
 DEFAULT_BRAND_COLOR = "#E74363"
 DEFAULT_TEXT_COLOR = "#FFFFFF"
 
@@ -617,7 +625,7 @@ def push_public(
     ),
     target: str = typer.Option("production", "--target", help="production|sandbox"),
 ) -> None:
-    """Push the full local app (manifest, functions, webhooks) to Caraer."""
+    """Push the full local app (manifest, functions, webhooks, schedules, inbound, OAuth) to Caraer."""
     from caraer_cli.app_sync import push_app, resolve_app_root
     from caraer_cli.project.release import is_semver
     from caraer_cli.wizard.prompts import WizardCancelled
@@ -919,7 +927,7 @@ def validate_app(
         help="Treat warnings as failures (non-zero exit).",
     ),
 ) -> None:
-    """Validate the local app manifest, functions, and webhooks (no API calls)."""
+    """Validate the local app manifest, functions, webhooks, schedules, and inbound (no API calls)."""
     from caraer_cli.app_sync import resolve_app_root
     from caraer_cli.formatters.output import print_error
     from caraer_cli.project.validate_app import validate_local_app
@@ -1139,32 +1147,51 @@ def deploy_app(
     ctx: typer.Context,
     build_uuid: str | None = typer.Argument(None, help="Build UUID (defaults to last build)."),
     target: str = typer.Option("production", "--target", help="production|sandbox"),
+    wait: bool = typer.Option(
+        True,
+        "--wait/--no-wait",
+        help="For V2 apps, poll runtimeStatus until READY/FAILED (default: wait).",
+    ),
 ) -> None:
     """Deploy a previously created build for this app."""
     from caraer_cli.api import projects as projects_api
-    from caraer_cli.app_sync import require_project_uuid, resolve_app_root
+    from caraer_cli.app_sync import _poll_v2_runtime, require_project_uuid, resolve_app_root
     from caraer_cli.project.schema import load_workspace
     from caraer_cli.project.state import load_state, save_state
 
     app_ctx: AppContext = ctx.obj
     root = resolve_app_root(app_file=app_ctx.profile.app_file)
     config = load_workspace(root)
-    project_uuid = require_project_uuid(app_ctx.api_client(), root, config)
+    client = app_ctx.api_client()
+    project_uuid = require_project_uuid(client, root, config)
     state = load_state(root)
     resolved = build_uuid or state.get("lastBuildUuid")
     if not resolved:
         raise ValueError("No build UUID provided and no lastBuildUuid in local state.")
     response = projects_api.deploy_build(
-        app_ctx.api_client(), project_uuid, str(resolved), target=target
+        client, project_uuid, str(resolved), target=target
     )
     data = response.get("data") or {}
     state["lastDeployUuid"] = data.get("uuid")
     save_state(root, state)
     print_success(f"Deployed build {resolved}")
+    if config.is_app_platform_v2() and wait:
+        runtime = _poll_v2_runtime(client, config, progress=True)
+        if isinstance(data, dict):
+            data = {**data, "runtime": runtime}
+    elif config.is_app_platform_v2() and not wait:
+        print_success(
+            "Skipping runtime wait. Check later with 'caraer apps status' "
+            "(runtimeStatus) or re-run with --wait."
+        )
     print_data(data, app_ctx.output)
 
 
-@app.command("builds")
+builds_app = typer.Typer(help="Developer-project builds.", no_args_is_help=True)
+app.add_typer(builds_app, name="builds")
+
+
+@builds_app.command("list")
 def list_builds(ctx: typer.Context) -> None:
     """List builds for the selected app's developer project (newest first)."""
     from caraer_cli.api import projects as projects_api
@@ -1191,6 +1218,189 @@ def list_builds(ctx: typer.Context) -> None:
             marked.append(row)
         rows = marked
     print_data(rows, app_ctx.output)
+
+
+@builds_app.command("get")
+def get_build(
+    ctx: typer.Context,
+    build_uuid: str = typer.Argument(..., help="Build UUID."),
+) -> None:
+    """Fetch a single developer-project build by UUID."""
+    from caraer_cli.api import projects as projects_api
+    from caraer_cli.app_sync import require_project_uuid, resolve_app_root
+    from caraer_cli.project.schema import load_workspace
+
+    app_ctx: AppContext = ctx.obj
+    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    client = app_ctx.api_client()
+    project_uuid = require_project_uuid(client, root, load_workspace(root))
+    response = projects_api.get_build(client, project_uuid, build_uuid)
+    data = response.get("data") or {}
+    if isinstance(data, dict):
+        data = dict(data)
+        data.pop("manifestJson", None)
+        data.pop("artifactGcsPath", None)
+    print_data(data, app_ctx.output)
+
+
+@app.command("rollback")
+def rollback_app(
+    ctx: typer.Context,
+    version: str | None = typer.Option(
+        None,
+        "--version",
+        help="Semver of a prior READY build to redeploy.",
+    ),
+    build: str | None = typer.Option(
+        None,
+        "--build",
+        help="Build UUID to redeploy (overrides --version).",
+    ),
+    target: str = typer.Option("production", "--target", help="production|sandbox"),
+    wait: bool = typer.Option(
+        True,
+        "--wait/--no-wait",
+        help="For V2 apps, poll runtimeStatus until READY/FAILED (default: wait).",
+    ),
+) -> None:
+    """Redeploy a prior READY build (rollback). Defaults to the build before active."""
+    from caraer_cli.api import projects as projects_api
+    from caraer_cli.app_sync import _poll_v2_runtime, require_project_uuid, resolve_app_root
+    from caraer_cli.project.schema import load_workspace
+    from caraer_cli.project.state import load_state, save_state
+
+    app_ctx: AppContext = ctx.obj
+    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    config = load_workspace(root)
+    client = app_ctx.api_client()
+    project_uuid = require_project_uuid(client, root, config)
+    project = projects_api.get_project(client, project_uuid).get("data") or {}
+    active_build = str(project.get("activeBuildUuid") or "")
+    builds = projects_api.list_builds(client, project_uuid).get("data") or []
+    if not isinstance(builds, list):
+        builds = []
+
+    resolved: str | None = build
+    if not resolved and version:
+        for item in builds:
+            if (
+                isinstance(item, dict)
+                and str(item.get("version") or "") == version
+                and str(item.get("status") or "").upper() == "READY"
+            ):
+                resolved = str(item.get("uuid") or "")
+                break
+        if not resolved:
+            raise ValueError(f"No READY build found with version '{version}'.")
+    if not resolved:
+        # Default: first READY build that is not the currently active one
+        # (builds are newest-first).
+        for item in builds:
+            if not isinstance(item, dict):
+                continue
+            uuid = str(item.get("uuid") or "")
+            if not uuid or uuid == active_build:
+                continue
+            if str(item.get("status") or "").upper() != "READY":
+                continue
+            resolved = uuid
+            break
+    if not resolved:
+        raise ValueError(
+            "No prior READY build to roll back to. "
+            "Pass --build <uuid> or --version X.Y.Z."
+        )
+
+    print_success(f"Rolling back to build {resolved}…")
+    response = projects_api.deploy_build(client, project_uuid, resolved, target=target)
+    data = response.get("data") or {}
+    state = load_state(root)
+    state["lastDeployUuid"] = data.get("uuid") if isinstance(data, dict) else None
+    state["lastBuildUuid"] = resolved
+    save_state(root, state)
+    if config.is_app_platform_v2() and wait:
+        runtime = _poll_v2_runtime(client, config, progress=True)
+        if isinstance(data, dict):
+            data = {**data, "runtime": runtime, "rolledBackToBuild": resolved}
+    print_success(f"Rollback deploy started for build {resolved}")
+    print_data(data, app_ctx.output)
+
+
+@app.command("test")
+def test_function_cmd(
+    ctx: typer.Context,
+    function: str | None = typer.Argument(
+        None,
+        help="Local function name (defaults to the only local function, or prompts).",
+        autocompletion=complete_local_function,
+    ),
+    record_uuid: str = typer.Option(..., "--record", help="Record UUID for the sample payload."),
+    event_type: str = typer.Option(
+        "updated",
+        "--event",
+        help="Event type (created|updated|deleted).",
+    ),
+    sample_only: bool = typer.Option(
+        False,
+        "--sample-only",
+        help="Only fetch a sample payload; do not invoke the remote function.",
+    ),
+    force_provision: bool = typer.Option(
+        False,
+        "--force-provision",
+        help="V1 only: force Cloud Function provision before invoke.",
+    ),
+) -> None:
+    """Remote-invoke a function with a sample webhook payload (or print the sample)."""
+    from caraer_cli.api import functions as functions_api
+    from caraer_cli.api import projects as projects_api
+    from caraer_cli.app_sync import resolve_app_root
+    from caraer_cli.project.schema import load_workspace
+    from caraer_cli.project.state import load_state
+    from caraer_cli.project.sync import resolve_local_function_name
+
+    app_ctx: AppContext = ctx.obj
+    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    config = load_workspace(root)
+    if not config.appUuid:
+        raise ValueError("App has no remote UUID. Run 'caraer apps select' or 'caraer apps push'.")
+    function_name = resolve_local_function_name(root, config, function)
+    state = load_state(root)
+    fn_meta = (state.get("functions") or {}).get(function_name) or {}
+    function_uuid = fn_meta.get("uuid")
+    client = app_ctx.api_client()
+    if not function_uuid:
+        remote = functions_api.list_functions(client, config.appUuid, page=1, limit=200)
+        for item in remote.get("data") or []:
+            if isinstance(item, dict) and item.get("name") == function_name and item.get("uuid"):
+                function_uuid = item["uuid"]
+                break
+    if not function_uuid:
+        raise ValueError(
+            f"Function '{function_name}' is not tracked locally. Run 'caraer apps push' first."
+        )
+
+    if sample_only:
+        response = projects_api.sample_payload(
+            client,
+            config.appUuid,
+            record_uuid=record_uuid,
+            event_type=event_type,
+        )
+        print_success(f"Sample payload for '{function_name}'")
+        print_data(response.get("data"), app_ctx.output)
+        return
+
+    print_success(f"Testing remote function '{function_name}'…")
+    response = functions_api.test_function(
+        client,
+        config.appUuid,
+        str(function_uuid),
+        record_uuid,
+        event_type,
+        force_provision=force_provision,
+    )
+    print_data(response.get("data"), app_ctx.output)
 
 
 @app.command("deploys")
@@ -1292,11 +1502,16 @@ def app_logs(
         help="Local function name (defaults to the only local function, or prompts).",
         autocompletion=complete_local_function,
     ),
+    all_runtime: bool = typer.Option(
+        False,
+        "--all",
+        help="Fetch app-level V2 container logs (no function filter).",
+    ),
     since: str = typer.Option("1h", "--since", help="Lookback window, e.g. 15m, 1h, 24h."),
     follow: bool = typer.Option(False, "--follow", help="Poll for new log lines."),
     limit: int = typer.Option(100, "--limit", help="Maximum log lines to return."),
 ) -> None:
-    """Fetch remote logs for a local function (defaults to the only function, or prompts)."""
+    """Fetch remote logs for a local function (or the whole V2 runtime with --all)."""
     import time
 
     from caraer_cli.api import functions as functions_api
@@ -1311,33 +1526,47 @@ def app_logs(
     config = load_workspace(root)
     if not config.appUuid:
         raise ValueError("App has no remote UUID. Run 'caraer apps select' or 'caraer apps push'.")
-    function_name = resolve_local_function_name(root, config, function)
-    state = load_state(root)
-    fn_meta = (state.get("functions") or {}).get(function_name) or {}
-    function_uuid = fn_meta.get("uuid")
-    if not function_uuid:
-        remote = functions_api.list_functions(app_ctx.api_client(), config.appUuid, page=1, limit=200)
-        for item in remote.get("data") or []:
-            if isinstance(item, dict) and item.get("name") == function_name and item.get("uuid"):
-                function_uuid = item["uuid"]
-                break
-    if not function_uuid:
-        raise ValueError(
-            f"Function '{function_name}' is not tracked locally. Run 'caraer apps push' first."
-        )
 
     client = app_ctx.api_client()
-    print_success(f"Fetching logs for '{function_name}'…")
+    function_uuid: str | None = None
+    function_name: str | None = None
+    if not all_runtime:
+        function_name = resolve_local_function_name(root, config, function)
+        state = load_state(root)
+        fn_meta = (state.get("functions") or {}).get(function_name) or {}
+        function_uuid = fn_meta.get("uuid")
+        if not function_uuid:
+            remote = functions_api.list_functions(client, config.appUuid, page=1, limit=200)
+            for item in remote.get("data") or []:
+                if isinstance(item, dict) and item.get("name") == function_name and item.get("uuid"):
+                    function_uuid = item["uuid"]
+                    break
+        if not function_uuid:
+            raise ValueError(
+                f"Function '{function_name}' is not tracked locally. Run 'caraer apps push' first."
+            )
+        print_success(f"Fetching logs for '{function_name}'…")
+    else:
+        print_success("Fetching app runtime logs…")
+
     seen: set[str] = set()
     first = True
     while True:
-        response = projects_api.get_function_logs(
-            client,
-            config.appUuid,
-            str(function_uuid),
-            since=since,
-            limit=limit,
-        )
+        if all_runtime:
+            response = projects_api.get_runtime_logs(
+                client,
+                config.appUuid,
+                since=since,
+                limit=limit,
+            )
+        else:
+            response = projects_api.get_function_logs(
+                client,
+                config.appUuid,
+                str(function_uuid),
+                since=since,
+                limit=limit,
+            )
         payload = response.get("data")
         if (app_ctx.output or "table").lower() in {"json", "yaml"}:
             print_data(payload, app_ctx.output)
@@ -1360,8 +1589,18 @@ def app_dev(
     ),
     port: int = typer.Option(8787, "--port"),
     host: str = typer.Option("127.0.0.1", "--host"),
+    invoke_schedule: str | None = typer.Option(
+        None,
+        "--invoke-schedule",
+        help="Fire a local schedule's payloadTemplate at its function, then exit.",
+    ),
 ) -> None:
-    """Run a local HTTP server for all functions at http://host:port/<function_name>."""
+    """Run a local HTTP server matching the V2 container contract.
+
+    Invoke via POST /functions/<name> (canonical), POST /<name>, header
+    X-Caraer-Function, or body.functionName. Also emulates installation
+    state/secrets/jobs and POST /inbound/<routeName>.
+    """
     from caraer_cli.app_sync import resolve_app_root
     from caraer_cli.project.local_dev import serve_functions
     from caraer_cli.project.schema import load_workspace
@@ -1379,13 +1618,19 @@ def app_dev(
                 "Add a function folder first."
             )
     base = f"http://{host}:{port}"
-    print_success(f"Starting local dev server on {base}")
-    for name in names:
-        print_success(f"  POST {base}/{name}")
+    if invoke_schedule:
+        print_success(f"Invoking schedule '{invoke_schedule}'…")
+    else:
+        print_success(f"Starting local dev server on {base}")
+        for name in names:
+            print_success(f"  POST {base}/functions/{name}")
+        print_success(f"  installation shim: {base}/api/v2/apps/<uuid>/installation/…")
+        print_success(f"  inbound: POST {base}/inbound/<routeName>")
     serve_functions(
         root,
         config,
         host=host,
         port=port,
         function_names=names,
+        invoke_schedule=invoke_schedule,
     )

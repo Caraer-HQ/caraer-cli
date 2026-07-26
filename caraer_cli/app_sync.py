@@ -32,7 +32,11 @@ from caraer_cli.project.sync import pull_functions, upload_functions
 from caraer_cli.project.webhooks_sync import pull_webhooks, push_webhooks
 from caraer_cli.project.schedules_sync import pull_schedules, push_schedules
 from caraer_cli.project.inbound_sync import pull_inbound, push_inbound
-from caraer_cli.project.oauth_providers_sync import push_external_oauth_providers
+from caraer_cli.project.oauth_providers_sync import (
+    pull_external_oauth_providers,
+    push_external_oauth_providers,
+)
+from caraer_cli.project.schema import PLATFORM_VERSION, PLATFORM_VERSION_V1
 from caraer_cli.utils import deep_merge
 
 
@@ -455,8 +459,31 @@ def pull_app_full(
     linked_uuid = str(payload.get("uuid") or app_uuid).strip() or app_uuid
     root = resolve_app_root(app_file=app_file)
     config = load_workspace(root)
+    dirty = False
     if config.appUuid != linked_uuid:
         config.appUuid = linked_uuid
+        dirty = True
+
+    # Align local platformVersion / runtime with the remote AppDTO.
+    remote_full = apps_api.get_public_app(client, linked_uuid).get("data") or {}
+    if not isinstance(remote_full, dict):
+        remote_full = {}
+    remote_platform = remote_full.get("platformVersion")
+    if remote_platform == 2 or remote_platform == "2":
+        if config.platformVersion != PLATFORM_VERSION:
+            config.platformVersion = PLATFORM_VERSION
+            dirty = True
+    elif remote_platform == 1 or remote_platform == "1":
+        if config.platformVersion != PLATFORM_VERSION_V1:
+            config.platformVersion = PLATFORM_VERSION_V1
+            dirty = True
+    remote_runtime = remote_full.get("runtime") or payload.get("runtime")
+    if isinstance(remote_runtime, str) and remote_runtime.strip():
+        normalized = remote_runtime.strip().lower()
+        if normalized in {"nodejs22", "python312"} and config.runtime != normalized:
+            config.runtime = normalized
+            dirty = True
+    if dirty:
         save_project_config(workspace_file(root), config)
     ensure_linked(client, root, config, app_uuid=linked_uuid)
 
@@ -464,6 +491,7 @@ def pull_app_full(
     webhooks_result: dict[str, Any] = {"webhooks": [], "error": None}
     schedules_result: dict[str, Any] = {"schedules": [], "error": None}
     inbound_result: dict[str, Any] = {"inbound": [], "error": None}
+    oauth_result: dict[str, Any] = {"providers": [], "error": None}
     try:
         functions_result = pull_functions(client, root, config)
     except Exception as exc:  # noqa: BLE001
@@ -480,6 +508,10 @@ def pull_app_full(
         inbound_result = {"count": pull_inbound(client, root, config)}
     except Exception as exc:  # noqa: BLE001
         inbound_result = {"inbound": [], "error": str(exc)}
+    try:
+        oauth_result = {"count": pull_external_oauth_providers(client, root, config)}
+    except Exception as exc:  # noqa: BLE001
+        oauth_result = {"providers": [], "error": str(exc)}
     return {
         "appUuid": linked_uuid,
         "app_file": str(app_file),
@@ -489,8 +521,11 @@ def pull_app_full(
             "name": payload.get("name"),
             "label": payload.get("label"),
         },
+        "platformVersion": config.platformVersion,
+        "runtime": config.runtime,
         "functions": functions_result,
         "webhooks": webhooks_result,
         "schedules": schedules_result,
         "inbound": inbound_result,
+        "externalOAuthProviders": oauth_result,
     }

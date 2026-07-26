@@ -28,6 +28,10 @@ def get_events(client: CaraerApiClient, app_uuid: str) -> dict[str, Any]:
     return client.request("GET", f"/api/v2/apps/{app_uuid}/webhooks/events")
 
 
+def get_webhook(client: CaraerApiClient, app_uuid: str, webhook_uuid: str) -> dict[str, Any]:
+    return client.request("GET", f"/api/v2/apps/{app_uuid}/webhooks/{webhook_uuid}")
+
+
 def create_webhook(client: CaraerApiClient, app_uuid: str, payload: dict[str, Any]) -> dict[str, Any]:
     return client.request("POST", f"/api/v2/apps/{app_uuid}/webhooks", json_body=payload)
 

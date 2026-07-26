@@ -163,9 +163,22 @@ def write_pulled_app(
     target: Path,
     *,
     force: bool = True,
+    platform_version: str | None = None,
+    runtime: str | None = None,
 ) -> Path:
     """Write payload to target, scaffolding an app folder around it when needed."""
+    from caraer_cli.project.schema import PLATFORM_VERSION, PLATFORM_VERSION_V1
+
     target = target.expanduser().resolve()
+    resolved_platform = platform_version or PLATFORM_VERSION
+    if resolved_platform not in {PLATFORM_VERSION, PLATFORM_VERSION_V1}:
+        resolved_platform = PLATFORM_VERSION
+    resolved_runtime = (runtime or payload.get("runtime") or "nodejs22")
+    if isinstance(resolved_runtime, str):
+        resolved_runtime = resolved_runtime.strip().lower() or "nodejs22"
+    else:
+        resolved_runtime = "nodejs22"
+
     # If writing into .../src/app/app.caraer.* without a workspace, scaffold.
     if target.parent.name == "app" and target.name in {APP_MANIFEST_YAML, APP_MANIFEST_JSON}:
         project_root = target.parents[2] if len(target.parents) >= 3 else target.parent
@@ -176,6 +189,8 @@ def write_pulled_app(
                 project_name=str(payload.get("name") or project_root.name),
                 app_uuid=str(payload["uuid"]) if payload.get("uuid") else None,
                 sample_function=None,
+                runtime=resolved_runtime,
+                platform_version=resolved_platform,
                 force=force,
             )
             return app_manifest_path(project_root).resolve()
@@ -209,6 +224,8 @@ def pull_remote_app(
     force: bool = True,
 ) -> tuple[dict[str, Any], Path]:
     """Fetch a remote public app and write it to a local app.caraer.yaml."""
+    from caraer_cli.project.schema import PLATFORM_VERSION, PLATFORM_VERSION_V1
+
     response = apps_api.get_public_app(client, app_uuid)
     data = response.get("data")
     if not isinstance(data, dict):
@@ -216,11 +233,27 @@ def pull_remote_app(
     payload = sanitize_remote_app_payload(data)
     if not payload.get("uuid"):
         payload["uuid"] = app_uuid
+
+    remote_platform = data.get("platformVersion")
+    if remote_platform == 2 or remote_platform == "2":
+        platform_version = PLATFORM_VERSION
+    elif remote_platform == 1 or remote_platform == "1":
+        platform_version = PLATFORM_VERSION_V1
+    else:
+        platform_version = PLATFORM_VERSION
+    runtime = data.get("runtime") or payload.get("runtime") or "nodejs22"
+
     target = resolve_pull_target_file(
         payload,
         file=file,
         directory=directory,
         existing_app_file=existing_app_file,
     )
-    written = write_pulled_app(payload, target, force=force)
+    written = write_pulled_app(
+        payload,
+        target,
+        force=force,
+        platform_version=platform_version,
+        runtime=str(runtime) if runtime else None,
+    )
     return payload, written

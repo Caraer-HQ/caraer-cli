@@ -34,7 +34,9 @@ env/
 
 # Scratch apps created while developing the CLI itself (keep on disk, do not publish)
 /my_public_app/
+/my_public_app_*/
 /my_second_cli_public_app/
+/jan_heins_public_app/
 /caraer_ai/
 
 # Maintainer planning notes (not part of the public developer contract)

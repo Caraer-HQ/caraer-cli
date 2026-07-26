@@ -122,3 +122,59 @@ def test_validate_strict_treats_warnings_as_failure(tmp_path: Path) -> None:
     assert any(i.severity == "warning" for i in soft.issues)
     hard = validate_local_app(tmp_path, strict=True)
     assert not hard.ok
+
+
+def test_validate_schedule_and_inbound(tmp_path: Path) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(tmp_path)
+    _write_function(tmp_path, "hello-world")
+    schedules = tmp_path / "src" / "app" / "schedules"
+    schedules.mkdir(parents=True)
+    (schedules / "renew.json").write_text(
+        json.dumps(
+            {
+                "name": "renew",
+                "schedule": "0 0 * * *",
+                "serverlessFunction": {"name": "hello-world"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    inbound = tmp_path / "src" / "app" / "inbound"
+    inbound.mkdir(parents=True)
+    (inbound / "push.json").write_text(
+        json.dumps(
+            {
+                "name": "push",
+                "authMode": "SHARED_SECRET",
+                "sharedSecret": "s3cret",
+                "serverlessFunction": {"name": "hello-world"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = validate_local_app(tmp_path)
+    assert report.ok
+    assert report.schedules == 1
+    assert report.inbound == 1
+
+
+def test_validate_inbound_bad_auth_mode(tmp_path: Path) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(tmp_path)
+    _write_function(tmp_path)
+    inbound = tmp_path / "src" / "app" / "inbound"
+    inbound.mkdir(parents=True)
+    (inbound / "bad.json").write_text(
+        json.dumps(
+            {
+                "name": "bad",
+                "authMode": "NOPE",
+                "serverlessFunction": {"name": "hello-world"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = validate_local_app(tmp_path)
+    assert not report.ok
+    assert any("authMode" in i.path for i in report.issues)
