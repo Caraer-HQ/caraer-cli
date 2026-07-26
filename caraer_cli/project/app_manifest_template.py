@@ -18,21 +18,19 @@ _EXAMPLE_REQUIRED_SCOPES = """\
 """
 
 _EXAMPLE_SETTINGS_SCHEMA = """\
-# Prefer modular files: src/app/settings/<name>.json
-# (caraer apps add-setting <name>)
-# Inline settingsSchema: [] is fine when using files.
+# Edit settingsSchema above, or: caraer apps add-setting
+# Optional modular files also work: src/app/settings/<name>.json (--modular)
 """
 
 _EXAMPLE_PRICING_PLANS = """\
-# Prefer modular files: src/app/pricing/<slug>.json
-# (caraer apps add-pricing-plan "Starter")
+# Edit pricingPlans above, or: caraer apps add-pricing-plan
+# Optional modular files: src/app/pricing/<slug>.json (--modular)
 """
 
 _EXAMPLE_APP_BARS = """\
-# Prefer modular files: src/app/app-bars/<slug>.json
-# (caraer apps add-app-bar "Run action" --location RECORD_PREVIEW --function hello-world)
-# Lifecycle hooks are scaffolded on init under src/app/lifecycle/ + functions/on-*
-# (see docs/app_lifecycle.md; recreate with: caraer apps add-lifecycle-hook install)
+# Edit appBars above, or: caraer apps add-app-bar
+# Optional modular files: src/app/app-bars/<slug>.json (--modular)
+# Lifecycle hooks: src/app/lifecycle/ + functions/on-* (caraer apps add-lifecycle-hook)
 """
 
 

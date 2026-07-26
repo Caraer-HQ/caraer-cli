@@ -216,6 +216,9 @@ def scaffold_lifecycle_hook(
     function_name: str | None = None,
     runtime: str | None = None,
     create_function: bool = True,
+    delivery_mode: str = "SERVERLESS",
+    url: str | None = None,
+    enabled: bool = True,
     force: bool = False,
 ) -> dict[str, Any]:
     """Write ``lifecycle/<event>.json`` and optionally scaffold ``functions/on-<event>/``."""
@@ -226,6 +229,9 @@ def scaffold_lifecycle_hook(
             f"Expected one of: {', '.join(sorted(LIFECYCLE_HOOKS))}."
         )
     manifest_key, topic = LIFECYCLE_HOOKS[stem]
+    mode = (delivery_mode or "SERVERLESS").strip().upper()
+    if mode not in {"SERVERLESS", "HTTP"}:
+        raise ValueError("delivery_mode must be SERVERLESS or HTTP")
     fn_name = (function_name or f"on-{stem}").strip()
     base = lifecycle_dir(root, config.srcDir)
     base.mkdir(parents=True, exist_ok=True)
@@ -234,7 +240,7 @@ def scaffold_lifecycle_hook(
         raise FileExistsError(f"Lifecycle file already exists: {path}. Use --force to overwrite.")
 
     function_folder = None
-    if create_function:
+    if mode == "SERVERLESS" and create_function:
         resolved_runtime = (
             runtime or config.resolved_runtime("nodejs22")
         ).strip().lower()
@@ -250,18 +256,23 @@ def scaffold_lifecycle_hook(
             function_folder, resolved_runtime, stem=stem, topic=topic
         )
 
-    payload = {
+    payload: dict[str, Any] = {
         "topic": topic,
-        "deliveryMode": "SERVERLESS",
-        "enabled": True,
-        "serverlessFunction": {"name": fn_name},
+        "deliveryMode": mode,
+        "enabled": enabled,
     }
+    if mode == "HTTP":
+        if not url or not url.strip():
+            raise ValueError("url is required for HTTP lifecycle hooks")
+        payload["url"] = url.strip()
+    else:
+        payload["serverlessFunction"] = {"name": fn_name}
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return {
         "event": stem,
         "manifestKey": manifest_key,
         "lifecycleFile": path,
-        "functionName": fn_name,
+        "functionName": fn_name if mode == "SERVERLESS" else None,
         "functionFolder": function_folder,
     }
 

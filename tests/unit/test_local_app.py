@@ -91,8 +91,8 @@ def test_scaffold_app_project_layout(tmp_path: Path) -> None:
     assert "authMethod: OAUTH2" in text
     assert "oauthRedirectUris:" in text
     assert "http://localhost:3000/oauth/callback" in text
-    assert "# Prefer modular files: src/app/pricing/" in text
-    assert "# Prefer modular files: src/app/app-bars/" in text
+    assert "# Edit pricingPlans above, or: caraer apps add-pricing-plan" in text
+    assert "# Edit appBars above, or: caraer apps add-app-bar" in text
     assert "# Example scopes" in text
     assert "caraer apps add-setting" in text
     assert "add-lifecycle-hook" in text

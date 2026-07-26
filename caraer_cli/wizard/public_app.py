@@ -13,11 +13,13 @@ from rich.panel import Panel
 from rich.table import Table
 
 from caraer_cli.wizard.catalog import (
-    ACTION_BASED_LOCATIONS,
-    APP_BAR_LOCATIONS,
     MAIN_CATEGORIES,
-    SETTING_FIELD_TYPES,
     find_main_category,
+)
+from caraer_cli.wizard.marketplace import (
+    prompt_app_bar as _prompt_app_bar,
+    prompt_pricing_plan as _prompt_pricing_plan,
+    prompt_setting_field as _prompt_setting_field,
 )
 from caraer_cli.wizard.prompts import (
     WizardCancelled,
@@ -305,51 +307,6 @@ def _prompt_scopes() -> list[str]:
     return scopes
 
 
-def _prompt_setting_field() -> dict[str, Any]:
-    name = ask_text("Field name", required=True)
-    label = ask_text("Field label", default=name)
-    field_type = ask_select(
-        "Field type",
-        [Choice(title=label, value=key) for key, label in SETTING_FIELD_TYPES],
-        default="SINGLE_LINE",
-    )
-    required = ask_confirm("Required?", default=False)
-    help_text = ask_text("Help text (optional)", default="")
-    default_value = ask_text("Default value (optional)", default="")
-
-    field: dict[str, Any] = {
-        "name": name,
-        "label": label or name,
-        "type": field_type,
-        "required": required,
-    }
-    if _optional(help_text):
-        field["helpText"] = help_text.strip()
-    if _optional(default_value):
-        if field_type == "SWITCH":
-            field["defaultValue"] = default_value.strip().lower() in {"1", "true", "yes", "y"}
-        else:
-            field["defaultValue"] = default_value.strip()
-
-    if field_type in {"SINGLE_SELECT", "MULTI_SELECT"}:
-        options_raw = ask_text(
-            "Options (comma-separated label=value or label)",
-            required=True,
-        )
-        options: list[dict[str, str]] = []
-        for part in options_raw.split(","):
-            item = part.strip()
-            if not item:
-                continue
-            if "=" in item:
-                option_label, option_value = item.split("=", 1)
-            else:
-                option_label, option_value = item, item
-            options.append({"label": option_label.strip(), "value": option_value.strip()})
-        field["options"] = options
-    return field
-
-
 def _prompt_settings_schema() -> list[dict[str, Any]]:
     _print_section("Settings schema")
     fields: list[dict[str, Any]] = []
@@ -363,71 +320,6 @@ def _prompt_settings_schema() -> list[dict[str, Any]]:
     return fields
 
 
-def _prompt_tier() -> dict[str, Any]:
-    tier: dict[str, Any] = {
-        "startUnits": ask_text("Start units", default="0", required=True),
-    }
-    end_units = ask_text("End units (blank = unlimited)", default="")
-    if _optional(end_units):
-        tier["endUnits"] = end_units.strip()
-    price_month = ask_text("Price per month (optional)", default="")
-    price_year = ask_text("Price per year (optional)", default="")
-    price_extra = ask_text("Price per extra unit (optional)", default="")
-    if _optional(price_month):
-        tier["pricePerMonth"] = price_month.strip()
-    if _optional(price_year):
-        tier["pricePerYear"] = price_year.strip()
-    if _optional(price_extra):
-        tier["pricePerExtraUnit"] = price_extra.strip()
-    return tier
-
-
-def _prompt_pricing_plan() -> dict[str, Any]:
-    pricing_type = ask_select(
-        "Pricing type",
-        [
-            Choice(title="FLAT — fixed price per unit", value="FLAT"),
-            Choice(title="TIERED — volume tiers", value="TIERED"),
-        ],
-        default="FLAT",
-    )
-    plan: dict[str, Any] = {
-        "title": ask_text("Plan title", required=True),
-        "pricingType": pricing_type,
-    }
-    description = ask_text("Plan description (optional)", default="")
-    if _optional(description):
-        plan["description"] = description.strip()
-
-    if pricing_type == "FLAT":
-        price = ask_text("Price per unit (e.g. 10.00)", default="")
-        unit = ask_text("Unit (e.g. call)", default="")
-        free_units = ask_text("Free units (optional)", default="")
-        free_period = ask_text("Free units period (optional)", default="")
-        if _optional(price):
-            plan["pricePerUnit"] = price.strip()
-        if _optional(unit):
-            plan["unit"] = unit.strip()
-        if _optional(free_units):
-            plan["freeUnits"] = free_units.strip()
-        if _optional(free_period):
-            plan["freeUnitsPeriod"] = free_period.strip()
-    else:
-        tiers: list[dict[str, Any]] = []
-        console.print("[dim]Add at least one tier.[/dim]")
-        while True:
-            tiers.append(_prompt_tier())
-            _print_overview(
-                "Tiers in this plan",
-                tiers,
-                ["#", "startUnits", "endUnits", "pricePerMonth", "pricePerYear"],
-            )
-            if not ask_confirm("Add another tier?", default=False):
-                break
-        plan["tiers"] = tiers
-    return plan
-
-
 def _prompt_pricing_plans() -> list[dict[str, Any]]:
     _print_section("Pricing plans")
     plans: list[dict[str, Any]] = []
@@ -439,38 +331,6 @@ def _prompt_pricing_plans() -> list[dict[str, Any]]:
             ["#", "title", "pricingType", "pricePerUnit", "unit", "freeUnits"],
         )
     return plans
-
-
-def _prompt_app_bar() -> dict[str, Any]:
-    location = ask_select(
-        "Location",
-        [Choice(title=label, value=key) for key, label in APP_BAR_LOCATIONS],
-        default="RECORD_PREVIEW",
-    )
-    bar: dict[str, Any] = {
-        "location": location,
-        "label": ask_text("Label", required=True),
-    }
-    tooltip = ask_text("Tooltip label (optional)", default="")
-    if _optional(tooltip):
-        bar["tooltipLabel"] = tooltip.strip()
-
-    if location in ACTION_BASED_LOCATIONS:
-        description = ask_text("Description (optional)", default="")
-        action_label = ask_text("Action button label (optional)", default="")
-        webhook_url = ask_text("Webhook URL", required=True)
-        if _optional(description):
-            bar["description"] = description.strip()
-        if _optional(action_label):
-            bar["actionLabel"] = action_label.strip()
-        bar["webhook"] = {"url": webhook_url.strip(), "topic": "app.bar.triggered"}
-    else:
-        iframe_url = ask_text("Iframe URL", required=True)
-        icon = ask_text("Icon (optional)", default="")
-        bar["iframeUrl"] = iframe_url.strip()
-        if _optional(icon):
-            bar["icon"] = icon.strip()
-    return bar
 
 
 def _prompt_app_bars() -> list[dict[str, Any]]:

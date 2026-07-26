@@ -79,12 +79,16 @@ caraer apps add-function my-action
 caraer apps add-webhook --topic record.created --function my-action
 caraer apps add-schedule renew-watch --function my-action --cron "0 0 */6 * * *"
 caraer apps add-inbound gmail-push --function my-action --auth SHARED_SECRET
-caraer apps add-setting api_base_url --label "API base URL" --type SINGLE_LINE
-caraer apps add-pricing-plan Free --type FLAT --price 0 --unit installations
-caraer apps add-app-bar "Sync now" --location RECORD_PREVIEW --function my-action
-caraer apps add-lifecycle-hook uninstall   # recreate one hook if deleted
+caraer apps add-setting          # wizard → appends to app.caraer.yaml
+caraer apps add-pricing-plan     # wizard → appends to app.caraer.yaml
+caraer apps add-app-bar          # wizard → appends to app.caraer.yaml
+caraer apps add-lifecycle-hook   # wizard → lifecycle/*.json + function
 caraer apps add-webhook --topic app.bar.triggered --mode HTTP --url https://example.com/hook
 ```
+
+`add-setting` / `add-pricing-plan` / `add-app-bar` write into `app.caraer.yaml` by
+default (use `--modular` for separate JSON files). Lifecycle hooks stay under
+`src/app/lifecycle/` because they pair with function folders.
 
 Lifecycle hooks (`install` / `uninstall` / `rotate` / `update`) and matching
 `functions/on-*` folders are created automatically by `caraer apps init`.
@@ -122,10 +126,7 @@ until `runtimeStatus=READY`, then updates local `caraer.json` to `2026.2`.
 my_app/
   caraer.json                 # workspace metadata (platformVersion, appUuid, …)
   src/app/
-    app.caraer.yaml           # identity, auth, OAuth, rate limits
-    settings/*.json           # installation settingsSchema fields
-    pricing/*.json            # marketplace pricing plans
-    app-bars/*.json           # app bars (actions / iframes)
+    app.caraer.yaml           # identity, auth, OAuth, settings, pricing, app bars
     lifecycle/*.json          # install|uninstall|rotate|update hooks
     functions/<name>/         # function.caraer.json + entry source
     webhooks/*.json           # one webhook definition per file
@@ -133,9 +134,10 @@ my_app/
     inbound/*.json            # public inbound routes → function
 ```
 
-Marketplace arrays may still be inlined in `app.caraer.yaml`; modular files win on
-name conflict. `apps init` always creates all four lifecycle hooks + `on-*`
-functions. See [docs/app_lifecycle.md](docs/app_lifecycle.md) for payloads.
+`add-setting` / `add-pricing-plan` / `add-app-bar` append to `app.caraer.yaml`.
+Optional modular JSON files (`settings/`, `pricing/`, `app-bars/`) still merge on
+push when present (`--modular`). `apps init` always creates all four lifecycle
+hooks + `on-*` functions. See [docs/app_lifecycle.md](docs/app_lifecycle.md).
 
 See [`examples/hello-function`](examples/hello-function) for a minimal sample and
 [`examples/gmail-sync`](examples/gmail-sync) for settings + lifecycle hooks.

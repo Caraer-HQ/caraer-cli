@@ -912,81 +912,136 @@ def add_setting(
     ctx: typer.Context,
     name: str | None = typer.Argument(None, help="Setting field name (e.g. pubsub_topic)."),
     label: str | None = typer.Option(None, "--label", help="Display label."),
-    field_type: str = typer.Option("SINGLE_LINE", "--type", help="Setting field type."),
-    required: bool = typer.Option(False, "--required/--optional", help="Mark as required."),
+    field_type: str | None = typer.Option(None, "--type", help="Setting field type."),
+    required: bool | None = typer.Option(
+        None, "--required/--optional", help="Mark as required."
+    ),
     help_text: str | None = typer.Option(None, "--help-text", help="Help text for installers."),
     default: str | None = typer.Option(None, "--default", help="Default value."),
-    force: bool = typer.Option(False, "--force", help="Overwrite existing file."),
+    modular: bool = typer.Option(
+        False,
+        "--modular",
+        help="Write src/app/settings/<name>.json instead of app.caraer.yaml.",
+    ),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing entry/file."),
 ) -> None:
-    """Scaffold a settingsSchema field under src/app/settings/."""
+    """Add a settingsSchema field to app.caraer.yaml (wizard prompts when interactive)."""
     from caraer_cli.app_sync import resolve_app_root
+    from caraer_cli.project.manifest_edit import append_manifest_list_item
     from caraer_cli.project.scaffold import scaffold_setting
     from caraer_cli.project.schema import load_workspace
-    from caraer_cli.wizard.prompts import require_text
+    from caraer_cli.project.settings_sync import sanitize_setting
+    from caraer_cli.wizard.marketplace import prompt_setting_field
 
     app_ctx: AppContext = ctx.obj
-    name = require_text(name, "Setting name", flag="name")
     root = resolve_app_root(app_file=app_ctx.profile.app_file)
     config = load_workspace(root)
-    try:
-        path = scaffold_setting(
-            root,
-            config,
+    field = sanitize_setting(
+        prompt_setting_field(
             name=name,
             label=label,
             field_type=field_type,
             required=required,
             help_text=help_text,
             default_value=default,
-            force=force,
         )
+    )
+    try:
+        if modular:
+            path = scaffold_setting(
+                root,
+                config,
+                name=str(field["name"]),
+                label=field.get("label"),
+                field_type=str(field.get("type") or "SINGLE_LINE"),
+                required=bool(field.get("required")),
+                help_text=field.get("helpText"),
+                default_value=field.get("defaultValue"),
+                force=force,
+            )
+            print_success(f"Created setting file at {path}")
+        else:
+            path = append_manifest_list_item(
+                root,
+                config,
+                list_key="settingsSchema",
+                item=field,
+                identity=lambda i: str(i.get("name") or "").strip().lower(),
+                force=force,
+            )
+            print_success(f"Added setting '{field['name']}' to {path}")
     except FileExistsError as exc:
         raise ValueError(str(exc)) from None
-    print_success(f"Created setting scaffold at {path}")
 
 
 @app.command("add-pricing-plan")
 def add_pricing_plan(
     ctx: typer.Context,
     title: str | None = typer.Argument(None, help="Plan title (e.g. Free)."),
-    pricing_type: str = typer.Option("FLAT", "--type", help="FLAT or TIERED."),
-    price_per_unit: float = typer.Option(0.0, "--price", help="FLAT pricePerUnit."),
-    unit: str = typer.Option("installations", "--unit", help="FLAT unit label."),
+    pricing_type: str | None = typer.Option(None, "--type", help="FLAT or TIERED."),
+    price_per_unit: float | None = typer.Option(None, "--price", help="FLAT pricePerUnit."),
+    unit: str | None = typer.Option(None, "--unit", help="FLAT unit label."),
     description: str | None = typer.Option(None, "--description"),
-    force: bool = typer.Option(False, "--force", help="Overwrite existing file."),
+    modular: bool = typer.Option(
+        False,
+        "--modular",
+        help="Write src/app/pricing/<slug>.json instead of app.caraer.yaml.",
+    ),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing entry/file."),
 ) -> None:
-    """Scaffold a pricing plan under src/app/pricing/."""
+    """Add a pricing plan to app.caraer.yaml (wizard prompts when interactive)."""
     from caraer_cli.app_sync import resolve_app_root
+    from caraer_cli.project.manifest_edit import append_manifest_list_item
+    from caraer_cli.project.pricing_sync import pricing_identity, sanitize_pricing
     from caraer_cli.project.scaffold import scaffold_pricing_plan
     from caraer_cli.project.schema import load_workspace
-    from caraer_cli.wizard.prompts import require_text
+    from caraer_cli.wizard.marketplace import prompt_pricing_plan
 
     app_ctx: AppContext = ctx.obj
-    title = require_text(title, "Plan title", flag="title")
     root = resolve_app_root(app_file=app_ctx.profile.app_file)
     config = load_workspace(root)
-    try:
-        path = scaffold_pricing_plan(
-            root,
-            config,
+    plan = sanitize_pricing(
+        prompt_pricing_plan(
             title=title,
             pricing_type=pricing_type,
             price_per_unit=price_per_unit,
             unit=unit,
             description=description,
-            force=force,
         )
+    )
+    try:
+        if modular:
+            path = scaffold_pricing_plan(
+                root,
+                config,
+                title=str(plan.get("title") or "Plan"),
+                pricing_type=str(plan.get("pricingType") or "FLAT"),
+                price_per_unit=plan.get("pricePerUnit", 0),
+                unit=str(plan.get("unit") or "installations"),
+                description=plan.get("description"),
+                force=force,
+            )
+            print_success(f"Created pricing plan file at {path}")
+        else:
+            path = append_manifest_list_item(
+                root,
+                config,
+                list_key="pricingPlans",
+                item=plan,
+                identity=pricing_identity,
+                force=force,
+            )
+            print_success(f"Added pricing plan '{plan.get('title')}' to {path}")
     except FileExistsError as exc:
         raise ValueError(str(exc)) from None
-    print_success(f"Created pricing plan scaffold at {path}")
 
 
 @app.command("add-app-bar")
 def add_app_bar(
     ctx: typer.Context,
     label: str | None = typer.Argument(None, help="App bar label."),
-    location: str = typer.Option(
-        "RECORD_PREVIEW",
+    location: str | None = typer.Option(
+        None,
         "--location",
         help="RECORD_PREVIEW|RECORD_OVERVIEW|RECORD_DETAIL|TOOL_BAR|TRAIT_BAR.",
     ),
@@ -1000,32 +1055,61 @@ def add_app_bar(
     iframe_url: str | None = typer.Option(
         None, "--iframe-url", help="Required for iframe locations."
     ),
-    force: bool = typer.Option(False, "--force", help="Overwrite existing file."),
+    modular: bool = typer.Option(
+        False,
+        "--modular",
+        help="Write src/app/app-bars/<slug>.json instead of app.caraer.yaml.",
+    ),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing entry/file."),
 ) -> None:
-    """Scaffold an app bar under src/app/app-bars/."""
+    """Add an app bar to app.caraer.yaml (wizard prompts when interactive)."""
     from caraer_cli.app_sync import resolve_app_root
+    from caraer_cli.project.app_bars_sync import app_bar_identity, sanitize_app_bar
+    from caraer_cli.project.manifest_edit import append_manifest_list_item
     from caraer_cli.project.scaffold import scaffold_app_bar
     from caraer_cli.project.schema import load_workspace
-    from caraer_cli.wizard.prompts import require_text
+    from caraer_cli.project.sync import list_local_function_names
+    from caraer_cli.wizard.marketplace import prompt_app_bar
 
     app_ctx: AppContext = ctx.obj
-    label = require_text(label, "App bar label", flag="label")
     root = resolve_app_root(app_file=app_ctx.profile.app_file)
     config = load_workspace(root)
-    function_name = normalize_function_name(function) if function else None
-    try:
-        path = scaffold_app_bar(
-            root,
-            config,
-            location=location,
+    bar = sanitize_app_bar(
+        prompt_app_bar(
             label=label,
+            location=location,
+            function_name=normalize_function_name(function) if function else None,
             iframe_url=iframe_url,
-            function_name=function_name,
-            force=force,
+            function_choices=list_local_function_names(root, config),
         )
+    )
+    try:
+        if modular:
+            webhook = bar.get("webhook") if isinstance(bar.get("webhook"), dict) else {}
+            sf = webhook.get("serverlessFunction") if isinstance(webhook, dict) else {}
+            path = scaffold_app_bar(
+                root,
+                config,
+                location=str(bar.get("location") or "RECORD_PREVIEW"),
+                label=str(bar.get("label") or "Action"),
+                iframe_url=bar.get("iframeUrl"),
+                function_name=(sf or {}).get("name") if isinstance(sf, dict) else None,
+                action_label=bar.get("actionLabel"),
+                force=force,
+            )
+            print_success(f"Created app bar file at {path}")
+        else:
+            path = append_manifest_list_item(
+                root,
+                config,
+                list_key="appBars",
+                item=bar,
+                identity=app_bar_identity,
+                force=force,
+            )
+            print_success(f"Added app bar '{bar.get('label')}' to {path}")
     except (FileExistsError, ValueError) as exc:
         raise ValueError(str(exc)) from None
-    print_success(f"Created app bar scaffold at {path}")
 
 
 @app.command("add-lifecycle-hook")
@@ -1052,20 +1136,26 @@ def add_lifecycle_hook(
     from caraer_cli.app_sync import resolve_app_root
     from caraer_cli.project.scaffold import scaffold_lifecycle_hook
     from caraer_cli.project.schema import load_workspace
-    from caraer_cli.wizard.prompts import require_text
+    from caraer_cli.wizard.marketplace import prompt_lifecycle_hook
 
     app_ctx: AppContext = ctx.obj
-    event = require_text(event, "Lifecycle event", flag="event").strip().lower()
     root = resolve_app_root(app_file=app_ctx.profile.app_file)
     config = load_workspace(root)
-    function_name = normalize_function_name(function) if function else None
+    options = prompt_lifecycle_hook(
+        event=event,
+        function_name=normalize_function_name(function) if function else None,
+        create_function=False if no_function else None,
+    )
     try:
         result = scaffold_lifecycle_hook(
             root,
             config,
-            event=event,
-            function_name=function_name,
-            create_function=not no_function,
+            event=str(options["event"]),
+            function_name=options.get("function_name"),
+            create_function=bool(options.get("create_function")),
+            delivery_mode=str(options.get("deliveryMode") or "SERVERLESS"),
+            url=options.get("url"),
+            enabled=bool(options.get("enabled", True)),
             force=force,
         )
     except (FileExistsError, ValueError) as exc:
