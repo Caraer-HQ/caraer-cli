@@ -10,6 +10,7 @@ from caraer_cli.commands import (
     profile,
     publish,
     sandbox,
+    skill,
     webhooks,
 )
 from caraer_cli.completion_callbacks import complete_output_format, complete_profile
@@ -31,6 +32,7 @@ app.add_typer(webhooks.app, name="webhooks")
 app.add_typer(publish.app, name="publish")
 app.add_typer(sandbox.app, name="sandbox")
 app.add_typer(profile.app, name="profile")
+app.add_typer(skill.app, name="skill")
 
 
 def _version_callback(value: bool) -> None:

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Cursor Agent Skill `caraer-apps` under `skills/caraer-apps`, installable via
+  `caraer skill install` / `caraer skill install --project`
 - JSON Schemas under `schemas/` for app / function / webhook / schedule /
   inbound / lifecycle configs (IDE `$schema` + optional `caraer-cli[schemas]`)
 - `caraer apps typegen` writes `src/types/caraer.d.ts` (Node) or

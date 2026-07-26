@@ -58,6 +58,7 @@ packages = ["caraer_cli"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "schemas" = "caraer_cli/schemas"
+"skills" = "caraer_cli/skills"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

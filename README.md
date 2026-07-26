@@ -37,6 +37,20 @@ If install fails with `requires a different Python`, create the venv with
 
 Tab completion is installed by `scripts/install.sh`. Restart the terminal afterward.
 
+## AI IDEs (Cursor skill)
+
+Ship an Agent Skill so Cursor (and similar IDEs) can scaffold and validate Caraer
+apps correctly:
+
+```bash
+caraer skill install              # ~/.cursor/skills/caraer-apps
+caraer skill install --project    # ./.cursor/skills/caraer-apps
+caraer skill list
+```
+
+Source of truth: [`skills/caraer-apps`](skills/caraer-apps). After install, start a
+new agent chat and ask it to create or edit a Caraer app.
+
 ## Quick start
 
 ```bash
@@ -190,6 +204,7 @@ production. Prefer `caraer apps push --dry-run` to preview changes, and treat
 - [Backend contract](docs/backend_contract.md) — REST endpoints used by the CLI
 - [Changelog](CHANGELOG.md)
 - [Security](SECURITY.md)
+- Cursor skill: [`skills/caraer-apps`](skills/caraer-apps) (`caraer skill install`)
 
 ## Related
 

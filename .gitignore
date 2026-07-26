@@ -19,6 +19,7 @@ env/
 .DS_Store
 .idea/
 .vscode/
+.cursor/
 *.swp
 
 # Local env / secrets (never commit)

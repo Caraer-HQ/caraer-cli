@@ -1,0 +1,172 @@
+---
+name: caraer-apps
+description: >-
+  Scaffolds, edits, validates, and deploys Caraer Apps V2 projects with the
+  caraer CLI (app.caraer.yaml, serverless functions, inbound routes, schedules,
+  lifecycle hooks, settings, app bars). Use when creating or changing a Caraer
+  public app, marketplace app, serverless function, webhook, inbound route, or
+  when the user mentions caraer apps, app.caraer.yaml, or caraer-cli.
+---
+
+# Caraer Apps (CLI)
+
+Build Caraer apps with the **caraer** CLI and the V2 layout (`platformVersion:
+2026.2`). Prefer CLI scaffolds over inventing folders by hand.
+
+## Install this skill
+
+From a machine with `caraer-cli` installed:
+
+```bash
+caraer skill install              # ~/.cursor/skills/caraer-apps
+caraer skill install --project    # ./.cursor/skills/caraer-apps (this repo)
+```
+
+Or copy `skills/caraer-apps/` from the [caraer-cli](https://github.com/Caraer-HQ/caraer-cli)
+repo into `~/.cursor/skills/caraer-apps/`.
+
+## Preconditions
+
+1. CLI available: `caraer --version` (Python 3.10+).
+2. Auth + company: `caraer auth login` then `caraer company select <uuid>`.
+3. Work inside an app folder (has `caraer.json`) or pass `--file`.
+
+## Golden path
+
+```bash
+caraer apps init --name my_app --label "My App"
+cd my_app
+# edit src/app/app.caraer.yaml + functions
+caraer apps validate
+caraer apps typegen
+caraer apps push --dry-run
+caraer apps push --deploy
+caraer apps install
+caraer apps status
+caraer apps logs --follow
+```
+
+Local loop without deploy:
+
+```bash
+caraer apps dev
+caraer apps test --function <name> --sample-only
+```
+
+## Project layout (V2)
+
+```text
+caraer.json
+src/app/
+  app.caraer.yaml           # identity, auth, settings, pricing, app bars, OAuth
+  functions/<name>/         # function.caraer.json + index.js|main.py (+ shared.js)
+  lifecycle/*.json          # install|uninstall|rotate|update → function
+  inbound/*.json            # public HTTP → function
+  schedules/*.json          # cron → function
+  webhooks/*.json           # platform events → function
+src/types/                  # from `caraer apps typegen`
+```
+
+JSON Schema for IDE hints:
+
+`https://raw.githubusercontent.com/Caraer-HQ/caraer-cli/main/schemas/app.caraer.schema.json`
+
+Point the YAML at it:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Caraer-HQ/caraer-cli/main/schemas/app.caraer.schema.json
+```
+
+Reference example: `examples/webhook-inbox` in the caraer-cli repo.
+
+## Agent workflow
+
+Copy and track:
+
+```text
+App progress:
+- [ ] Clarify job (inbound / schedule / record bar / OAuth / records)
+- [ ] `caraer apps init` or open existing app
+- [ ] Edit manifest settings (user-facing only)
+- [ ] Add/edit functions (shared helpers copied per folder)
+- [ ] Wire inbound / schedule / webhook / app bar / lifecycle
+- [ ] `caraer apps validate` → fix until 0 errors
+- [ ] `caraer apps push --dry-run` then `--deploy` when user asks
+```
+
+### Clarify before coding
+
+Ask only what blocks design:
+
+- Trigger: inbound HTTP, schedule, record event, app bar, or install lifecycle?
+- Runtime: `nodejs22` (default) or `python312`?
+- Need installation state/secrets? → `authMethod: API_KEY` (gets `installationToken`).
+- Need Caraer user OAuth app install? → `OAUTH2` + redirect URIs.
+- External provider (Google, etc.)? → `externalOAuthProviders` + `${ENV}` secrets.
+
+### Settings UX rules
+
+Installation settings are for **admins installing the app**, not developers.
+
+- Use clear labels + `helpText`. Prefer `SWITCH`, `OBJECT_SINGLE_SELECT`,
+  `SINGLE_SELECT` over free-text when possible.
+- Do **not** add `caraer_api_base` or other platform URLs — runtime injects
+  `body.caraerApiBase`.
+- Do **not** ask for object/property names as raw strings when a select type exists.
+- Keep required settings to the minimum that makes the app work.
+
+### Functions
+
+- Node: `exports.handler = async (req, res) => { ... }`.
+- Python: `def handler(request): ...` returning `{statusCode, body}`.
+- Each function folder deploys alone — **copy** `shared.js` / helpers into every
+  folder that needs them (see webhook-inbox).
+- Read settings via flattened `body.settingsSchema` (`name` → `value`).
+- Use `body.installationToken` + `body.appUuid` for
+  `/v2/apps/{appUuid}/installation/state|secrets|jobs`.
+- Prefer `body.caraerApiBase` when calling Caraer APIs.
+
+### Scaffolding commands
+
+| Need | Command |
+|------|---------|
+| New function | `caraer apps add-function` |
+| Inbound route | `caraer apps add-inbound` |
+| Schedule | `caraer apps add-schedule` |
+| Webhook | `caraer apps add-webhook` |
+| Setting | `caraer apps add-setting` |
+| App bar | `caraer apps add-app-bar` |
+| Lifecycle | `caraer apps add-lifecycle-hook` |
+| Pricing | `caraer apps add-pricing-plan` |
+
+### Validate loop
+
+After every structural edit:
+
+```bash
+caraer apps validate --file .
+```
+
+Fix errors before push. Warnings (e.g. missing inbound `sharedSecret`) are OK
+to leave for the installer when documented in README.
+
+### Deploy safety
+
+- Never push/deploy/install unless the user asks.
+- Use `caraer apps push --dry-run` first for non-trivial changes.
+- Do not commit secrets (`.env`, OAuth client secrets, inbound shared secrets).
+- Expand `${ENV_VAR}` OAuth client fields from the **process environment** on push.
+
+## Anti-patterns
+
+- Inventing V1 per-function GCP layouts when V2 is default.
+- Hand-writing remote UUIDs into YAML (let push fill them).
+- One giant shared package import across functions (runtime is per-folder).
+- Putting developer-only knobs in `settingsSchema`.
+- Skipping `validate` before `push`.
+
+## Dig deeper
+
+- Payload shapes, lifecycle events, settings flattening: [reference.md](reference.md)
+- CLI docs in the caraer-cli repo: `docs/app_lifecycle.md`, `docs/platform_versioning.md`
+- Schemas: `schemas/*.caraer.schema.json`

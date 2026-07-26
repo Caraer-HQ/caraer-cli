@@ -1,0 +1,2 @@
+# Packaged copy of repo skills/ (see hatch force-include). Placeholder so the
+# package path exists before build; wheel build overlays skills/caraer-apps.
