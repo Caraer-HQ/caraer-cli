@@ -57,15 +57,21 @@ caraer apps test --function <name> --sample-only
 
 ```text
 caraer.json
+package.json                # npm-style scripts (dev/validate/push/deploy)
 src/app/
   app.caraer.yaml           # identity, auth, settings, pricing, app bars, OAuth
-  functions/<name>/         # function.caraer.json + index.js|main.py (+ shared.js)
+  functions/<name>/         # index.js|main.py (function.caraer.json optional)
+  shared/                   # code shared by all functions (require "../../shared/...")
   lifecycle/*.json          # install|uninstall|rotate|update → function
   inbound/*.json            # public HTTP → function
   schedules/*.json          # cron → function
   webhooks/*.json           # platform events → function
 src/types/                  # from `caraer apps typegen`
 ```
+
+`function.caraer.json` is only needed to override conventions (custom entry,
+description); a folder with `index.js` / `main.py` is a function named after
+the folder.
 
 JSON Schema for IDE hints:
 
@@ -88,7 +94,7 @@ App progress:
 - [ ] Clarify job (inbound / schedule / record bar / OAuth / records)
 - [ ] `caraer apps init` or open existing app
 - [ ] Edit manifest settings (user-facing only)
-- [ ] Add/edit functions (shared helpers copied per folder)
+- [ ] Add/edit functions (shared helpers in `src/app/shared/`)
 - [ ] Wire inbound / schedule / webhook / app bar / lifecycle
 - [ ] `caraer apps validate` → fix until 0 errors
 - [ ] `caraer apps push --dry-run` then `--deploy` when user asks
@@ -119,12 +125,18 @@ Installation settings are for **admins installing the app**, not developers.
 
 - Node: `exports.handler = async (req, res) => { ... }`.
 - Python: `def handler(request): ...` returning `{statusCode, body}`.
-- Each function folder deploys alone — **copy** `shared.js` / helpers into every
-  folder that needs them (see webhook-inbox).
+- Shared helpers live in `src/app/shared/` and are imported with the same
+  relative path locally and deployed:
+  `require("../../shared")` / `require("../../shared/<file>")` from
+  `functions/<name>/index.js` (platform 2026.2 build pushes only).
 - Read settings via flattened `body.settingsSchema` (`name` → `value`).
 - Use `body.installationToken` + `body.appUuid` for
   `/v2/apps/{appUuid}/installation/state|secrets|jobs`.
 - Prefer `body.caraerApiBase` when calling Caraer APIs.
+- The pushed build archive is the source of truth for V2 runtimes: the
+  platform keeps function metadata only, not code. Editing function code in
+  the Caraer UI is rejected for build-deployed apps — always change code
+  locally and `caraer apps push --deploy`.
 
 ### Scaffolding commands
 
@@ -161,7 +173,7 @@ to leave for the installer when documented in README.
 
 - Inventing V1 per-function GCP layouts when V2 is default.
 - Hand-writing remote UUIDs into YAML (let push fill them).
-- One giant shared package import across functions (runtime is per-folder).
+- Copying helper files into every function folder (use `src/app/shared/`).
 - Putting developer-only knobs in `settingsSchema`.
 - Skipping `validate` before `push`.
 

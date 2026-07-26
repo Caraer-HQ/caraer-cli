@@ -55,7 +55,7 @@ def test_scaffold_app_project_layout(tmp_path: Path) -> None:
     manifest = root / "src" / "app" / "app.caraer.yaml"
     assert manifest.is_file()
     assert (root / "src" / "app" / "functions" / "hello-world" / "main.py").is_file()
-    assert (root / "src" / "app" / "functions" / "hello-world" / "function.caraer.json").is_file()
+    assert not (root / "src" / "app" / "functions" / "hello-world" / "function.caraer.json").exists()
     assert (root / "src" / "app" / "webhooks").is_dir()
     webhook = root / "src" / "app" / "webhooks" / "record-created-serverless.json"
     assert webhook.is_file()

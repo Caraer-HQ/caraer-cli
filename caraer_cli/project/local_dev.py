@@ -21,8 +21,10 @@ from caraer_cli.project.sync import list_local_function_names
 
 
 def _load_local_function(root: Path, config: ProjectConfig, function_name: str) -> tuple[str, Path]:
+    from caraer_cli.project.sync import load_or_conventional_manifest
+
     folder = functions_dir(root, config.srcDir) / function_name
-    manifest = load_function_manifest(folder / "function.caraer.json")
+    manifest = load_or_conventional_manifest(folder, config)
     entry = folder / manifest.resolved_entry()
     if not entry.is_file():
         raise FileNotFoundError(f"Missing entry file: {entry}")

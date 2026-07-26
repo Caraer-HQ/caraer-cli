@@ -566,16 +566,19 @@ def _validate_functions(
         manifest_runtime = ""
     expected_runtime = manifest_runtime or str(config.resolved_runtime("") or "").strip().lower()
 
+    # function.caraer.json is optional: a folder with an entry file (index.js /
+    # main.py) is discovered by convention. Only flag folders that are neither.
     for child in sorted(base.iterdir()):
         if not child.is_dir() or child.name.startswith("."):
             continue
-        manifest_file = child / "function.caraer.json"
-        if not manifest_file.is_file():
+        has_manifest = (child / "function.caraer.json").is_file()
+        has_entry = (child / "index.js").is_file() or (child / "main.py").is_file()
+        if not has_manifest and not has_entry:
             _issue(
                 issues,
                 "error",
-                str(manifest_file.relative_to(root)),
-                "Missing function.caraer.json.",
+                str(child.relative_to(root)),
+                "Not a function: add index.js/main.py or a function.caraer.json with an entry.",
             )
 
     for manifest, entry_path, _code, _source_files in discovered:
@@ -604,7 +607,30 @@ def _validate_functions(
             str(base.relative_to(root)),
             "No local functions found.",
         )
+
+    _validate_shared(root, config, issues)
     return len(discovered)
+
+
+def _validate_shared(
+    root: Path,
+    config: ProjectConfig,
+    issues: list[ValidationIssue],
+) -> None:
+    from caraer_cli.project.paths import shared_dir
+
+    shared = shared_dir(root, config.srcDir)
+    if not shared.is_dir():
+        return
+    has_files = any(path.is_file() for path in shared.rglob("*"))
+    if has_files and not config.is_app_platform_v2():
+        _issue(
+            issues,
+            "warning",
+            str(shared.relative_to(root)),
+            "src/app/shared/ requires platformVersion 2026.2; "
+            "V1 functions cannot import shared files.",
+        )
 
 
 def _validate_webhooks(

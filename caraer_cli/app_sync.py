@@ -28,7 +28,7 @@ from caraer_cli.project.schema import (
     save_project_config,
 )
 from caraer_cli.project.state import load_state, save_state
-from caraer_cli.project.sync import pull_functions, upload_functions
+from caraer_cli.project.sync import pull_functions, track_functions, upload_functions
 from caraer_cli.project.webhooks_sync import pull_webhooks, push_webhooks
 from caraer_cli.project.schedules_sync import pull_schedules, push_schedules
 from caraer_cli.project.inbound_sync import pull_inbound, push_inbound
@@ -393,6 +393,15 @@ def push_functions(
         except (ApiError, ValueError):
             project_uuid = None
     if legacy or not project_uuid:
+        from caraer_cli.formatters.output import print_warning
+        from caraer_cli.project.paths import shared_dir
+
+        shared = shared_dir(root, config.srcDir)
+        if shared.is_dir() and any(path.is_file() for path in shared.rglob("*")):
+            print_warning(
+                "src/app/shared/ is only deployed by build pushes (platform "
+                "2026.2 developer projects); the legacy function sync skips it."
+            )
         print_success("Syncing functions (legacy)…")
         return {
             "mode": "legacy",
@@ -467,9 +476,10 @@ def push_functions(
                 "(runtimeStatus) or re-run with --wait."
             )
 
-    # Also refresh local function UUID tracking via legacy list when possible.
+    # Refresh local function UUID tracking (read-only): V2 runtimes deploy
+    # from the build archive, so no code is re-uploaded here.
     try:
-        upload_functions(client, root, config, delete_missing=False)
+        track_functions(client, root, config)
     except Exception:  # noqa: BLE001
         pass
     return result

@@ -287,8 +287,11 @@ def _write_lifecycle_function_entry(
     """Overwrite the scaffold entry with a lifecycle-aware stub."""
     from caraer_cli.project.schema import load_function_manifest
 
-    manifest = load_function_manifest(folder / "function.caraer.json")
-    entry = folder / manifest.resolved_entry()
+    manifest_path = folder / "function.caraer.json"
+    if manifest_path.is_file():
+        entry = folder / load_function_manifest(manifest_path).resolved_entry()
+    else:
+        entry = folder / ("main.py" if runtime.startswith("python") else "index.js")
     if runtime.startswith("python"):
         entry.write_text(
             f'def handler(request):\n'
@@ -418,9 +421,8 @@ def write_app_manifest(
     functions_dir(root, src_dir).mkdir(parents=True, exist_ok=True)
     webhooks_dir(root, src_dir).mkdir(parents=True, exist_ok=True)
     lifecycle_dir(root, src_dir).mkdir(parents=True, exist_ok=True)
-    settings_dir(root, src_dir).mkdir(parents=True, exist_ok=True)
-    pricing_dir(root, src_dir).mkdir(parents=True, exist_ok=True)
-    app_bars_dir(root, src_dir).mkdir(parents=True, exist_ok=True)
+    # settings/, pricing/, and app-bars/ hold optional modular files; their
+    # writers create the directories on demand, so don't scaffold empty ones.
     # Always write preferred YAML for scaffolds / local edits.
     manifest = app_dir(root, src_dir) / APP_MANIFEST_YAML
     manifest.parent.mkdir(parents=True, exist_ok=True)
@@ -436,6 +438,28 @@ def ensure_gitignore(root: Path) -> Path | None:
     if path.exists():
         return None
     path.write_text(GITIGNORE_CONTENTS, encoding="utf-8")
+    return path
+
+
+def ensure_package_json(root: Path, name: str) -> Path | None:
+    """Scaffold a root package.json so Node app projects behave like a
+    regular npm project (editor tooling, `npm run dev`, debugger attach)."""
+    path = root / "package.json"
+    if path.exists():
+        return None
+    payload = {
+        "name": name,
+        "private": True,
+        "scripts": {
+            "dev": "caraer apps dev",
+            "validate": "caraer apps validate",
+            "push": "caraer apps push",
+            "deploy": "caraer apps push --deploy",
+            "logs": "caraer apps logs --all",
+            "typegen": "caraer apps typegen --force",
+        },
+    }
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return path
 
 
@@ -498,6 +522,8 @@ def scaffold_app_project(
 
     app_file = write_app_manifest(project_root, manifest_payload, src_dir=src_dir)
     ensure_gitignore(project_root)
+    if not str(runtime or "").startswith("python"):
+        ensure_package_json(project_root, name)
 
     lifecycle_hooks = scaffold_all_lifecycle_hooks(
         project_root,

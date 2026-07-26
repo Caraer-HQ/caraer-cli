@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+- V2 runtimes now deploy straight from the pushed build archive (Cloud Run
+  style): the platform stores function metadata only, not source code. After a
+  build push, the CLI refreshes function UUID tracking read-only instead of
+  re-uploading code through the legacy API, and `apps pull` never overwrites
+  local sources when the platform has no stored code
+- Shared code: `src/app/shared/` is deployed at the runtime archive root, so
+  functions import helpers with the same relative path locally and deployed
+  (`require("../../shared")` from `functions/<name>/index.js`). No more
+  copying `shared.js` into every function folder (requires backend support;
+  platform 2026.2 build pushes only — legacy sync warns and skips it)
+- `function.caraer.json` is now optional: a folder under `src/app/functions/`
+  with `index.js` / `main.py` is a function named after the folder, using the
+  app-level runtime. Keep the manifest only for a custom `entry` or
+  `description`. Scaffolds and `apps pull` no longer write redundant manifests
+- `apps init` scaffolds a root `package.json` with npm scripts
+  (`dev`, `validate`, `push`, `deploy`, `logs`, `typegen`) for Node projects
+- `apps init` no longer creates empty `settings/`, `pricing/`, and `app-bars/`
+  directories; their writers create them on demand
+
 ## 0.1.2
 
 - Cursor Agent Skill `caraer-apps` under `skills/caraer-apps`, installable via

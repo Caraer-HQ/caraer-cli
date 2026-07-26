@@ -83,12 +83,14 @@ def test_invalid_runtime_rejected() -> None:
 def test_scaffold_writes_files(tmp_path: Path) -> None:
     from caraer_cli.project.sync import scaffold_function
 
+    from caraer_cli.project.sync import discover_local_functions
+
     config = ProjectConfig(name="demo")
     folder = scaffold_function(tmp_path, config, "hello-world", "python312")
-    assert (folder / "function.caraer.json").is_file()
+    assert not (folder / "function.caraer.json").exists()
     assert (folder / "main.py").is_file()
-    data = json.loads((folder / "function.caraer.json").read_text(encoding="utf-8"))
-    assert data["runtime"] == "python312"
+    discovered = {m.name: m for m, _, _, _ in discover_local_functions(tmp_path, config)}
+    assert discovered["hello-world"].runtime == "python312"
 
 
 def test_webhook_filename_stable() -> None:

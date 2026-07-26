@@ -32,9 +32,14 @@ def discover_local_functions(
         if not child.is_dir():
             continue
         manifest_path = child / "function.caraer.json"
-        if not manifest_path.is_file():
-            continue
-        manifest = load_function_manifest(manifest_path)
+        if manifest_path.is_file():
+            manifest = load_function_manifest(manifest_path)
+        else:
+            # Convention over configuration: a folder with an entry file is a
+            # function named after the folder, using the app-level runtime.
+            manifest = _conventional_manifest(child, config)
+            if manifest is None:
+                continue
         entry_path = child / manifest.resolved_entry()
         if not entry_path.is_file():
             raise FileNotFoundError(f"Missing entry file for function '{manifest.name}': {entry_path}")
@@ -42,6 +47,30 @@ def discover_local_functions(
         source_files = _collect_source_files(child, entry_path)
         found.append((manifest, entry_path, code, source_files))
     return found
+
+
+def load_or_conventional_manifest(folder: Path, config: ProjectConfig) -> FunctionManifest:
+    """Load function.caraer.json, or derive a conventional manifest from the entry file."""
+    manifest_path = folder / "function.caraer.json"
+    if manifest_path.is_file():
+        return load_function_manifest(manifest_path)
+    manifest = _conventional_manifest(folder, config)
+    if manifest is None:
+        raise FileNotFoundError(
+            f"No function.caraer.json or entry file (index.js/main.py) in {folder}"
+        )
+    return manifest
+
+
+def _conventional_manifest(folder: Path, config: ProjectConfig) -> FunctionManifest | None:
+    """Manifest for a folder without function.caraer.json, or None if it has no entry."""
+    runtime = config.resolved_runtime()
+    default_entry = "main.py" if runtime.startswith("python") else "index.js"
+    for entry in (default_entry, "index.js", "main.py"):
+        if (folder / entry).is_file():
+            entry_runtime = "python312" if entry == "main.py" else "nodejs22"
+            return FunctionManifest(name=folder.name, runtime=entry_runtime, entry=entry)
+    return None
 
 
 def _collect_source_files(folder: Path, entry_path: Path) -> dict[str, str]:
@@ -181,6 +210,37 @@ def upload_functions(
     return {"functions": results, "deleted": deleted}
 
 
+def track_functions(client: CaraerApiClient, root: Path, config: ProjectConfig) -> dict[str, Any]:
+    """Refresh local UUID/hash tracking from the remote function list.
+
+    Read-only counterpart to :func:`upload_functions` for build-deployed apps:
+    V2 runtimes deploy from the build archive, so nothing is uploaded here.
+    """
+    if not config.appUuid:
+        raise ValueError("App has no remote UUID. Run 'caraer apps select' or 'caraer apps push'.")
+
+    remote = functions_api.list_functions(client, config.appUuid, page=1, limit=200)
+    remote_items = remote.get("data") or []
+    by_name = {str(item.get("name") or ""): item for item in remote_items if isinstance(item, dict)}
+
+    state = load_state(root)
+    fn_state: dict[str, Any] = state.setdefault("functions", {})
+    tracked: list[dict[str, Any]] = []
+    for manifest, _entry_path, code, source_files in discover_local_functions(root, config):
+        remote_item = by_name.get(manifest.name)
+        uuid = str(remote_item.get("uuid")) if remote_item and remote_item.get("uuid") else None
+        if not uuid:
+            continue
+        extras_blob = json.dumps(source_files, sort_keys=True) if source_files else ""
+        content_hash = _hash_text(
+            f"{manifest.runtime}\n{manifest.description}\n{code}\n{extras_blob}"
+        )
+        fn_state[manifest.name] = {"uuid": uuid, "hash": content_hash}
+        tracked.append({"name": manifest.name, "uuid": uuid})
+    save_state(root, state)
+    return {"functions": tracked}
+
+
 def pull_functions(client: CaraerApiClient, root: Path, config: ProjectConfig) -> dict[str, Any]:
     if not config.appUuid:
         raise ValueError("App has no remote UUID. Run 'caraer apps select' or 'caraer apps push'.")
@@ -203,10 +263,21 @@ def pull_functions(client: CaraerApiClient, root: Path, config: ProjectConfig) -
         source_files = item.get("sourceFiles") if isinstance(item.get("sourceFiles"), dict) else {}
         uuid = str(item.get("uuid") or "")
         folder = base / name
-        folder.mkdir(parents=True, exist_ok=True)
         manifest = FunctionManifest(name=name, runtime=runtime, description=description)
-        save_function_manifest(folder / "function.caraer.json", manifest)
         entry = folder / manifest.resolved_entry()
+        if not code.strip():
+            # Build-deployed V2 apps keep no code in the platform DB; never
+            # overwrite (or scaffold) local sources from empty remote code.
+            pulled.append({"name": name, "uuid": uuid, "path": str(folder), "skipped": "no remote code"})
+            if uuid:
+                fn_state.setdefault(name, {})["uuid"] = uuid
+            continue
+        folder.mkdir(parents=True, exist_ok=True)
+        # Conventional functions (folder name + default entry) need no manifest.
+        if description:
+            save_function_manifest(folder / "function.caraer.json", manifest)
+        else:
+            (folder / "function.caraer.json").unlink(missing_ok=True)
         entry.write_text(code, encoding="utf-8")
         for relative, content in source_files.items():
             if not isinstance(relative, str) or not relative.strip() or ".." in relative.split("/"):
@@ -274,7 +345,11 @@ def scaffold_function(
     description: str | None = None,
     force: bool = False,
 ) -> Path:
-    """Create ``src/app/functions/<name>/`` with manifest + entry source."""
+    """Create ``src/app/functions/<name>/`` with an entry source file.
+
+    function.caraer.json is only written when the function needs more than the
+    conventional defaults (folder name + default entry), i.e. a description.
+    """
     folder = functions_dir(root, config.srcDir) / name
     manifest_path = folder / "function.caraer.json"
     if folder.exists() and any(folder.iterdir()) and not force:
@@ -285,9 +360,10 @@ def scaffold_function(
     manifest = FunctionManifest(
         name=name,
         runtime=runtime,
-        description=description if description is not None else name,
+        description=description if description is not None else "",
     )
-    save_function_manifest(manifest_path, manifest)
+    if manifest.description:
+        save_function_manifest(manifest_path, manifest)
     entry = folder / manifest.resolved_entry()
     if force or not entry.exists():
         if runtime.startswith("python"):

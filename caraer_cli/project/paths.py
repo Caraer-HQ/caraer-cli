@@ -86,6 +86,16 @@ def lifecycle_dir(root: Path, src_dir: str = "src") -> Path:
     return app_dir(root, src_dir) / "lifecycle"
 
 
+def shared_dir(root: Path, src_dir: str = "src") -> Path:
+    """Source files shared by all functions (platform 2026.2 only).
+
+    Deployed at ``shared/`` in the runtime archive root, so functions import
+    them with the same relative path as locally, e.g.
+    ``require("../../shared/utils")`` from ``functions/<name>/index.js``.
+    """
+    return app_dir(root, src_dir) / "shared"
+
+
 APP_MANIFEST_YAML = "app.caraer.yaml"
 APP_MANIFEST_JSON = "app.caraer.json"
 

@@ -19,11 +19,15 @@ def test_scaffold_function_creates_nodejs_folder(tmp_path: Path) -> None:
     root = result["root"]
     config = load_workspace(root)
     folder = scaffold_function(root, config, "my-action", "nodejs22")
-    assert (folder / "function.caraer.json").is_file()
+    # Conventional functions need no function.caraer.json; discovery uses the
+    # folder name and entry file.
+    assert not (folder / "function.caraer.json").exists()
     assert (folder / "index.js").is_file()
-    manifest = json.loads((folder / "function.caraer.json").read_text(encoding="utf-8"))
-    assert manifest["name"] == "my-action"
-    assert manifest["runtime"] == "nodejs22"
+    from caraer_cli.project.sync import discover_local_functions
+
+    discovered = {m.name: m for m, _, _, _ in discover_local_functions(root, config)}
+    assert "my-action" in discovered
+    assert discovered["my-action"].runtime == "nodejs22"
 
 
 def test_scaffold_function_refuses_overwrite(tmp_path: Path) -> None:
