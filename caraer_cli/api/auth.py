@@ -14,6 +14,32 @@ def login(client: CaraerApiClient, email: str, password: str) -> dict[str, Any]:
     )
 
 
+def device_start(client: CaraerApiClient) -> dict[str, Any]:
+    return client.request(
+        "POST",
+        "/api/v2/auth/device/start",
+        allow_unauthenticated=True,
+    )
+
+
+def device_poll(client: CaraerApiClient, device_code: str) -> dict[str, Any]:
+    return client.request(
+        "POST",
+        "/api/v2/auth/device/poll",
+        json_body={"deviceCode": device_code},
+        allow_unauthenticated=True,
+    )
+
+
+def refresh(client: CaraerApiClient, refresh_token: str) -> dict[str, Any]:
+    return client.request(
+        "POST",
+        "/api/v2/auth/refresh",
+        json_body={"refreshToken": refresh_token},
+        allow_unauthenticated=True,
+    )
+
+
 def me(client: CaraerApiClient) -> dict[str, Any]:
     # /auth/me is company-optional; a stale company header causes "Company not found".
     return client.request("GET", "/api/v2/auth/me", send_company_header=False)

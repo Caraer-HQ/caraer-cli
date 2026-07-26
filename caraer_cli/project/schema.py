@@ -146,7 +146,9 @@ def load_function_manifest(path: Path) -> FunctionManifest:
 
 
 def save_function_manifest(path: Path, manifest: FunctionManifest) -> None:
-    path.write_text(manifest.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    from caraer_cli.project.json_schemas import FUNCTION_SCHEMA_URL, dump_json_with_schema
+
+    dump_json_with_schema(path, manifest.model_dump(), FUNCTION_SCHEMA_URL)
 
 
 def default_app_manifest(name: str) -> dict[str, Any]:

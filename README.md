@@ -12,6 +12,14 @@ the Caraer API as a thin client — no GCP credentials are required on your mach
 
 ## Install
 
+### From PyPI
+
+```bash
+pipx install caraer-cli
+# or: uv tool install caraer-cli
+# or: pip install caraer-cli
+```
+
 ### From source (development)
 
 ```bash
@@ -29,17 +37,11 @@ If install fails with `requires a different Python`, create the venv with
 
 Tab completion is installed by `scripts/install.sh`. Restart the terminal afterward.
 
-### From PyPI (when published)
-
-```bash
-pipx install caraer-cli
-# or: pip install caraer-cli
-```
-
 ## Quick start
 
 ```bash
-caraer auth login --email you@example.com
+caraer auth login
+# or password/CI: caraer auth login --email you@example.com
 caraer company list
 caraer company select <company-uuid>
 caraer apps list
@@ -177,6 +179,10 @@ caraer sandbox clear                # back to the company production database
 
 Each company may have at most **3** active sandboxes. After a backend deploy that
 changed the sandbox model, recreate sandboxes (old clone-company sandboxes are invalid).
+
+Sandboxes isolate **Neo4j data only** — function runtime code is still shared with
+production. Prefer `caraer apps push --dry-run` to preview changes, and treat
+`--target sandbox` as a data sandbox, not a separate code environment.
 
 ## Documentation
 

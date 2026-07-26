@@ -619,7 +619,12 @@ def push_public(
         False,
         "--yes",
         "-y",
-        help="Non-interactive: require --version and --notes (no prompts).",
+        help="Non-interactive: skip confirmation; require --version and --notes.",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Show the create/update/delete plan and exit without writing.",
     ),
     delete_missing: bool = typer.Option(
         False,
@@ -634,16 +639,21 @@ def push_public(
     target: str = typer.Option("production", "--target", help="production|sandbox"),
 ) -> None:
     """Push the full local app (manifest, functions, webhooks, schedules, inbound, OAuth) to Caraer."""
+    import sys
+
     from caraer_cli.app_sync import push_app, resolve_app_root
+    from caraer_cli.formatters.output import print_warning
+    from caraer_cli.project.push_plan import build_push_plan, print_push_plan
     from caraer_cli.project.release import is_semver
-    from caraer_cli.wizard.prompts import WizardCancelled
+    from caraer_cli.project.schema import load_workspace
+    from caraer_cli.wizard.prompts import WizardCancelled, ask_confirm
 
     app_ctx: AppContext = ctx.obj
     if version is not None:
         version = version.strip()
         if not is_semver(version):
             raise typer.BadParameter("--version must be MAJOR.MINOR.PATCH (e.g. 1.2.3).")
-    if yes and (not version or not (release_notes or "").strip()):
+    if yes and not dry_run and (not version or not (release_notes or "").strip()):
         raise typer.BadParameter("--yes requires both --version and --notes.")
     selected_file = file or app_ctx.profile.app_file
     try:
@@ -657,10 +667,41 @@ def push_public(
             "No app folder found. Run 'caraer apps init' or 'cd' into an app directory."
         ) from None
 
+    if target == "sandbox":
+        print_warning(
+            "Sandbox target isolates Neo4j data via X-Caraer-Sandbox-Uuid, "
+            "but function runtime code is shared with production."
+        )
+
+    client = app_ctx.api_client()
+    config = load_workspace(root)
+    if app_uuid:
+        config.appUuid = app_uuid
+    elif not config.appUuid and app_ctx.profile.app_uuid:
+        config.appUuid = app_ctx.profile.app_uuid
+
+    interactive_tty = sys.stdin.isatty() and sys.stdout.isatty()
+    show_plan = dry_run or (interactive_tty and not yes)
+    if show_plan:
+        plan = build_push_plan(client, root, config, delete_missing=delete_missing)
+        if app_ctx.output in {"json", "yaml"}:
+            print_data(plan, app_ctx.output)
+        else:
+            print_push_plan(plan)
+        if dry_run:
+            print_success("Dry run complete — no changes written.")
+            return
+        try:
+            if not ask_confirm("Proceed with push?", default=False):
+                print_warning("Push cancelled.")
+                raise typer.Exit(code=1)
+        except WizardCancelled:
+            raise typer.Exit(code=1) from None
+
     patch_data = parse_patch(patch) if patch else None
     try:
         result = push_app(
-            app_ctx.api_client(),
+            client,
             root,
             app_uuid=app_uuid or app_ctx.profile.app_uuid,
             patch=patch_data,
@@ -831,7 +872,6 @@ def add_schedule(
     force: bool = typer.Option(False, "--force", help="Overwrite existing file."),
 ) -> None:
     """Scaffold a local schedule JSON under src/app/schedules/."""
-    import json
     from caraer_cli.app_sync import resolve_app_root
     from caraer_cli.project.paths import schedules_dir
     from caraer_cli.project.schema import load_workspace
@@ -855,7 +895,9 @@ def add_schedule(
         "enabled": True,
         "serverlessFunction": {"name": function_name},
     }
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    from caraer_cli.project.json_schemas import SCHEDULE_SCHEMA_URL, dump_json_with_schema
+
+    dump_json_with_schema(path, payload, SCHEDULE_SCHEMA_URL)
     print_success(f"Created schedule scaffold at {path}")
 
 
@@ -879,7 +921,6 @@ def add_inbound(
     force: bool = typer.Option(False, "--force", help="Overwrite existing file."),
 ) -> None:
     """Scaffold a local inbound route JSON under src/app/inbound/."""
-    import json
     from caraer_cli.app_sync import resolve_app_root
     from caraer_cli.project.paths import inbound_dir
     from caraer_cli.project.schema import load_workspace
@@ -903,7 +944,9 @@ def add_inbound(
         "enqueue": enqueue,
         "serverlessFunction": {"name": function_name},
     }
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    from caraer_cli.project.json_schemas import INBOUND_SCHEMA_URL, dump_json_with_schema
+
+    dump_json_with_schema(path, payload, INBOUND_SCHEMA_URL)
     print_success(f"Created inbound scaffold at {path}")
 
 
@@ -1178,6 +1221,42 @@ def app_status(ctx: typer.Context) -> None:
     print_data(status_summary(app_ctx.api_client(), root, config), app_ctx.output)
 
 
+@app.command("typegen")
+def typegen(
+    ctx: typer.Context,
+    file: str | None = typer.Option(
+        None,
+        "--file",
+        "-f",
+        help="App folder or app.caraer.yaml (defaults to selected local app / cwd).",
+    ),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing type files."),
+) -> None:
+    """Generate typed payload helpers (TypeScript or Python) under src/types/."""
+    from caraer_cli.app_sync import resolve_app_root
+    from caraer_cli.project.schema import load_workspace
+    from caraer_cli.project.typegen import generate_types
+
+    app_ctx: AppContext = ctx.obj
+    selected = file or app_ctx.profile.app_file
+    try:
+        root = resolve_app_root(app_file=selected)
+    except FileNotFoundError:
+        raise typer.BadParameter(
+            "No app folder found. Pass --file, select a local app, or cd into an app directory."
+        ) from None
+
+    config = load_workspace(root)
+    try:
+        result = generate_types(root, config, force=force)
+    except FileExistsError as exc:
+        raise ValueError(str(exc)) from None
+    print_success(
+        f"Wrote {result['runtime']} types to {result['relative']} "
+        f"(re-run with --force to overwrite)."
+    )
+
+
 @app.command("validate")
 def validate_app(
     ctx: typer.Context,
@@ -1423,7 +1502,14 @@ def deploy_app(
 ) -> None:
     """Deploy a previously created build for this app."""
     from caraer_cli.api import projects as projects_api
-    from caraer_cli.app_sync import _poll_v2_runtime, require_project_uuid, resolve_app_root
+    from caraer_cli.app_sync import (
+        _poll_v2_runtime,
+        _print_deploy_results,
+        _refresh_deploy,
+        require_project_uuid,
+        resolve_app_root,
+    )
+    from caraer_cli.formatters.output import print_warning
     from caraer_cli.project.schema import load_workspace
     from caraer_cli.project.state import load_state, save_state
 
@@ -1436,15 +1522,28 @@ def deploy_app(
     resolved = build_uuid or state.get("lastBuildUuid")
     if not resolved:
         raise ValueError("No build UUID provided and no lastBuildUuid in local state.")
+    if target == "sandbox":
+        print_warning(
+            "Sandbox deploys isolate Neo4j data via X-Caraer-Sandbox-Uuid, "
+            "but the Cloud Function runtime is shared with production."
+        )
     response = projects_api.deploy_build(
-        client, project_uuid, str(resolved), target=target
+        client, project_uuid, str(resolved), target=target, prune=False
     )
     data = response.get("data") or {}
     state["lastDeployUuid"] = data.get("uuid")
     save_state(root, state)
     print_success(f"Deployed build {resolved}")
+    if isinstance(data, dict):
+        _print_deploy_results(data)
     if config.is_app_platform_v2() and wait:
         runtime = _poll_v2_runtime(client, config, progress=True)
+        refreshed = _refresh_deploy(
+            client, project_uuid, data.get("uuid") if isinstance(data, dict) else None
+        )
+        if refreshed:
+            data = refreshed
+            _print_deploy_results(refreshed)
         if isinstance(data, dict):
             data = {**data, "runtime": runtime}
     elif config.is_app_platform_v2() and not wait:
@@ -1776,7 +1875,11 @@ def app_logs(
         help="Fetch app-level V2 container logs (no function filter).",
     ),
     since: str = typer.Option("1h", "--since", help="Lookback window, e.g. 15m, 1h, 24h."),
-    follow: bool = typer.Option(False, "--follow", help="Poll for new log lines."),
+    follow: bool = typer.Option(
+        False,
+        "--follow",
+        help="Follow new log lines (SSE for --all; poll otherwise).",
+    ),
     limit: int = typer.Option(100, "--limit", help="Maximum log lines to return."),
 ) -> None:
     """Fetch remote logs for a local function (or the whole V2 runtime with --all)."""
@@ -1785,6 +1888,7 @@ def app_logs(
     from caraer_cli.api import functions as functions_api
     from caraer_cli.api import projects as projects_api
     from caraer_cli.app_sync import resolve_app_root
+    from caraer_cli.errors import ApiError, NotFoundError
     from caraer_cli.project.schema import load_workspace
     from caraer_cli.project.state import load_state
     from caraer_cli.project.sync import resolve_local_function_name
@@ -1816,6 +1920,23 @@ def app_logs(
         print_success(f"Fetching logs for '{function_name}'…")
     else:
         print_success("Fetching app runtime logs…")
+
+    # Prefer SSE for app-level follow; fall back to polling.
+    if all_runtime and follow and (app_ctx.output or "table").lower() == "table":
+        try:
+            print_success("Streaming runtime logs (SSE)…")
+            for event in projects_api.stream_runtime_logs(
+                client, config.appUuid, since=since
+            ):
+                if not isinstance(event, dict):
+                    continue
+                name = str(event.get("event") or "")
+                if name in {"ready", "done"}:
+                    continue
+                print_logs({"entries": [event]}, seen=None, show_header=False)
+            return
+        except (ApiError, NotFoundError) as exc:
+            print_success(f"SSE unavailable ({exc.status}); falling back to poll.")
 
     seen: set[str] = set()
     first = True

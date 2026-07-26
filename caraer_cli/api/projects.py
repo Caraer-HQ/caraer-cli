@@ -84,11 +84,15 @@ def deploy_build(
     build_uuid: str,
     *,
     target: str = "production",
+    prune: bool = False,
 ) -> dict[str, Any]:
+    body: dict[str, Any] = {"target": target}
+    if prune:
+        body["prune"] = True
     return client.request(
         "POST",
         f"/api/v2/developer-projects/{project_uuid}/builds/{build_uuid}/deploy",
-        json_body={"target": target},
+        json_body=body,
     )
 
 
@@ -124,6 +128,75 @@ def get_runtime_logs(
         f"/api/v2/apps/{app_uuid}/runtime/logs",
         params={"since": since, "limit": limit},
     )
+
+
+def stream_runtime_logs(
+    client: CaraerApiClient,
+    app_uuid: str,
+    *,
+    since: str = "1h",
+):
+    """Yield SSE JSON payloads from the runtime log stream endpoint.
+
+    Falls back by raising ApiError (caller should poll) when unavailable.
+    """
+    import json
+
+    import httpx
+
+    headers: dict[str, str] = {"Accept": "text/event-stream"}
+    if client.context.token:
+        headers["Authorization"] = f"Bearer {client.context.token}"
+    if client.context.company_uuid:
+        headers["X-Caraer-Company-Uuid"] = client.context.company_uuid
+    if client.context.sandbox_uuid:
+        headers["X-Caraer-Sandbox-Uuid"] = client.context.sandbox_uuid
+
+    url = (
+        client.context.base_url.rstrip("/")
+        + f"/api/v2/apps/{app_uuid}/runtime/logs/stream"
+    )
+    params = {"since": since}
+    with httpx.Client(
+        timeout=httpx.Timeout(None, connect=30.0),
+        verify=client.context.verify_ssl,
+    ) as http:
+        with http.stream("GET", url, headers=headers, params=params) as response:
+            if response.status_code >= 400:
+                from caraer_cli.errors import parse_api_error
+
+                payload = None
+                try:
+                    payload = response.json()
+                except Exception:  # noqa: BLE001
+                    payload = None
+                raise parse_api_error(response.status_code, payload)
+            event_name = "message"
+            data_lines: list[str] = []
+            for line in response.iter_lines():
+                if line is None:
+                    continue
+                if line.startswith(":"):
+                    continue
+                if line.startswith("event:"):
+                    event_name = line[len("event:") :].strip() or "message"
+                    continue
+                if line.startswith("data:"):
+                    data_lines.append(line[len("data:") :].lstrip())
+                    continue
+                if line == "" and data_lines:
+                    raw = "\n".join(data_lines)
+                    data_lines = []
+                    try:
+                        payload = json.loads(raw)
+                    except json.JSONDecodeError:
+                        payload = {"message": raw, "event": event_name}
+                    if isinstance(payload, dict):
+                        payload.setdefault("event", event_name)
+                    yield payload
+                    event_name = "message"
+                    if isinstance(payload, dict) and payload.get("event") == "done":
+                        return
 
 
 def sample_payload(

@@ -8,11 +8,16 @@ This document maps the backend API surface currently used by the Python CLI.
 - `POST /api/v2/auth/logout`
 - `GET /api/v2/auth/me`
 - `GET /api/v2/auth/companies`
+- `POST /api/v2/auth/device/start` — device-code login; returns `{deviceCode, userCode, verificationUri, expiresIn, interval}`
+- `POST /api/v2/auth/device/poll` — body `{deviceCode}` → `{status: pending|approved|expired|denied}` (+ tokens when approved)
+- `POST /api/v2/auth/device/approve` — authenticated; body `{userCode}`
+- `POST /api/v2/auth/refresh` — body `{refreshToken}` → new access (+ rotated refresh) token
 
 Headers:
 
 - `Authorization: Bearer <token>`
 - `X-Caraer-Company-Uuid: <company_uuid>` on most protected endpoints
+- `X-Request-Id` / `X-Correlation-Id` (optional); echoed on responses and included as `requestId` in error envelopes
 
 ## App lifecycle endpoints
 
@@ -42,6 +47,7 @@ Headers:
 ## App runtime (V2)
 
 - `GET /api/v2/apps/{appUuid}/runtime/logs?since=&limit=` — shared container logs
+- `GET /api/v2/apps/{appUuid}/runtime/logs/stream` — SSE stream of runtime logs (`text/event-stream`)
 - `POST /api/v2/apps/{uuid}/migrate-v2` — body `{runtime?}`
 
 ## App integration runtime
@@ -83,7 +89,9 @@ Headers:
   - Project DTO includes `activeVersion` (set when a build is deployed)
 - `GET /api/v2/developer-projects/{projectUuid}/builds`
 - `GET /api/v2/developer-projects/{projectUuid}/builds/{buildUuid}`
-- `POST /api/v2/developer-projects/{projectUuid}/builds/{buildUuid}/deploy` — body `{target}`
+- `POST /api/v2/developer-projects/{projectUuid}/builds/{buildUuid}/deploy` — body `{target, prune?}`
+  - Deploy reconciles functions, webhooks, schedules, inbound routes, and external OAuth from the archive
+  - `prune: true` soft-deletes remote resources absent from the archive (`resultsJson.pruned`)
 - `GET /api/v2/developer-projects/{projectUuid}/deploys`
 
 ## Developer sandboxes
@@ -106,6 +114,11 @@ Access rules:
 - Company identity and roles are unchanged; only the Neo4j database is swapped for the request
 
 DTO fields: `ownerCompanyUuid`, `databaseId` (no sandbox `companyUuid`).
+
+**Isolation scope:** sandboxes isolate Neo4j graph data only. Cloud Function / V2
+container runtime code is shared with production. `caraer apps push --target sandbox`
+and `caraer apps deploy --target sandbox` warn about this; use a separate app or
+careful versioning when experimenting with function code.
 
 ## Response envelope assumptions
 

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- JSON Schemas under `schemas/` for app / function / webhook / schedule /
+  inbound / lifecycle configs (IDE `$schema` + optional `caraer-cli[schemas]`)
+- `caraer apps typegen` writes `src/types/caraer.d.ts` (Node) or
+  `caraer_types.py` (Python) payload helpers
+- Example app `examples/todo-sync-python` (Python 3.12 runtime)
 - Modular marketplace files: `src/app/settings/`, `pricing/`, `app-bars/`, `lifecycle/`
   (merged into the manifest on push; split on pull). Scaffolds:
   `apps add-setting|add-pricing-plan|add-app-bar|add-lifecycle-hook`

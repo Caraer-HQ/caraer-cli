@@ -325,6 +325,7 @@ def validate_local_app(
     lifecycle_count = _validate_lifecycle(
         root, config, function_names, issues
     )
+    _validate_against_json_schemas(root, config, issues)
 
     error_count = sum(1 for i in issues if i.severity == "error")
     warning_count = sum(1 for i in issues if i.severity == "warning")
@@ -1069,6 +1070,94 @@ def _validate_sf_ref(
             f"{rel}:serverlessFunction",
             f"Unknown local function '{name}'.",
         )
+
+
+def _validate_against_json_schemas(
+    root: Path,
+    config: ProjectConfig,
+    issues: list[ValidationIssue],
+) -> None:
+    """Optional structural checks via jsonschema when the extra is installed."""
+    try:
+        import jsonschema
+    except ImportError:
+        return
+
+    from caraer_cli.project.json_schemas import SCHEMA_FILENAMES, schemas_dir
+    from caraer_cli.project.paths import lifecycle_dir
+
+    schema_root = schemas_dir()
+    if schema_root is None:
+        return
+
+    import json
+
+    cache: dict[str, Any] = {}
+
+    def load_schema(kind: str) -> Any | None:
+        if kind in cache:
+            return cache[kind]
+        filename = SCHEMA_FILENAMES.get(kind)
+        if not filename:
+            return None
+        path = schema_root / filename
+        if not path.is_file():
+            return None
+        try:
+            schema = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            return None
+        cache[kind] = schema
+        return schema
+
+    def check(kind: str, rel: str, data: Any) -> None:
+        schema = load_schema(kind)
+        if schema is None or not isinstance(data, dict):
+            return
+        payload = {k: v for k, v in data.items() if k != "$schema"}
+        try:
+            jsonschema.validate(instance=payload, schema=schema)
+        except jsonschema.ValidationError as exc:
+            path_bits = ".".join(str(p) for p in exc.absolute_path) if exc.absolute_path else ""
+            loc = f"{rel}:{path_bits}" if path_bits else rel
+            _issue(
+                issues,
+                "warning",
+                loc,
+                f"JSON Schema: {exc.message}",
+            )
+        except Exception as exc:  # noqa: BLE001
+            _issue(issues, "warning", rel, f"JSON Schema check failed: {exc}")
+
+    try:
+        manifest = load_local_app(app_manifest_path(root, config.srcDir))
+        check("app", str(app_manifest_path(root, config.srcDir).relative_to(root)), manifest)
+    except Exception:  # noqa: BLE001
+        pass
+
+    for manifest, _entry, _code, _sources in discover_local_functions(root, config):
+        fn_path = functions_dir(root, config.srcDir) / manifest.name / "function.caraer.json"
+        if fn_path.is_file():
+            try:
+                data = json.loads(fn_path.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001
+                continue
+            check("function", str(fn_path.relative_to(root)), data)
+
+    for path, item in discover_local_webhooks(root, config):
+        check("webhook", str(path.relative_to(root)), item)
+    for path, item in discover_local_schedules(root, config):
+        check("schedule", str(path.relative_to(root)), item)
+    for path, item in discover_local_inbound(root, config):
+        check("inbound", str(path.relative_to(root)), item)
+
+    hooks = discover_local_lifecycle(root, config)
+    base = lifecycle_dir(root, config.srcDir)
+    for stem, (manifest_key, _topic) in LIFECYCLE_HOOKS.items():
+        hook = hooks.get(manifest_key)
+        if hook is None:
+            continue
+        check("lifecycle", str((base / f"{stem}.json").relative_to(root)), hook)
 
 
 def _validate_lifecycle(

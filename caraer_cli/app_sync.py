@@ -210,6 +210,110 @@ def _resolve_app_runtime(root: Path, config: ProjectConfig) -> str:
     return "nodejs22"
 
 
+def _parse_results_json(raw: Any) -> dict[str, Any]:
+    """Parse deploy resultsJson (string or dict) into a dict."""
+    import json
+
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _print_deploy_results(deploy_data: dict[str, Any]) -> None:
+    """Print per-item reconcile results from a deploy response."""
+    from caraer_cli.formatters.output import print_error, print_success, print_warning
+
+    status = str(deploy_data.get("status") or "").upper()
+    results = _parse_results_json(deploy_data.get("resultsJson"))
+    if not results and status not in {"PARTIAL", "FAILED"}:
+        return
+
+    if status:
+        printer = print_error if status == "FAILED" else (
+            print_warning if status == "PARTIAL" else print_success
+        )
+        printer(f"Deploy status: {status}")
+
+    for section, payload in results.items():
+        if section == "runtime":
+            continue
+        if isinstance(payload, list):
+            for item in payload:
+                if not isinstance(item, dict):
+                    continue
+                name = item.get("name") or item.get("uuid") or "?"
+                if item.get("success") is True:
+                    print_success(f"  {section}/{name}: ok")
+                elif item.get("skipped"):
+                    print_warning(
+                        f"  {section}/{name}: skipped"
+                        f" ({item.get('reason') or item.get('error') or 'n/a'})"
+                    )
+                else:
+                    print_error(
+                        f"  {section}/{name}: "
+                        f"{item.get('error') or 'failed'}"
+                    )
+        elif isinstance(payload, dict):
+            if payload.get("success") is True:
+                print_success(f"  {section}: ok")
+            elif payload.get("skipped"):
+                print_warning(
+                    f"  {section}: skipped"
+                    f" ({payload.get('reason') or payload.get('error') or 'n/a'})"
+                )
+            elif payload.get("success") is False or payload.get("error"):
+                print_error(f"  {section}: {payload.get('error') or 'failed'}")
+
+
+def _print_runtime_outcome(runtime: dict[str, Any]) -> None:
+    """Print a clear READY-at-URL or FAILED message after wait."""
+    from caraer_cli.formatters.output import print_error, print_success, print_warning
+
+    if not runtime:
+        return
+    status = str(runtime.get("runtimeStatus") or "").upper()
+    base_url = runtime.get("runtimeBaseUrl")
+    error = runtime.get("runtimeError")
+    if status == "READY":
+        if base_url:
+            print_success(f"runtime READY at {base_url}")
+        else:
+            print_success("runtime READY")
+    elif status == "FAILED":
+        print_error(f"runtime FAILED: {error or 'unknown error'}")
+    elif status == "TIMEOUT":
+        print_warning(f"runtime wait timed out: {error or status}")
+    elif status:
+        print_warning(f"runtimeStatus={status}")
+
+
+def _refresh_deploy(
+    client: CaraerApiClient,
+    project_uuid: str,
+    deploy_uuid: str | None,
+) -> dict[str, Any]:
+    """Re-fetch a deploy by UUID (best-effort) to pick up final resultsJson."""
+    if not deploy_uuid:
+        return {}
+    try:
+        rows = projects_api.list_deploys(client, project_uuid).get("data") or []
+    except Exception:  # noqa: BLE001
+        return {}
+    if not isinstance(rows, list):
+        return {}
+    for item in rows:
+        if isinstance(item, dict) and str(item.get("uuid") or "") == str(deploy_uuid):
+            return item
+    return {}
+
+
 def _poll_v2_runtime(
     client: CaraerApiClient,
     config: ProjectConfig,
@@ -253,17 +357,14 @@ def _poll_v2_runtime(
             print_success(f"still waiting… runtimeStatus={status} ({int(elapsed)}s)")
             last_heartbeat = elapsed
         if status in {"READY", "FAILED"}:
-            if progress and status == "FAILED":
-                print_success(f"runtime FAILED: {last.get('runtimeError') or 'unknown error'}")
+            if progress:
+                _print_runtime_outcome(last)
             return last
         time.sleep(interval_s)
     last["runtimeStatus"] = last.get("runtimeStatus") or "TIMEOUT"
     last["runtimeError"] = last.get("runtimeError") or "Timed out waiting for runtime READY"
     if progress:
-        print_success(
-            f"Timed out after {int(timeout_s)}s "
-            f"(last runtimeStatus={last.get('runtimeStatus')})."
-        )
+        _print_runtime_outcome(last)
     return last
 
 
@@ -344,15 +445,22 @@ def push_functions(
     if should_deploy:
         print_success(f"Deploying build {build_uuid} to {target}…")
         deploy_response = projects_api.deploy_build(
-            client, project_uuid, str(build_uuid), target=target
+            client, project_uuid, str(build_uuid), target=target, prune=delete_missing
         )
         deploy_data = deploy_response.get("data") or {}
         state["lastDeployUuid"] = deploy_data.get("uuid")
         save_state(root, state)
         result["deploy"] = deploy_data
         print_success(f"Deploy started: {deploy_data.get('uuid') or 'ok'}")
+        _print_deploy_results(deploy_data if isinstance(deploy_data, dict) else {})
         if config.is_app_platform_v2() and wait:
             result["runtime"] = _poll_v2_runtime(client, config, progress=True)
+            refreshed = _refresh_deploy(
+                client, project_uuid, deploy_data.get("uuid") if isinstance(deploy_data, dict) else None
+            )
+            if refreshed:
+                result["deploy"] = refreshed
+                _print_deploy_results(refreshed)
         elif config.is_app_platform_v2() and not wait:
             print_success(
                 "Skipping runtime wait. Check later with 'caraer apps get' "
@@ -365,6 +473,18 @@ def push_functions(
     except Exception:  # noqa: BLE001
         pass
     return result
+
+
+def _deploy_has_full_reconcile(functions_result: dict[str, Any]) -> bool:
+    """True when the backend deploy results include schedules/inbound/oauth."""
+    deploy = functions_result.get("deploy") if isinstance(functions_result, dict) else None
+    if not isinstance(deploy, dict):
+        return False
+    results = _parse_results_json(deploy.get("resultsJson"))
+    return any(
+        key in results
+        for key in ("schedules", "inboundRoutes", "externalOAuthProviders")
+    )
 
 
 def push_app(
@@ -382,7 +502,7 @@ def push_app(
     release_notes: str | None = None,
     interactive: bool = True,
 ) -> dict[str, Any]:
-    from caraer_cli.formatters.output import print_success
+    from caraer_cli.formatters.output import print_success, print_warning
 
     config = load_workspace(root)
 
@@ -401,6 +521,11 @@ def push_app(
         )
 
     config = ensure_linked(client, root, config)
+    if target == "sandbox":
+        print_warning(
+            "Sandbox deploys isolate Neo4j data via X-Caraer-Sandbox-Uuid, "
+            "but the Cloud Function runtime is shared with production."
+        )
     functions_result = push_functions(
         client,
         root,
@@ -421,34 +546,48 @@ def push_app(
         )
     except ValueError as exc:
         print_success(f"Manifest refresh deferred: {exc}")
-    print_success("Syncing webhooks…")
-    webhooks_result = push_webhooks(
-        client,
-        root,
-        config,
-        delete_missing=delete_missing,
-    )
-    print_success("Syncing schedules…")
-    schedules_result = push_schedules(
-        client,
-        root,
-        config,
-        delete_missing=delete_missing,
-    )
-    print_success("Syncing inbound routes…")
-    inbound_result = push_inbound(
-        client,
-        root,
-        config,
-        delete_missing=delete_missing,
-    )
-    print_success("Syncing external OAuth providers…")
-    oauth_result = push_external_oauth_providers(
-        client,
-        root,
-        config,
-        delete_missing=delete_missing,
-    )
+
+    # Prefer server-side reconcile (build/deploy) when the backend reports it.
+    # Fall back to per-resource CRUD for older backends or non-deploy pushes.
+    server_reconciled = bool(deploy) and _deploy_has_full_reconcile(functions_result)
+    if server_reconciled:
+        print_success(
+            "Server-side deploy reconciled functions/webhooks/schedules/"
+            "inbound/OAuth (skipping client CRUD)."
+        )
+        webhooks_result: dict[str, Any] = {"mode": "server-reconcile"}
+        schedules_result: dict[str, Any] = {"mode": "server-reconcile"}
+        inbound_result: dict[str, Any] = {"mode": "server-reconcile"}
+        oauth_result: dict[str, Any] = {"mode": "server-reconcile"}
+    else:
+        print_success("Syncing webhooks…")
+        webhooks_result = push_webhooks(
+            client,
+            root,
+            config,
+            delete_missing=delete_missing,
+        )
+        print_success("Syncing schedules…")
+        schedules_result = push_schedules(
+            client,
+            root,
+            config,
+            delete_missing=delete_missing,
+        )
+        print_success("Syncing inbound routes…")
+        inbound_result = push_inbound(
+            client,
+            root,
+            config,
+            delete_missing=delete_missing,
+        )
+        print_success("Syncing external OAuth providers…")
+        oauth_result = push_external_oauth_providers(
+            client,
+            root,
+            config,
+            delete_missing=delete_missing,
+        )
     return {
         "appUuid": config.appUuid,
         "manifest": {
@@ -461,6 +600,7 @@ def push_app(
         "schedules": schedules_result,
         "inbound": inbound_result,
         "externalOAuthProviders": oauth_result,
+        "serverReconcile": server_reconciled,
     }
 
 

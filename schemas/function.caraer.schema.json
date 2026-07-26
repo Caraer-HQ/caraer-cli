@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/caraer/caraer-cli/main/schemas/function.caraer.schema.json",
+  "title": "Caraer function manifest (function.caraer.json)",
+  "type": "object",
+  "required": ["name", "runtime"],
+  "additionalProperties": true,
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Function name (usually matches the folder name)."
+    },
+    "runtime": {
+      "type": "string",
+      "enum": ["nodejs22", "python312"]
+    },
+    "entry": {
+      "type": "string",
+      "description": "Entrypoint file; defaults to index.js or main.py."
+    },
+    "description": { "type": "string" },
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Remote function UUID (filled after push)."
+    }
+  }
+}

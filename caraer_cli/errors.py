@@ -63,6 +63,10 @@ def parse_api_error(status: int, payload: dict[str, Any] | None) -> ApiError:
     if envelope.roles:
         detail_lines.append("Missing roles: " + ", ".join(envelope.roles))
 
+    request_id = envelope.requestId or envelope.correlationId
+    if request_id:
+        detail_lines.append(f"Request ID: {request_id}")
+
     if detail_lines:
         message = f"{message}\n" + "\n".join(detail_lines)
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "caraer-cli"
-version = "0.1.0"
+version = "0.1.1"
 description = "Developer CLI for Caraer apps, webhooks, and serverless functions."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -42,16 +42,22 @@ dev = [
   "pytest>=8.3.2",
   "build>=1.2.1",
 ]
+schemas = [
+  "jsonschema>=4.22.0",
+]
 
 [project.scripts]
 caraer = "caraer_cli.main:run"
 
 [project.urls]
 Homepage = "https://caraer.com"
-Documentation = "https://docs.caraer.com"
+Documentation = "https://developer.caraer.com"
 
 [tool.hatch.build.targets.wheel]
 packages = ["caraer_cli"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"schemas" = "caraer_cli/schemas"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

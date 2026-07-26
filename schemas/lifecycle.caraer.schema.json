@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/caraer/caraer-cli/main/schemas/lifecycle.caraer.schema.json",
+  "title": "Caraer lifecycle hook config",
+  "type": "object",
+  "required": ["topic", "deliveryMode"],
+  "additionalProperties": true,
+  "properties": {
+    "topic": {
+      "type": "string",
+      "enum": [
+        "app.installed",
+        "app.uninstalled",
+        "app.rotated",
+        "app.updated"
+      ]
+    },
+    "deliveryMode": {
+      "type": "string",
+      "enum": ["SERVERLESS", "HTTP"]
+    },
+    "enabled": { "type": "boolean" },
+    "description": { "type": "string" },
+    "webhookFormat": { "type": "string" },
+    "secret": { "type": "string" },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Required when deliveryMode is HTTP."
+    },
+    "serverlessFunction": {
+      "$ref": "#/$defs/serverlessFunctionRef",
+      "description": "Required when deliveryMode is SERVERLESS."
+    }
+  },
+  "$defs": {
+    "serverlessFunctionRef": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+        "uuid": { "type": "string", "format": "uuid" }
+      },
+      "anyOf": [
+        { "required": ["name"] },
+        { "required": ["uuid"] }
+      ]
+    }
+  }
+}

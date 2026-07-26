@@ -50,7 +50,21 @@ def get_session_token(profile: str) -> str | None:
     return str(token) if token else None
 
 
-def set_session_token(profile: str, token: str) -> None:
+def get_refresh_token(profile: str) -> str | None:
+    data = _load_fallback()
+    value = data.get(profile, {})
+    if not isinstance(value, dict):
+        return None
+    token = value.get("refreshToken")
+    return str(token) if token else None
+
+
+def set_session_token(
+    profile: str,
+    token: str,
+    *,
+    refresh_token: str | None = None,
+) -> None:
     wrote_keyring = False
     try:
         keyring.set_password(SERVICE_NAME, profile, token)
@@ -58,10 +72,16 @@ def set_session_token(profile: str, token: str) -> None:
     except Exception:
         wrote_keyring = False
 
-    if not wrote_keyring:
-        data = _load_fallback()
-        data.setdefault(profile, {})
-        data[profile]["token"] = token
+    # Always persist tokens in the fallback file so refreshToken survives
+    # even when the access token is stored in the OS keyring.
+    data = _load_fallback()
+    data.setdefault(profile, {})
+    if not isinstance(data[profile], dict):
+        data[profile] = {}
+    data[profile]["token"] = token
+    if refresh_token is not None:
+        data[profile]["refreshToken"] = refresh_token
+    if not wrote_keyring or refresh_token is not None:
         _save_fallback(data)
 
 
@@ -74,4 +94,5 @@ def clear_session_token(profile: str) -> None:
     data = _load_fallback()
     if profile in data and isinstance(data[profile], dict):
         data[profile].pop("token", None)
+        data[profile].pop("refreshToken", None)
     _save_fallback(data)

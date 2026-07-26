@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/caraer/caraer-cli/main/schemas/schedule.caraer.schema.json",
+  "title": "Caraer schedule config",
+  "type": "object",
+  "required": ["name", "schedule", "serverlessFunction"],
+  "additionalProperties": true,
+  "properties": {
+    "uuid": { "type": "string", "format": "uuid" },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schedule": {
+      "type": "string",
+      "minLength": 1,
+      "description": "5–6 field cron expression (Spring-style)."
+    },
+    "enabled": { "type": "boolean" },
+    "description": { "type": "string" },
+    "serverlessFunction": {
+      "$ref": "#/$defs/serverlessFunctionRef"
+    }
+  },
+  "$defs": {
+    "serverlessFunctionRef": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+        "uuid": { "type": "string", "format": "uuid" }
+      },
+      "anyOf": [
+        { "required": ["name"] },
+        { "required": ["uuid"] }
+      ]
+    }
+  }
+}

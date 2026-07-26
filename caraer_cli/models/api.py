@@ -18,6 +18,8 @@ class ErrorEnvelope(BaseModel):
     roles: list[str] | None = None
     scopes: list[str] | None = None
     stackTrace: str | None = None
+    requestId: str | None = None
+    correlationId: str | None = None
 
 
 class SuccessEnvelope(BaseModel):

@@ -253,6 +253,75 @@ def _function_ref_name(ref: Any) -> str | None:
     return None
 
 
+class _SourceWatcher:
+    """Stat-based poll watcher for local app sources under ``src/``."""
+
+    def __init__(self, root: Path, config: ProjectConfig) -> None:
+        self.root = root
+        self.config = config
+        self.src = root / config.srcDir
+        self._mtimes: dict[Path, float] = {}
+        self._snapshot()
+
+    def _iter_files(self) -> list[Path]:
+        if not self.src.is_dir():
+            return []
+        files: list[Path] = []
+        for path in self.src.rglob("*"):
+            if not path.is_file():
+                continue
+            if path.name.startswith(".") or "__pycache__" in path.parts:
+                continue
+            if path.suffix.lower() in {
+                ".js",
+                ".mjs",
+                ".cjs",
+                ".ts",
+                ".py",
+                ".json",
+                ".yaml",
+                ".yml",
+            }:
+                files.append(path)
+        return files
+
+    def _snapshot(self) -> None:
+        current: dict[Path, float] = {}
+        for path in self._iter_files():
+            try:
+                current[path] = path.stat().st_mtime
+            except OSError:
+                continue
+        self._mtimes = current
+
+    def poll(self) -> list[Path]:
+        previous = self._mtimes
+        current: dict[Path, float] = {}
+        changed: list[Path] = []
+        for path in self._iter_files():
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                continue
+            current[path] = mtime
+            if previous.get(path) != mtime:
+                changed.append(path)
+        for path in previous:
+            if path not in current:
+                changed.append(path)
+        self._mtimes = current
+        return changed
+
+    def function_name_for(self, path: Path) -> str | None:
+        try:
+            rel = path.relative_to(functions_dir(self.root, self.config.srcDir))
+        except ValueError:
+            return None
+        if not rel.parts:
+            return None
+        return rel.parts[0]
+
+
 def serve_functions(
     root: Path,
     config: ProjectConfig,
@@ -268,6 +337,7 @@ def serve_functions(
     Canonical invoke: POST /functions/{name}
     Also accepts: POST /{name}, X-Caraer-Function header, or body.functionName.
     When enable_installation_shim is True, also serves local installation APIs.
+    Reloads function discovery when files under src/ change (hot reload).
     """
     load_dotenv(root / ".env")
     available = list_local_function_names(root, config)
@@ -279,8 +349,10 @@ def serve_functions(
                 f"Available: {', '.join(available) or '(none)'}"
             )
         names = list(function_names)
+        lock_names = True
     else:
         names = available
+        lock_names = False
     if not names:
         raise ValueError(
             "No local functions found under src/app/functions/. "
@@ -303,8 +375,34 @@ def serve_functions(
     schedules = _load_local_schedules(root, config)
     inbound_routes = _load_local_inbound(root, config)
     job_lock = threading.Lock()
+    watcher = _SourceWatcher(root, config)
+    reload_lock = threading.Lock()
+
+    def _refresh_from_disk(*, announce: bool = True) -> list[str]:
+        nonlocal names, name_set, schedules, inbound_routes
+        changed = watcher.poll()
+        if not changed:
+            return []
+        reloaded_functions: list[str] = []
+        with reload_lock:
+            if not lock_names:
+                names = list_local_function_names(root, config)
+                name_set = set(names)
+            schedules = _load_local_schedules(root, config)
+            inbound_routes = _load_local_inbound(root, config)
+            for path in changed:
+                fn_name = watcher.function_name_for(path)
+                if fn_name and fn_name in name_set and fn_name not in reloaded_functions:
+                    reloaded_functions.append(fn_name)
+        if announce:
+            for fn_name in reloaded_functions:
+                print(f"reloaded {fn_name}", flush=True)
+            if changed and not reloaded_functions:
+                print(f"reloaded config ({len(changed)} file(s))", flush=True)
+        return reloaded_functions
 
     def _run_function(fn_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+        _refresh_from_disk(announce=True)
         runtime, entry = _load_local_function(root, config, fn_name)
         return invoke_local(runtime, entry, payload)
 
@@ -564,6 +662,7 @@ def serve_functions(
                 return
 
             if not parts:
+                _refresh_from_disk(announce=True)
                 _json_response(
                     self,
                     200,
@@ -580,6 +679,7 @@ def serve_functions(
                             else None
                         ),
                         "inbound": "POST /inbound/<routeName>",
+                        "hotReload": True,
                     },
                 )
                 return
@@ -686,6 +786,20 @@ def serve_functions(
         print(json.dumps({"schedule": invoke_schedule, "function": fn_name, "result": result}))
         return
 
+    def _watch_loop() -> None:
+        while True:
+            time.sleep(1.0)
+            try:
+                _refresh_from_disk(announce=True)
+            except Exception:  # noqa: BLE001
+                continue
+
+    threading.Thread(target=_watch_loop, daemon=True).start()
+    print(
+        f"Local dev server on {base_url} (hot reload enabled). "
+        f"Functions: {', '.join(names)}",
+        flush=True,
+    )
     server = ThreadingHTTPServer((host, port), Handler)
     try:
         server.serve_forever()

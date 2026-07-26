@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/caraer/caraer-cli/main/schemas/webhook.caraer.schema.json",
+  "title": "Caraer webhook config",
+  "type": "object",
+  "required": ["topic", "deliveryMode"],
+  "additionalProperties": true,
+  "properties": {
+    "uuid": { "type": "string", "format": "uuid" },
+    "topic": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Event topic (e.g. record.created)."
+    },
+    "deliveryMode": {
+      "type": "string",
+      "enum": ["HTTP", "SERVERLESS"]
+    },
+    "webhookFormat": {
+      "type": "string",
+      "enum": ["USER_FRIENDLY", "RAW"]
+    },
+    "description": { "type": "string" },
+    "enabled": { "type": "boolean" },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Required when deliveryMode is HTTP."
+    },
+    "secret": { "type": "string" },
+    "serverlessFunction": {
+      "$ref": "#/$defs/serverlessFunctionRef",
+      "description": "Required when deliveryMode is SERVERLESS."
+    }
+  },
+  "$defs": {
+    "serverlessFunctionRef": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+        "uuid": { "type": "string", "format": "uuid" }
+      },
+      "anyOf": [
+        { "required": ["name"] },
+        { "required": ["uuid"] }
+      ]
+    }
+  }
+}

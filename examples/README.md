@@ -37,3 +37,16 @@ export GMAIL_OAUTH_CLIENT_SECRET=...
 caraer apps select examples/gmail-sync
 caraer apps push --deploy
 ```
+
+## todo-sync-python
+
+Same shape as `hello-function`, but with `runtime: python312` and a
+`sync-todo` function that reads installation state. See
+`todo-sync-python/README.md`.
+
+```bash
+cd examples/todo-sync-python
+caraer apps select .
+caraer apps push --deploy
+caraer apps dev
+```

@@ -80,7 +80,9 @@ def scaffold_webhook(
             "enabled": True,
             "url": url.strip(),
         }
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    from caraer_cli.project.json_schemas import WEBHOOK_SCHEMA_URL, dump_json_with_schema
+
+    dump_json_with_schema(path, payload, WEBHOOK_SCHEMA_URL)
     return path
 
 
@@ -267,7 +269,9 @@ def scaffold_lifecycle_hook(
         payload["url"] = url.strip()
     else:
         payload["serverlessFunction"] = {"name": fn_name}
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    from caraer_cli.project.json_schemas import LIFECYCLE_SCHEMA_URL, dump_json_with_schema
+
+    dump_json_with_schema(path, payload, LIFECYCLE_SCHEMA_URL)
     return {
         "event": stem,
         "manifestKey": manifest_key,

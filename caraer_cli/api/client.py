@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 
-from caraer_cli.errors import ApiError, parse_api_error
+from caraer_cli.errors import ApiError, AuthError, parse_api_error
 
 # Serverless create/update can wait on GCP provisioning.
 DEFAULT_TIMEOUT_SECONDS = 120.0
@@ -20,6 +20,9 @@ class RequestContext:
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
     verify_ssl: bool = True
     debug: bool = False
+    profile_name: str | None = None
+    refresh_token: str | None = None
+    on_tokens_refreshed: Callable[[str, str | None], None] | None = None
 
 
 class CaraerApiClient:
@@ -37,8 +40,12 @@ class CaraerApiClient:
         send_company_header: bool = True,
         send_sandbox_header: bool = True,
         timeout_seconds: float | None = None,
+        _retried: bool = False,
     ) -> dict[str, Any]:
-        headers: dict[str, str] = {"Content-Type": "application/json"}
+        headers: dict[str, str] = {
+            "Content-Type": "application/json",
+            "X-Request-Id": _new_request_id(),
+        }
         if self.context.token:
             headers["Authorization"] = f"Bearer {self.context.token}"
         if send_company_header and self.context.company_uuid:
@@ -77,7 +84,34 @@ class CaraerApiClient:
 
         if response.status_code >= 400:
             payload = _safe_json(response)
+            # Transparent refresh on 401 when we have a refresh token.
+            if (
+                response.status_code == 401
+                and not _retried
+                and not allow_unauthenticated
+                and self.context.refresh_token
+                and path != "/api/v2/auth/refresh"
+            ):
+                if self._try_refresh():
+                    return self.request(
+                        method,
+                        path,
+                        params=params,
+                        json_body=json_body,
+                        allow_unauthenticated=allow_unauthenticated,
+                        send_company_header=send_company_header,
+                        send_sandbox_header=send_sandbox_header,
+                        timeout_seconds=timeout_seconds,
+                        _retried=True,
+                    )
             error = parse_api_error(response.status_code, payload)
+            request_id = (
+                (payload or {}).get("requestId")
+                if isinstance(payload, dict)
+                else None
+            ) or response.headers.get("X-Request-Id")
+            if request_id and "Request ID:" not in error.message:
+                error.message = f"{error.message}\nRequest ID: {request_id}"
             if error.message == "Company not found" and self.context.company_uuid:
                 error.message = (
                     f"Company not found ({self.context.company_uuid}). "
@@ -94,6 +128,45 @@ class CaraerApiClient:
         if isinstance(payload, dict):
             return payload
         return {"data": payload}
+
+    def _try_refresh(self) -> bool:
+        refresh_token = self.context.refresh_token
+        if not refresh_token:
+            return False
+        try:
+            response = self.request(
+                "POST",
+                "/api/v2/auth/refresh",
+                json_body={"refreshToken": refresh_token},
+                allow_unauthenticated=True,
+                _retried=True,
+            )
+        except (ApiError, AuthError):
+            return False
+        data = response.get("data") if isinstance(response.get("data"), dict) else response
+        if not isinstance(data, dict):
+            return False
+        access = data.get("accessToken")
+        token_obj = data.get("token")
+        if not access and isinstance(token_obj, dict):
+            access = token_obj.get("token")
+        if not access:
+            return False
+        new_refresh = data.get("refreshToken") or refresh_token
+        self.context.token = str(access)
+        self.context.refresh_token = str(new_refresh) if new_refresh else None
+        if self.context.on_tokens_refreshed:
+            self.context.on_tokens_refreshed(
+                str(access),
+                str(new_refresh) if new_refresh else None,
+            )
+        return True
+
+
+def _new_request_id() -> str:
+    import uuid
+
+    return str(uuid.uuid4())
 
 
 def _safe_json(response: httpx.Response) -> dict[str, Any] | None:

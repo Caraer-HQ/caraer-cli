@@ -36,6 +36,8 @@ _EXAMPLE_APP_BARS = """\
 
 def render_app_manifest(payload: dict[str, Any], *, include_examples: bool = True) -> str:
     """Serialize an app manifest as YAML, optionally with commented-out examples."""
+    from caraer_cli.project.json_schemas import YAML_LANGUAGE_SERVER_COMMENT
+
     data = dict(payload)
     for key in ("requiredScopes", "settingsSchema", "pricingPlans", "appBars"):
         data.setdefault(key, [])
@@ -46,11 +48,12 @@ def render_app_manifest(payload: dict[str, Any], *, include_examples: bool = Tru
         allow_unicode=True,
         default_flow_style=False,
     ).rstrip() + "\n"
+    header = YAML_LANGUAGE_SERVER_COMMENT + "\n"
     if not include_examples:
-        return body
+        return header + body
 
     lines = body.splitlines()
-    out: list[str] = []
+    out: list[str] = [YAML_LANGUAGE_SERVER_COMMENT]
     for line in lines:
         out.append(line)
         stripped = line.strip()

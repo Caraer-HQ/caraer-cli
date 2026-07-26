@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/caraer/caraer-cli/main/schemas/inbound.caraer.schema.json",
+  "title": "Caraer inbound route config",
+  "type": "object",
+  "required": ["name", "serverlessFunction"],
+  "additionalProperties": true,
+  "properties": {
+    "uuid": { "type": "string", "format": "uuid" },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Public route name (path segment)."
+    },
+    "authMode": {
+      "type": "string",
+      "enum": ["NONE", "SHARED_SECRET", "INSTALLATION_TOKEN"],
+      "default": "NONE"
+    },
+    "sharedSecret": {
+      "type": "string",
+      "description": "Recommended when authMode is SHARED_SECRET."
+    },
+    "hasSharedSecret": { "type": "boolean" },
+    "enqueue": {
+      "type": "boolean",
+      "description": "When true, invoke as an installation job."
+    },
+    "description": { "type": "string" },
+    "enabled": { "type": "boolean" },
+    "serverlessFunction": {
+      "$ref": "#/$defs/serverlessFunctionRef"
+    }
+  },
+  "$defs": {
+    "serverlessFunctionRef": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+        "uuid": { "type": "string", "format": "uuid" }
+      },
+      "anyOf": [
+        { "required": ["name"] },
+        { "required": ["uuid"] }
+      ]
+    }
+  }
+}

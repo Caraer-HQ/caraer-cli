@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/caraer/caraer-cli/main/schemas/app.caraer.schema.json",
+  "title": "Caraer app manifest (app.caraer.yaml)",
+  "type": "object",
+  "required": ["name", "label", "authMethod", "details"],
+  "additionalProperties": true,
+  "properties": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Remote app UUID (filled after push)."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable machine name."
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable display name."
+    },
+    "description": { "type": "string" },
+    "runtime": {
+      "type": "string",
+      "enum": ["nodejs22", "python312"],
+      "description": "App-level runtime for platformVersion 2026.2."
+    },
+    "authMethod": {
+      "type": "string",
+      "enum": ["OAUTH2", "API_KEY"]
+    },
+    "oauthRedirectUris": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri" },
+      "description": "Required when authMethod is OAUTH2."
+    },
+    "requiredScopes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "settingsSchema": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/settingField" }
+    },
+    "pricingPlans": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/pricingPlan" }
+    },
+    "appBars": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/appBar" }
+    },
+    "externalOAuthProviders": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/oauthProvider" }
+    },
+    "webhookRateLimitPerMinute": { "type": "integer", "minimum": 0 },
+    "billFailedWebhookRequests": { "type": "boolean" },
+    "details": {
+      "type": "object",
+      "required": ["category", "brandColor"],
+      "additionalProperties": true,
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": {
+          "type": "string",
+          "description": "Marketplace main category (e.g. developer_tools)."
+        },
+        "subcategories": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "url": { "type": "string", "format": "uri" },
+        "image": { "type": "string" },
+        "brandColor": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        },
+        "textColor": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "settingField": {
+      "type": "object",
+      "required": ["name", "type"],
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "label": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": [
+            "SINGLE_LINE",
+            "MULTI_LINE",
+            "SINGLE_SELECT",
+            "MULTI_SELECT",
+            "RECORD_SINGLE_SELECT",
+            "RECORD_MULTI_SELECT",
+            "OBJECT_SINGLE_SELECT",
+            "OBJECT_MULTI_SELECT",
+            "PROPERTY_SINGLE_SELECT",
+            "PROPERTY_MULTI_SELECT",
+            "SWITCH",
+            "MAPPING",
+            "SECRET"
+          ]
+        },
+        "required": { "type": "boolean" },
+        "helpText": { "type": "string" },
+        "defaultValue": {},
+        "options": { "type": "array" },
+        "optionsSource": {}
+      }
+    },
+    "pricingPlan": {
+      "type": "object",
+      "required": ["pricingType"],
+      "additionalProperties": true,
+      "properties": {
+        "title": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "pricingType": { "type": "string", "enum": ["FLAT", "TIERED"] },
+        "pricePerUnit": { "type": ["number", "string"] },
+        "unit": { "type": "string" },
+        "tiers": { "type": "array" }
+      }
+    },
+    "appBar": {
+      "type": "object",
+      "required": ["location", "label"],
+      "additionalProperties": true,
+      "properties": {
+        "location": {
+          "type": "string",
+          "enum": [
+            "RECORD_PREVIEW",
+            "RECORD_OVERVIEW",
+            "RECORD_DETAIL",
+            "TOOL_BAR",
+            "TRAIT_BAR"
+          ]
+        },
+        "label": { "type": "string", "minLength": 1 },
+        "actionLabel": { "type": "string" },
+        "iframeUrl": { "type": "string" },
+        "webhook": { "type": "object" }
+      }
+    },
+    "oauthProvider": {
+      "type": "object",
+      "required": ["name", "authorizeUrl", "tokenUrl"],
+      "additionalProperties": true,
+      "properties": {
+        "uuid": { "type": "string", "format": "uuid" },
+        "name": { "type": "string", "minLength": 1 },
+        "authorizeUrl": { "type": "string" },
+        "tokenUrl": { "type": "string" },
+        "clientId": { "type": "string" },
+        "logo": { "type": "string" },
+        "scopes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}
