@@ -161,6 +161,7 @@
       "properties": {
         "uuid": { "type": "string", "format": "uuid" },
         "name": { "type": "string", "minLength": 1 },
+        "label": { "type": "string" },
         "authorizeUrl": { "type": "string" },
         "tokenUrl": { "type": "string" },
         "clientId": { "type": "string" },
