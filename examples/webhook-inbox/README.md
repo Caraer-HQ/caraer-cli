@@ -51,7 +51,7 @@ caraer apps state get
 Clear via the **Clear inbox** app bar on a record preview, or:
 
 ```bash
-caraer apps test --function clear-inbox --record <any-uuid>
+caraer apps local test --function clear-inbox --record <any-uuid>
 ```
 
 ## Settings
@@ -64,7 +64,7 @@ caraer apps test --function clear-inbox --record <any-uuid>
 ## Local dev
 
 ```bash
-caraer apps dev
+caraer apps local dev
 # in another terminal:
-caraer apps dev --invoke-schedule heartbeat
+caraer apps local dev --invoke-schedule heartbeat
 ```

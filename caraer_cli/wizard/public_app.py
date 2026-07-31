@@ -396,6 +396,7 @@ def build_public_app_payload_from_answers(
         "name": name,
         "runtime": runtime,
         "authMethod": method,
+        "hideApiKeyField": True,
         "oauthRedirectUris": redirects,
         "details": details,
         "requiredScopes": required_scopes,

@@ -30,7 +30,7 @@ Use `--runtime` when functions disagree or have no runtime set.
 - `caraer apps status` shows `runtime`, `runtimeStatus`, `runtimeBaseUrl`
 - Functions under V2 are code modules; invoke URL is
   `{runtimeBaseUrl}/functions/{name}`
-- Local `caraer apps dev` mirrors that contract (`/functions/{name}`, header, body)
+- Local `caraer apps local dev` mirrors that contract (`/functions/{name}`, header, body)
   and emulates installation state/secrets/jobs for local integration testing
 
 ## 2026.1

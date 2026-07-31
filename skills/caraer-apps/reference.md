@@ -10,6 +10,9 @@ marketplace modules.
 | `API_KEY` | App needs `installationToken` for state/secrets/jobs | Typical for integrations |
 | `OAUTH2` | Install uses Caraer OAuth app flow | Set `oauthRedirectUris` |
 
+Set `hideApiKeyField: true` (CLI scaffold default) to hide the installation API
+key from the Caraer UI. Use `false` only when installers must copy the key.
+
 External providers (`externalOAuthProviders`) are separate from `authMethod`.
 Connected tokens arrive as installation secrets (e.g. `gmail_access_token`).
 
@@ -31,6 +34,16 @@ Approximate JSON body (also wrapped as `req.body` for Node):
   "secrets": {},
   "payload": {}
 }
+```
+
+Typed helpers ship in the Caraer clients (do **not** use `caraer apps typegen`):
+
+```ts
+import type { LifecyclePayload, WebhookPayload } from "@caraer/client";
+```
+
+```python
+from caraer_client import LifecyclePayload, WebhookPayload
 ```
 
 Lifecycle `event` values: `Installed`, `Updated`, `Uninstalled`, `Rotated`.
@@ -55,18 +68,46 @@ Base: `{caraerApiBase}` (no trailing slash).
 `OBJECT_MULTI_SELECT`, `PROPERTY_SINGLE_SELECT`, `PROPERTY_MULTI_SELECT`,
 `SWITCH`, `MAPPING`, `SECRET`.
 
-Flatten helper:
+Use `caraer apps add setting` for the interactive picker (includes object /
+property selects). For `SINGLE_SELECT` / `MULTI_SELECT` choose static
+`options[]` or dynamic `optionsSource`.
+
+### Dynamic options (`optionsSource`)
+
+```yaml
+- name: google_calendars
+  type: MULTI_SELECT
+  optionsSource:
+    type: SERVERLESS
+    serverlessFunctionName: list-calendars
+    dependsOn: []          # sibling field names; UI refetches when they change
+    searchable: true
+```
+
+Scaffold the loader:
+
+```bash
+caraer apps add options-function list-calendars
+# or: caraer apps add function list-calendars --template options
+```
+
+Request action is `loadSettingOptions`. Response must be
+`{ "options": [{ "name", "label", "helpText?" }, ...] }`.
+
+Sibling values are available as:
+- `settingsValues` — flat `{ [fieldName]: value }` (preferred)
+- `settingsSchema` — full draft fields with `value` / `defaultValue`
+- `dependsOn` — echo of `optionsSource.dependsOn` when set
 
 ```js
-function flattenSettings(schema) {
-  const out = {};
-  for (const field of schema || []) {
-    if (field && field.name) {
-      out[field.name] = field.value ?? field.defaultValue ?? null;
-    }
-  }
-  return out;
-}
+const settings = body.settingsValues
+  || Object.fromEntries(
+      (body.settingsSchema || []).map((f) => [
+        f.name,
+        f.value ?? f.defaultValue ?? null,
+      ])
+    );
+// const parent = settings.attendee_object; // listed in optionsSource.dependsOn
 ```
 
 `OBJECT_*_SELECT` values may be a string name or an object with `name` /
@@ -95,7 +136,18 @@ Set `sharedSecret` before production traffic; `validate` warns if missing.
 
 ## Schedules
 
-Six-field cron (sec min hour dom mon dow), example every 12 hours:
+Spring-style 5–6 field cron (`sec min hour dom mon dow`, seconds optional).
+Scaffold interactively or with flags:
+
+```bash
+caraer apps add schedule                         # wizard: presets + custom cron
+caraer apps add schedule heartbeat \
+  --function heartbeat \
+  --cron "0 0 */12 * * *" \
+  --description "12h ping"
+```
+
+Example every 12 hours:
 
 ```json
 {
@@ -108,6 +160,7 @@ Six-field cron (sec min hour dom mon dow), example every 12 hours:
 
 ## App bars
 
+Define `appBars` in `app.caraer.yaml` when needed (no `add app-bar` scaffold).
 Action locations can use SERVERLESS without `iframeUrl`:
 
 - `RECORD_PREVIEW`, `RECORD_OVERVIEW`, `RECORD_DETAIL`, `TOOL_BAR`, `TRAIT_BAR`
@@ -153,11 +206,11 @@ caraer apps validate
 caraer apps push --dry-run
 caraer apps push --deploy
 caraer apps status
-caraer apps logs --follow
+caraer apps local logs --follow
 caraer apps state get
 caraer apps jobs list
 caraer apps connections list
-caraer apps test --function <name> --record <uuid>
-caraer apps dev --invoke-schedule <schedule-name>
+caraer apps local test --function <name> --record <uuid>
+caraer apps local dev --invoke-schedule <schedule-name>
 caraer skill install --project
 ```

@@ -29,6 +29,7 @@ LOCAL_APP_KEYS = (
     "name",
     "runtime",
     "authMethod",
+    "hideApiKeyField",
     "oauthRedirectUris",
     "details",
     "requiredScopes",

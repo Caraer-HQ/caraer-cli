@@ -1,4 +1,8 @@
-"""Generate typed helpers for Caraer serverless function payloads."""
+"""Legacy typed helpers for Caraer serverless function payloads.
+
+Deprecated: prefer ``@caraer/client`` / ``caraer-client`` app payload types.
+``caraer apps typegen`` is a no-op warning; this module remains for one release.
+"""
 
 from __future__ import annotations
 

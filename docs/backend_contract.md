@@ -118,7 +118,7 @@ DTO fields: `ownerCompanyUuid`, `databaseId` (no sandbox `companyUuid`).
 
 **Isolation scope:** sandboxes isolate Neo4j graph data only. Cloud Function / V2
 container runtime code is shared with production. `caraer apps push --target sandbox`
-and `caraer apps deploy --target sandbox` warn about this; use a separate app or
+and `caraer apps release deploy --target sandbox` warn about this; use a separate app or
 careful versioning when experimenting with function code.
 
 ## Response envelope assumptions

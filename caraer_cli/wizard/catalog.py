@@ -158,8 +158,39 @@ SETTING_FIELD_TYPES: tuple[tuple[str, str], ...] = (
     ("SINGLE_LINE", "Single line text"),
     ("MULTI_LINE", "Multi-line text"),
     ("SWITCH", "Switch / boolean"),
-    ("SINGLE_SELECT", "Single select"),
-    ("MULTI_SELECT", "Multi select"),
+    ("SECRET", "Secret (write-only)"),
+    ("SINGLE_SELECT", "Single select (static or dynamic options)"),
+    ("MULTI_SELECT", "Multi select (static or dynamic options)"),
+    ("OBJECT_SINGLE_SELECT", "Object select (single)"),
+    ("OBJECT_MULTI_SELECT", "Object select (multi)"),
+    ("PROPERTY_SINGLE_SELECT", "Property select (single)"),
+    ("PROPERTY_MULTI_SELECT", "Property select (multi)"),
+    ("RECORD_SINGLE_SELECT", "Record select (single, static options)"),
+    ("RECORD_MULTI_SELECT", "Record select (multi, static options)"),
+    ("MAPPING", "Property mapping"),
+)
+
+# Types that may load options via optionsSource.serverlessFunctionName.
+DYNAMIC_OPTIONS_FIELD_TYPES = frozenset({"SINGLE_SELECT", "MULTI_SELECT"})
+
+# Types that need a static options[] list (no platform object/property picker).
+STATIC_OPTIONS_FIELD_TYPES = frozenset(
+    {
+        "SINGLE_SELECT",
+        "MULTI_SELECT",
+        "RECORD_SINGLE_SELECT",
+        "RECORD_MULTI_SELECT",
+    }
+)
+
+# Installer picks from the company schema — no creator-time options list.
+SCHEMA_PICKER_FIELD_TYPES = frozenset(
+    {
+        "OBJECT_SINGLE_SELECT",
+        "OBJECT_MULTI_SELECT",
+        "PROPERTY_SINGLE_SELECT",
+        "PROPERTY_MULTI_SELECT",
+    }
 )
 
 

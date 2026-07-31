@@ -18,19 +18,18 @@ _EXAMPLE_REQUIRED_SCOPES = """\
 """
 
 _EXAMPLE_SETTINGS_SCHEMA = """\
-# Edit settingsSchema above, or: caraer apps add-setting
+# Edit settingsSchema above, or: caraer apps add setting
 # Optional modular files also work: src/app/settings/<name>.json (--modular)
 """
 
 _EXAMPLE_PRICING_PLANS = """\
-# Edit pricingPlans above, or: caraer apps add-pricing-plan
+# Edit pricingPlans above, or: caraer apps add pricing-plan
 # Optional modular files: src/app/pricing/<slug>.json (--modular)
 """
 
 _EXAMPLE_APP_BARS = """\
-# Edit appBars above, or: caraer apps add-app-bar
-# Optional modular files: src/app/app-bars/<slug>.json (--modular)
-# Lifecycle hooks: src/app/lifecycle/ + functions/on-* (caraer apps add-lifecycle-hook)
+# Edit appBars above when needed (record / tool / trait bars).
+# Lifecycle hooks: src/app/lifecycle/ + functions/on-* (caraer apps add lifecycle-hook)
 """
 
 

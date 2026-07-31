@@ -10,7 +10,6 @@ from caraer_cli.project.app_manifest_template import render_app_manifest
 from caraer_cli.project.lifecycle_sync import LIFECYCLE_HOOKS
 from caraer_cli.project.paths import (
     WORKSPACE_FILE,
-    app_bars_dir,
     functions_dir,
     lifecycle_dir,
     pricing_dir,
@@ -96,6 +95,10 @@ def scaffold_setting(
     required: bool = False,
     help_text: str | None = None,
     default_value: Any = None,
+    options: list[dict[str, Any]] | None = None,
+    options_source: dict[str, Any] | None = None,
+    mapping_value: dict[str, Any] | None = None,
+    field: dict[str, Any] | None = None,
     force: bool = False,
 ) -> Path:
     """Write a settingsSchema field JSON under ``src/app/settings/``."""
@@ -103,16 +106,22 @@ def scaffold_setting(
     base.mkdir(parents=True, exist_ok=True)
     from caraer_cli.project.settings_sync import setting_filename, sanitize_setting
 
-    payload = sanitize_setting(
-        {
-            "name": name.strip(),
-            "label": (label or name).strip(),
-            "type": field_type.strip().upper() or "SINGLE_LINE",
-            "required": required,
-            "helpText": help_text,
-            "defaultValue": default_value,
-        }
-    )
+    if field is not None:
+        payload = sanitize_setting(field)
+    else:
+        payload = sanitize_setting(
+            {
+                "name": name.strip(),
+                "label": (label or name).strip(),
+                "type": field_type.strip().upper() or "SINGLE_LINE",
+                "required": required,
+                "helpText": help_text,
+                "defaultValue": default_value,
+                "options": options,
+                "optionsSource": options_source,
+                "mappingValue": mapping_value,
+            }
+        )
     path = base / setting_filename(payload)
     if path.exists() and not force:
         raise FileExistsError(f"Setting file already exists: {path}. Use --force to overwrite.")
@@ -159,53 +168,6 @@ def scaffold_pricing_plan(
     path = base / pricing_filename(sanitized)
     if path.exists() and not force:
         raise FileExistsError(f"Pricing file already exists: {path}. Use --force to overwrite.")
-    path.write_text(json.dumps(sanitized, indent=2) + "\n", encoding="utf-8")
-    return path
-
-
-def scaffold_app_bar(
-    root: Path,
-    config: ProjectConfig,
-    *,
-    location: str,
-    label: str,
-    iframe_url: str | None = None,
-    function_name: str | None = None,
-    action_label: str | None = None,
-    force: bool = False,
-) -> Path:
-    """Write an app bar JSON under ``src/app/app-bars/``."""
-    from caraer_cli.project.app_bars_sync import (
-        ACTION_BASED_LOCATIONS,
-        app_bar_filename,
-        sanitize_app_bar,
-    )
-
-    base = app_bars_dir(root, config.srcDir)
-    base.mkdir(parents=True, exist_ok=True)
-    loc = location.strip().upper()
-    payload: dict[str, Any] = {
-        "location": loc,
-        "label": label.strip(),
-    }
-    if loc in ACTION_BASED_LOCATIONS:
-        payload["actionLabel"] = (action_label or label).strip()
-        payload["webhook"] = {
-            "topic": "app.bar.triggered",
-            "deliveryMode": "SERVERLESS",
-            "enabled": True,
-            "serverlessFunction": {
-                "name": (function_name or "on-app-bar").strip(),
-            },
-        }
-    else:
-        if not iframe_url or not iframe_url.strip():
-            raise ValueError("iframe_url is required for iframe app bar locations.")
-        payload["iframeUrl"] = iframe_url.strip()
-    sanitized = sanitize_app_bar(payload)
-    path = base / app_bar_filename(sanitized)
-    if path.exists() and not force:
-        raise FileExistsError(f"App bar file already exists: {path}. Use --force to overwrite.")
     path.write_text(json.dumps(sanitized, indent=2) + "\n", encoding="utf-8")
     return path
 
@@ -421,8 +383,8 @@ def write_app_manifest(
     functions_dir(root, src_dir).mkdir(parents=True, exist_ok=True)
     webhooks_dir(root, src_dir).mkdir(parents=True, exist_ok=True)
     lifecycle_dir(root, src_dir).mkdir(parents=True, exist_ok=True)
-    # settings/, pricing/, and app-bars/ hold optional modular files; their
-    # writers create the directories on demand, so don't scaffold empty ones.
+    # settings/ and pricing/ hold optional modular files; their writers create
+    # the directories on demand, so don't scaffold empty ones.
     # Always write preferred YAML for scaffolds / local edits.
     manifest = app_dir(root, src_dir) / APP_MANIFEST_YAML
     manifest.parent.mkdir(parents=True, exist_ok=True)
@@ -451,12 +413,14 @@ def ensure_package_json(root: Path, name: str) -> Path | None:
         "name": name,
         "private": True,
         "scripts": {
-            "dev": "caraer apps dev",
+            "dev": "caraer apps local dev",
             "validate": "caraer apps validate",
             "push": "caraer apps push",
             "deploy": "caraer apps push --deploy",
-            "logs": "caraer apps logs --all",
-            "typegen": "caraer apps typegen --force",
+            "logs": "caraer apps local logs --all",
+        },
+        "devDependencies": {
+            "@caraer/client": "^2.0.366",
         },
     }
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -517,6 +481,9 @@ def scaffold_app_project(
         manifest_payload.pop("runtime", None)
     if not manifest_payload.get("authMethod"):
         manifest_payload["authMethod"] = "OAUTH2"
+    if "hideApiKeyField" not in manifest_payload:
+        # Hide installation API key in the Caraer UI by default.
+        manifest_payload["hideApiKeyField"] = True
     if not manifest_payload.get("oauthRedirectUris"):
         manifest_payload["oauthRedirectUris"] = ["http://localhost:3000/oauth/callback"]
 

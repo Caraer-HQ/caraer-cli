@@ -17,6 +17,7 @@ def test_build_public_app_placeholder() -> None:
     assert "privateApp" not in payload
     assert payload["runtime"] == "nodejs22"
     assert payload["authMethod"] == "OAUTH2"
+    assert payload["hideApiKeyField"] is True
     assert payload["oauthRedirectUris"] == ["http://localhost:3000/oauth/callback"]
     assert payload["details"]["category"] == "developer_tools"
     assert payload["details"]["brandColor"].startswith("#")
@@ -91,6 +92,7 @@ def test_build_public_app_payload_from_answers() -> None:
     assert "privateApp" not in payload
     assert payload["runtime"] == "nodejs22"
     assert payload["authMethod"] == "OAUTH2"
+    assert payload["hideApiKeyField"] is True
     assert payload["oauthRedirectUris"] == ["http://localhost:3000/oauth/callback"]
     assert payload["name"] == "my_first_cli_app"
     assert payload["requiredScopes"] == [

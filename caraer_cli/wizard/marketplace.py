@@ -1,21 +1,87 @@
-"""Interactive prompts for marketplace fields (settings, pricing, app bars, lifecycle)."""
+"""Interactive prompts for marketplace fields and local scaffolds (schedules, …)."""
 
 from __future__ import annotations
 
+import sys
 from typing import Any
 
 from questionary import Choice
 from rich.console import Console
 
 from caraer_cli.project.lifecycle_sync import LIFECYCLE_HOOKS
+from caraer_cli.project.validate_app import CRON_RE
 from caraer_cli.wizard.catalog import (
     ACTION_BASED_LOCATIONS,
     APP_BAR_LOCATIONS,
+    DYNAMIC_OPTIONS_FIELD_TYPES,
+    SCHEMA_PICKER_FIELD_TYPES,
     SETTING_FIELD_TYPES,
+    STATIC_OPTIONS_FIELD_TYPES,
 )
-from caraer_cli.wizard.prompts import ask_confirm, ask_select, ask_text
+from caraer_cli.wizard.prompts import (
+    ask_checkbox,
+    ask_confirm,
+    ask_select,
+    ask_text,
+)
 
 console = Console()
+
+DEFAULT_SCHEDULE_CRON = "0 0 */6 * * *"
+
+# Spring-style 6-field cron presets (sec min hour dom mon dow).
+CRON_PRESETS: list[tuple[str, str | None]] = [
+    ("Every hour", "0 0 * * * *"),
+    ("Every 6 hours", "0 0 */6 * * *"),
+    ("Every 12 hours", "0 0 */12 * * *"),
+    ("Daily at 09:00", "0 0 9 * * *"),
+    ("Weekdays at 09:00", "0 0 9 * * 1-5"),
+    ("Every 15 minutes", "0 */15 * * * *"),
+    ("Custom cron expression…", None),
+]
+
+
+def _is_tty() -> bool:
+    return bool(sys.stdin.isatty() and sys.stdout.isatty())
+
+
+def validate_cron_expression(value: str) -> str:
+    """Return a stripped cron string, or raise ValueError if it looks invalid."""
+    text = (value or "").strip()
+    if not text:
+        raise ValueError("Cron expression is required.")
+    if not CRON_RE.match(text):
+        raise ValueError(
+            f"Cron expression '{text}' does not look like a 5–6 field expression "
+            "(e.g. '0 0 9 * * 1-5' or '0 9 * * 1-5')."
+        )
+    return text
+
+
+def prompt_cron_expression(*, default: str = DEFAULT_SCHEDULE_CRON) -> str:
+    """Ask for a cron expression via presets, then optional custom input."""
+    console.print(
+        "[dim]Cron is Spring-style 5–6 fields "
+        "(sec min hour dom mon dow). Example: [bold]0 0 9 * * 1-5[/bold] "
+        "(weekdays at 09:00).[/dim]"
+    )
+    choices = [
+        Choice(title=f"{label}  ({expr})" if expr else label, value=expr or "")
+        for label, expr in CRON_PRESETS
+    ]
+    selected = ask_select("Schedule frequency", choices, default=default)
+    if selected:
+        return validate_cron_expression(selected)
+    while True:
+        custom = ask_text(
+            "Cron expression (e.g. 0 0 9 * * 1-5)",
+            default=default,
+            required=True,
+        )
+        try:
+            return validate_cron_expression(custom)
+        except ValueError as exc:
+            console.print(f"[yellow]{exc}[/yellow]")
 
 
 def _optional(value: str | None) -> str | None:
@@ -33,6 +99,179 @@ def _coerce_number(raw: str) -> int | float | str:
         return text
 
 
+def _parse_static_options(raw: str) -> list[dict[str, str]]:
+    """Parse ``label=name`` / ``name`` tokens into SettingOption-shaped dicts."""
+    options: list[dict[str, str]] = []
+    for part in raw.split(","):
+        item = part.strip()
+        if not item:
+            continue
+        if "=" in item:
+            option_label, option_name = item.split("=", 1)
+        else:
+            option_label, option_name = item, item
+        name = option_name.strip()
+        label = option_label.strip() or name
+        if name:
+            options.append({"name": name, "label": label})
+    return options
+
+
+def _parse_depends_on(raw: str) -> list[str]:
+    return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+def _prompt_depends_on(
+    *,
+    sibling_names: list[str] | None = None,
+    exclude_name: str | None = None,
+) -> list[str]:
+    """Ask which sibling setting keys must be set before options load."""
+    siblings = [
+        n
+        for n in (sibling_names or [])
+        if n and n != exclude_name
+    ]
+    console.print(
+        "[dim]dependsOn: option lists refetch when these sibling fields change "
+        "(stored on optionsSource.dependsOn).[/dim]"
+    )
+    if siblings and _is_tty():
+        if not ask_confirm(
+            "Does this field depend on other settings?", default=False
+        ):
+            return []
+        selected = ask_checkbox(
+            "Depends on (space to toggle)",
+            [Choice(title=n, value=n) for n in siblings],
+        )
+        return list(selected)
+    raw = ask_text(
+        "Depends on field names (comma-separated, optional)",
+        default="",
+    )
+    return _parse_depends_on(raw)
+
+
+def _prompt_options_source(
+    *,
+    field_name: str,
+    function_choices: list[str] | None = None,
+    sibling_names: list[str] | None = None,
+    offer_scaffold: bool = False,
+    options_function: str | None = None,
+    depends_on: list[str] | None = None,
+) -> tuple[dict[str, Any], str | None]:
+    """Build optionsSource; returns (source, function_name_to_scaffold_or_None)."""
+    names = list(function_choices or [])
+    default_fn = f"list-{field_name.replace('_', '-')}"
+    resolved_fn = (options_function or "").strip()
+    scaffold_name: str | None = None
+
+    if not resolved_fn:
+        if names and _is_tty():
+            choices = [
+                Choice(title=n, value=n) for n in names
+            ] + [
+                Choice(
+                    title=f"Create new options function ({default_fn})",
+                    value="__new__",
+                )
+            ]
+            picked = ask_select(
+                "Options loader function",
+                choices,
+                default=names[0],
+            )
+            if picked == "__new__":
+                resolved_fn = ask_text(
+                    "New function name",
+                    default=default_fn,
+                    required=True,
+                ).strip()
+                scaffold_name = resolved_fn if offer_scaffold else None
+            else:
+                resolved_fn = picked
+        else:
+            resolved_fn = (
+                ask_text(
+                    "Options function name",
+                    default=default_fn,
+                    required=True,
+                ).strip()
+                if _is_tty()
+                else default_fn
+            )
+            if offer_scaffold and _is_tty() and ask_confirm(
+                f"Scaffold options function functions/{resolved_fn}/?",
+                default=True,
+            ):
+                scaffold_name = resolved_fn
+
+    if depends_on is not None:
+        deps = [d.strip() for d in depends_on if d and str(d).strip()]
+    else:
+        deps = _prompt_depends_on(
+            sibling_names=sibling_names,
+            exclude_name=field_name,
+        )
+
+    searchable = True
+    if _is_tty():
+        searchable = ask_confirm("Searchable options?", default=True)
+
+    source: dict[str, Any] = {
+        "type": "SERVERLESS",
+        "serverlessFunctionName": resolved_fn,
+        "searchable": searchable,
+    }
+    if deps:
+        source["dependsOn"] = deps
+    return source, scaffold_name
+
+
+def _prompt_mapping_value() -> dict[str, Any]:
+    console.print(
+        "[dim]MAPPING defines rows the installer maps to object properties.[/dim]"
+    )
+    object_name = ask_text(
+        "Target object name (mappingValue.objectName)",
+        required=True,
+    )
+    items: list[dict[str, Any]] = []
+    console.print("[dim]Add at least one mapping row.[/dim]")
+    while True:
+        field_name = ask_text("Row fieldName (key)", required=True)
+        field_label = ask_text("Row fieldLabel", default=field_name)
+        field_help = ask_text("Row help text (optional)", default="")
+        is_required = ask_confirm("Row required?", default=False)
+        allowed_types = ask_text(
+            "allowedPropertyTypes (comma-separated, optional)",
+            default="",
+        )
+        allowed_formats = ask_text(
+            "allowedPropertyFormats (comma-separated, optional)",
+            default="",
+        )
+        row: dict[str, Any] = {
+            "fieldName": field_name.strip(),
+            "fieldLabel": (field_label or field_name).strip(),
+            "isRequired": bool(is_required),
+        }
+        if _optional(field_help):
+            row["fieldHelpText"] = field_help.strip()
+        types = [p.strip() for p in allowed_types.split(",") if p.strip()]
+        formats = [p.strip() for p in allowed_formats.split(",") if p.strip()]
+        if types:
+            row["allowedPropertyTypes"] = types
+        if formats:
+            row["allowedPropertyFormats"] = formats
+        items.append(row)
+        if not ask_confirm("Add another mapping row?", default=False):
+            break
+    return {"objectName": object_name.strip(), "items": items}
+
+
 def prompt_setting_field(
     *,
     name: str | None = None,
@@ -41,36 +280,59 @@ def prompt_setting_field(
     required: bool | None = None,
     help_text: str | None = None,
     default_value: str | None = None,
+    function_choices: list[str] | None = None,
+    sibling_setting_names: list[str] | None = None,
+    offer_options_scaffold: bool = False,
+    options_mode: str | None = None,
+    options_function: str | None = None,
+    depends_on: list[str] | None = None,
+    static_options: str | None = None,
 ) -> dict[str, Any]:
-    """Prompt for one settingsSchema field (wizard-style)."""
-    resolved_name = (name or "").strip() or ask_text("Field name", required=True)
+    """Prompt for one settingsSchema field (wizard-style).
+
+    Private key ``_scaffoldOptionsFunction`` may be set when the caller should
+    create an options-loader function (stripped by sanitize_setting).
+    """
+    interactive = _is_tty()
+    resolved_name = (name or "").strip()
+    if not resolved_name:
+        if not interactive:
+            raise ValueError("Missing required value: name")
+        resolved_name = ask_text("Field name", required=True)
     resolved_label = (
         label
         if label is not None and str(label).strip()
-        else ask_text("Field label", default=resolved_name)
+        else (
+            ask_text("Field label", default=resolved_name)
+            if interactive
+            else resolved_name
+        )
     )
-    resolved_type = (
-        (field_type or "").strip().upper()
-        or ask_select(
+    resolved_type = (field_type or "").strip().upper()
+    if not resolved_type:
+        if not interactive:
+            raise ValueError("Missing required value: --type")
+        resolved_type = ask_select(
             "Field type",
             [Choice(title=lbl, value=key) for key, lbl in SETTING_FIELD_TYPES],
             default="SINGLE_LINE",
         )
-    )
+    known = {key for key, _ in SETTING_FIELD_TYPES}
+    if resolved_type not in known:
+        raise ValueError(
+            f"Unknown setting type '{resolved_type}'. "
+            f"Expected one of: {', '.join(sorted(known))}."
+        )
+
     resolved_required = (
         required
         if required is not None
-        else ask_confirm("Required?", default=False)
+        else (ask_confirm("Required?", default=False) if interactive else False)
     )
     resolved_help = (
         help_text
         if help_text is not None
-        else ask_text("Help text (optional)", default="")
-    )
-    resolved_default = (
-        default_value
-        if default_value is not None
-        else ask_text("Default value (optional)", default="")
+        else (ask_text("Help text (optional)", default="") if interactive else "")
     )
 
     field: dict[str, Any] = {
@@ -81,34 +343,114 @@ def prompt_setting_field(
     }
     if _optional(resolved_help):
         field["helpText"] = resolved_help.strip()
-    if _optional(resolved_default):
-        if resolved_type == "SWITCH":
-            field["defaultValue"] = resolved_default.strip().lower() in {
-                "1",
-                "true",
-                "yes",
-                "y",
-            }
-        else:
-            field["defaultValue"] = resolved_default.strip()
 
-    if resolved_type in {"SINGLE_SELECT", "MULTI_SELECT"}:
-        options_raw = ask_text(
-            "Options (comma-separated label=value or label)",
-            required=True,
-        )
-        options: list[dict[str, str]] = []
-        for part in options_raw.split(","):
-            item = part.strip()
-            if not item:
-                continue
-            if "=" in item:
-                option_label, option_value = item.split("=", 1)
-            else:
-                option_label, option_value = item, item
-            options.append(
-                {"label": option_label.strip(), "value": option_value.strip()}
+    # SECRET: no defaultValue in schema (write-only at install time).
+    if resolved_type != "SECRET":
+        resolved_default = (
+            default_value
+            if default_value is not None
+            else (
+                ask_text("Default value (optional)", default="")
+                if interactive
+                else ""
             )
+        )
+        if _optional(resolved_default):
+            if resolved_type == "SWITCH":
+                field["defaultValue"] = resolved_default.strip().lower() in {
+                    "1",
+                    "true",
+                    "yes",
+                    "y",
+                }
+            else:
+                field["defaultValue"] = resolved_default.strip()
+
+    if resolved_type in SCHEMA_PICKER_FIELD_TYPES:
+        console.print(
+            "[dim]Installer picks the object/property at install time — "
+            "no static options needed.[/dim]"
+        )
+        return field
+
+    if resolved_type == "MAPPING":
+        if interactive:
+            field["mappingValue"] = _prompt_mapping_value()
+        else:
+            field["mappingValue"] = {"objectName": "", "items": []}
+        return field
+
+    if resolved_type in DYNAMIC_OPTIONS_FIELD_TYPES:
+        mode = (options_mode or "").strip().lower()
+        if not mode:
+            if interactive:
+                mode = ask_select(
+                    "Options source",
+                    [
+                        Choice(
+                            title="Static — comma-separated options",
+                            value="static",
+                        ),
+                        Choice(
+                            title="Dynamic — serverless options function",
+                            value="dynamic",
+                        ),
+                    ],
+                    default="static",
+                )
+            else:
+                # Non-interactive: prefer dynamic when --options-function is set.
+                mode = "dynamic" if options_function else "static"
+
+        if mode == "dynamic":
+            source, scaffold_name = _prompt_options_source(
+                field_name=resolved_name,
+                function_choices=function_choices,
+                sibling_names=sibling_setting_names,
+                offer_scaffold=offer_options_scaffold,
+                options_function=options_function,
+                depends_on=depends_on,
+            )
+            field["optionsSource"] = source
+            if scaffold_name:
+                field["_scaffoldOptionsFunction"] = scaffold_name
+            return field
+
+        if static_options is not None:
+            options_raw = static_options
+        elif interactive:
+            options_raw = ask_text(
+                "Options (comma-separated label=name or name)",
+                required=True,
+            )
+        else:
+            raise ValueError(
+                "Select fields require --options (comma-separated label=name) "
+                "or --options-mode dynamic with --options-function."
+            )
+        options = _parse_static_options(options_raw)
+        if not options:
+            raise ValueError("At least one option is required for select fields.")
+        field["options"] = options
+        return field
+
+    if resolved_type in STATIC_OPTIONS_FIELD_TYPES:
+        # RECORD_*_SELECT: static options only (no optionsSource).
+        if static_options is not None:
+            options_raw = static_options
+        elif interactive:
+            options_raw = ask_text(
+                "Options (comma-separated label=name or name)",
+                required=True,
+            )
+        else:
+            raise ValueError(
+                "RECORD select fields require --options "
+                "(comma-separated label=name)."
+            )
+        options = _parse_static_options(options_raw)
+        if not options:
+            raise ValueError("At least one option is required for select fields.")
         field["options"] = options
     return field
 
@@ -286,6 +628,76 @@ def prompt_app_bar(
         if _optional(icon):
             bar["icon"] = icon.strip()
     return bar
+
+
+def prompt_schedule(
+    *,
+    name: str | None = None,
+    function_name: str | None = None,
+    cron: str | None = None,
+    description: str | None = None,
+    enabled: bool | None = None,
+    function_choices: list[str] | None = None,
+) -> dict[str, Any]:
+    """Prompt for a local schedule scaffold (name, function, cron, …)."""
+    interactive = _is_tty()
+
+    resolved_name = (name or "").strip()
+    if not resolved_name:
+        if not interactive:
+            raise ValueError("Missing required value: name")
+        resolved_name = ask_text("Schedule name", required=True)
+
+    names = list(function_choices or [])
+    resolved_function = (function_name or "").strip()
+    if not resolved_function:
+        if not interactive:
+            raise ValueError("Missing required value: --function")
+        if names:
+            resolved_function = ask_select(
+                "Function to invoke",
+                [Choice(title=n, value=n) for n in names],
+                default=names[0],
+            )
+        else:
+            resolved_function = ask_text("Function name", required=True)
+
+    if cron is not None and str(cron).strip():
+        try:
+            resolved_cron = validate_cron_expression(str(cron))
+        except ValueError as exc:
+            if not interactive:
+                raise
+            console.print(f"[yellow]{exc}[/yellow]")
+            resolved_cron = prompt_cron_expression()
+    elif interactive:
+        resolved_cron = prompt_cron_expression()
+    else:
+        resolved_cron = DEFAULT_SCHEDULE_CRON
+
+    if description is not None:
+        resolved_description = description.strip()
+    elif interactive:
+        resolved_description = ask_text("Description (optional)", default="")
+    else:
+        resolved_description = ""
+
+    if enabled is not None:
+        resolved_enabled = bool(enabled)
+    elif interactive:
+        resolved_enabled = ask_confirm("Enabled?", default=True)
+    else:
+        resolved_enabled = True
+
+    result: dict[str, Any] = {
+        "name": resolved_name.strip(),
+        "schedule": resolved_cron,
+        "enabled": resolved_enabled,
+        "function_name": resolved_function.strip(),
+    }
+    if _optional(resolved_description):
+        result["description"] = resolved_description.strip()
+    return result
 
 
 def prompt_lifecycle_hook(

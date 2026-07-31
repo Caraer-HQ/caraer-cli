@@ -89,13 +89,14 @@ def test_scaffold_app_project_layout(tmp_path: Path) -> None:
     text = manifest.read_text(encoding="utf-8")
     assert "runtime: python312" in text
     assert "authMethod: OAUTH2" in text
+    assert "hideApiKeyField: true" in text
     assert "oauthRedirectUris:" in text
     assert "http://localhost:3000/oauth/callback" in text
-    assert "# Edit pricingPlans above, or: caraer apps add-pricing-plan" in text
-    assert "# Edit appBars above, or: caraer apps add-app-bar" in text
+    assert "# Edit pricingPlans above, or: caraer apps add pricing-plan" in text
+    assert "# Edit appBars above when needed" in text
     assert "# Example scopes" in text
-    assert "caraer apps add-setting" in text
-    assert "add-lifecycle-hook" in text
+    assert "caraer apps add setting" in text
+    assert "add lifecycle-hook" in text
 
     app_json = load_local_app(manifest)
     assert app_json["name"] == "my_app"

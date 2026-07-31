@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- **Deprecated:** `caraer apps typegen` no longer writes `src/types/`. Import
+  serverless payload helpers from the Caraer clients instead:
+  `@caraer/client` (Node: `LifecyclePayload`, …) /
+  `caraer-client` (Python: `from caraer_client import LifecyclePayload`).
+  Node scaffolds add `@caraer/client` as a `devDependency` and omit the
+  `typegen` npm script.
+- App scaffolds (`apps init` / wizard) default `hideApiKeyField: true` so the
+  installation API key is hidden in the Caraer UI unless explicitly shown
+- `caraer apps add schedule` interactive wizard: cron presets (hourly,
+  daily, weekdays, …) or custom Spring 5–6 field expression, plus
+  function picker, description, and enabled. `--cron` / `--description` /
+  `--enabled|--disabled` still work non-interactively.
+- **Breaking (with aliases):** regrouped `caraer apps` into nested
+  `add/`, `local/`, and `release/` groups. Golden-path leaves stay flat
+  (`list`, `select`, `init`, `push`, `validate`, …). Old flat paths
+  (`add-function`, `dev`, `deploy`, `builds`, …) remain as **hidden**
+  aliases that print a one-line deprecation warning. Aliases will be
+  removed after one release — migrate to the new paths now.
 - V2 runtimes now deploy straight from the pushed build archive (Cloud Run
   style): the platform stores function metadata only, not source code. After a
   build push, the CLI refreshes function UUID tracking read-only instead of
@@ -17,7 +35,7 @@
   app-level runtime. Keep the manifest only for a custom `entry` or
   `description`. Scaffolds and `apps pull` no longer write redundant manifests
 - `apps init` scaffolds a root `package.json` with npm scripts
-  (`dev`, `validate`, `push`, `deploy`, `logs`, `typegen`) for Node projects
+  (`dev`, `validate`, `push`, `deploy`, `logs`) for Node projects
 - `apps init` no longer creates empty `settings/`, `pricing/`, and `app-bars/`
   directories; their writers create them on demand
 

@@ -1,31 +1,27 @@
 from __future__ import annotations
 
-from pathlib import Path
+from typer.testing import CliRunner
 
-import pytest
-
+from caraer_cli.main import app as typer_app
+from caraer_cli.project.typegen import generate_types
 from caraer_cli.project.schema import ProjectConfig
-from caraer_cli.project.typegen import generate_types, typegen_output_path
+
+runner = CliRunner()
 
 
-def test_typegen_python(tmp_path: Path) -> None:
-    config = ProjectConfig(name="demo", runtime="python312")
-    result = generate_types(tmp_path, config)
-    assert result["runtime"] == "python"
-    path = typegen_output_path(tmp_path, config)
-    assert path.is_file()
-    text = path.read_text(encoding="utf-8")
-    assert "class LifecyclePayload" in text
-    assert "InstallationState" in text
-    with pytest.raises(FileExistsError):
-        generate_types(tmp_path, config)
+def test_typegen_command_is_deprecated_noop() -> None:
+    result = runner.invoke(typer_app, ["apps", "typegen"])
+    assert result.exit_code == 0
+    assert "deprecated" in result.output.lower()
+    assert "@caraer/client" in result.output
+    assert "caraer_client" in result.output
+    assert "LifecyclePayload" in result.output
 
 
-def test_typegen_nodejs_force(tmp_path: Path) -> None:
+def test_generate_types_module_still_writes_for_compat(tmp_path) -> None:
+    """Internal helper kept for one release; command no longer calls it."""
     config = ProjectConfig(name="demo", runtime="nodejs22")
-    generate_types(tmp_path, config)
-    result = generate_types(tmp_path, config, force=True)
+    result = generate_types(tmp_path, config)
     assert result["runtime"] == "nodejs"
-    text = Path(result["path"]).read_text(encoding="utf-8")
+    text = result["path"].read_text(encoding="utf-8")
     assert "export interface LifecyclePayload" in text
-    assert "EnqueueJobRequest" in text

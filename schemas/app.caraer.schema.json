@@ -31,6 +31,11 @@
       "type": "string",
       "enum": ["OAUTH2", "API_KEY"]
     },
+    "hideApiKeyField": {
+      "type": "boolean",
+      "default": true,
+      "description": "When true, hide the installation API key field in the Caraer UI. Defaults to true for new scaffolds."
+    },
     "oauthRedirectUris": {
       "type": "array",
       "items": { "type": "string", "format": "uri" },
@@ -115,8 +120,44 @@
         "required": { "type": "boolean" },
         "helpText": { "type": "string" },
         "defaultValue": {},
-        "options": { "type": "array" },
-        "optionsSource": {}
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "label": { "type": "string" },
+              "helpText": { "type": "string" }
+            }
+          }
+        },
+        "optionsSource": { "$ref": "#/$defs/optionsSource" }
+      }
+    },
+    "optionsSource": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "SERVERLESS",
+          "description": "Only SERVERLESS is supported today."
+        },
+        "serverlessFunctionName": {
+          "type": "string",
+          "description": "Local/deployed function name (preferred for manifests)."
+        },
+        "serverlessFunctionUuid": {
+          "type": "string",
+          "description": "Remote function UUID (optional if name is set)."
+        },
+        "dependsOn": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Sibling setting names. Installer clears this field and refetches options when any dependency value changes."
+        },
+        "searchable": { "type": "boolean" },
+        "minQueryLength": { "type": "integer", "minimum": 0 }
       }
     },
     "pricingPlan": {

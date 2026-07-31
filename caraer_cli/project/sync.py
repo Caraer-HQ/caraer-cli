@@ -336,6 +336,130 @@ def status_summary(client: CaraerApiClient, root: Path, config: ProjectConfig) -
     return summary
 
 
+_OPTIONS_FUNCTION_JS = '''\
+/**
+ * LOAD_SETTING_OPTIONS loader for settingsSchema optionsSource.
+ *
+ * Request body (approx):
+ *   {
+ *     action: "loadSettingOptions",
+ *     fieldName: "<setting name>",
+ *     query?: "<search string>",
+ *     settingsSchema: [{ name, type, value, defaultValue, ... }],
+ *     settingsValues: { [name]: value },  // flat sibling values (incl. dependsOn)
+ *     dependsOn?: string[],               // from optionsSource.dependsOn
+ *     scopes: string[]
+ *   }
+ *
+ * Response MUST be: { options: [{ name, label, helpText? }, ...] }
+ * Prefer HTTP 200 even on soft failures so the settings UI stays usable.
+ */
+function flattenSettings(schema) {
+  const out = {};
+  for (const field of schema || []) {
+    if (field && field.name) {
+      out[field.name] = field.value ?? field.defaultValue ?? null;
+    }
+  }
+  return out;
+}
+
+exports.handler = async (req, res) => {
+  try {
+    const body =
+      typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
+    const fieldName = body.fieldName;
+    const query = (body.query || "").toString().trim().toLowerCase();
+    const settings = body.settingsValues || flattenSettings(body.settingsSchema);
+
+    // Example: read sibling values listed in optionsSource.dependsOn.
+    // const parent = settings.attendee_object;
+
+    const all = [
+      { name: "option_a", label: "Option A" },
+      { name: "option_b", label: "Option B", helpText: "Example help" },
+    ];
+    const options = query
+      ? all.filter(
+          (o) =>
+            o.name.toLowerCase().includes(query) ||
+            o.label.toLowerCase().includes(query)
+        )
+      : all;
+
+    return res.status(200).json({ options, fieldName });
+  } catch (err) {
+    return res.status(200).json({
+      options: [],
+      error: String(err && err.message ? err.message : err),
+    });
+  }
+};
+'''
+
+_OPTIONS_FUNCTION_PY = '''\
+"""LOAD_SETTING_OPTIONS loader for settingsSchema optionsSource.
+
+Request body (approx):
+  {
+    "action": "loadSettingOptions",
+    "fieldName": "<setting name>",
+    "query": "<search string>",
+    "settingsSchema": [{"name", "type", "value", "defaultValue", ...}],
+    "settingsValues": {"<name>": "<value>"},
+    "dependsOn": ["sibling_field"],
+    "scopes": [...]
+  }
+
+Response body MUST be: {"options": [{"name", "label", "helpText?"}, ...]}
+Prefer status 200 even on soft failures so the settings UI stays usable.
+"""
+
+
+def _flatten_settings(schema):
+    out = {}
+    for field in schema or []:
+        if isinstance(field, dict) and field.get("name"):
+            out[field["name"]] = field.get("value", field.get("defaultValue"))
+    return out
+
+
+def handler(request):
+    try:
+        body = request.get("body") or request or {}
+        if isinstance(body, str):
+            import json
+
+            body = json.loads(body or "{}")
+        field_name = body.get("fieldName")
+        query = str(body.get("query") or "").strip().lower()
+        settings = body.get("settingsValues") or _flatten_settings(
+            body.get("settingsSchema")
+        )
+        # Example: read sibling values listed in optionsSource.dependsOn.
+        # parent = settings.get("attendee_object")
+
+        all_options = [
+            {"name": "option_a", "label": "Option A"},
+            {"name": "option_b", "label": "Option B", "helpText": "Example help"},
+        ]
+        if query:
+            options = [
+                o
+                for o in all_options
+                if query in o["name"].lower() or query in o["label"].lower()
+            ]
+        else:
+            options = all_options
+        return {
+            "statusCode": 200,
+            "body": {"options": options, "fieldName": field_name},
+        }
+    except Exception as exc:  # noqa: BLE001 — soft-fail for settings UI
+        return {"statusCode": 200, "body": {"options": [], "error": str(exc)}}
+'''
+
+
 def scaffold_function(
     root: Path,
     config: ProjectConfig,
@@ -344,11 +468,14 @@ def scaffold_function(
     *,
     description: str | None = None,
     force: bool = False,
+    template: str | None = None,
 ) -> Path:
     """Create ``src/app/functions/<name>/`` with an entry source file.
 
     function.caraer.json is only written when the function needs more than the
     conventional defaults (folder name + default entry), i.e. a description.
+
+    ``template`` may be ``options`` for a LOAD_SETTING_OPTIONS loader scaffold.
     """
     folder = functions_dir(root, config.srcDir) / name
     manifest_path = folder / "function.caraer.json"
@@ -357,16 +484,29 @@ def scaffold_function(
             f"Function folder already exists: {folder}. Use --force to overwrite scaffold files."
         )
     folder.mkdir(parents=True, exist_ok=True)
+    resolved_template = (template or "").strip().lower() or None
+    default_description = (
+        "LOAD_SETTING_OPTIONS loader for settingsSchema optionsSource"
+        if resolved_template == "options"
+        else (description if description is not None else "")
+    )
+    if description is not None and str(description).strip():
+        default_description = description
     manifest = FunctionManifest(
         name=name,
         runtime=runtime,
-        description=description if description is not None else "",
+        description=default_description or "",
     )
     if manifest.description:
         save_function_manifest(manifest_path, manifest)
     entry = folder / manifest.resolved_entry()
     if force or not entry.exists():
-        if runtime.startswith("python"):
+        if resolved_template == "options":
+            if runtime.startswith("python"):
+                entry.write_text(_OPTIONS_FUNCTION_PY, encoding="utf-8")
+            else:
+                entry.write_text(_OPTIONS_FUNCTION_JS, encoding="utf-8")
+        elif runtime.startswith("python"):
             entry.write_text(
                 'def handler(request):\n'
                 '    """Caraer serverless entrypoint."""\n'
@@ -382,3 +522,24 @@ def scaffold_function(
                 encoding="utf-8",
             )
     return folder
+
+
+def scaffold_options_function(
+    root: Path,
+    config: ProjectConfig,
+    name: str,
+    runtime: str = "nodejs22",
+    *,
+    description: str | None = None,
+    force: bool = False,
+) -> Path:
+    """Scaffold a LOAD_SETTING_OPTIONS serverless function."""
+    return scaffold_function(
+        root,
+        config,
+        name,
+        runtime,
+        description=description,
+        force=force,
+        template="options",
+    )

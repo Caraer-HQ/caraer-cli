@@ -22,7 +22,7 @@ caraer apps push --deploy
 To recreate a single hook (e.g. after deleting it):
 
 ```bash
-caraer apps add-lifecycle-hook uninstall
+caraer apps add lifecycle-hook uninstall
 ```
 
 ## Files
@@ -126,10 +126,10 @@ Use the Connections card + installation secrets
 
 ## Related marketplace modules
 
-| Folder | Command | Purpose |
-|--------|---------|---------|
-| `settings/*.json` | `caraer apps add-setting` | Installation settings |
-| `pricing/*.json` | `caraer apps add-pricing-plan` | Marketplace pricing |
-| `app-bars/*.json` | `caraer apps add-app-bar` | Record / tool / trait bars |
+| Folder / field | Command | Purpose |
+|----------------|---------|---------|
+| `settingsSchema` in YAML (or `settings/*.json` with `--modular`) | `caraer apps add setting` | Installation settings |
+| `pricingPlans` in YAML (or `pricing/*.json` with `--modular`) | `caraer apps add pricing-plan` | Marketplace pricing |
+| `appBars` in YAML | edit manifest | Record / tool / trait bars |
 
 Validate with `caraer apps validate`.

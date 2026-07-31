@@ -73,46 +73,67 @@ caraer apps init --label "My App"
 cd my_app
 # edit src/app/app.caraer.yaml, src/app/functions/, src/app/webhooks/
 caraer apps push --deploy       # prompts for version (> previous) + release notes
-caraer apps version             # live semver + recent builds
+caraer apps release version     # live semver + recent builds
 caraer apps status
-caraer apps logs                # uses the only local function (or prompts)
-caraer apps logs --all          # V2 app container logs
-caraer apps dev                 # local server: POST /functions/<name>
-caraer apps test --record <uuid>
+caraer apps local logs          # uses the only local function (or prompts)
+caraer apps local logs --all    # V2 app container logs
+caraer apps local dev           # local server: POST /functions/<name>
+caraer apps local test --record <uuid>
 caraer apps state get
 caraer apps secrets list
-caraer apps rollback            # redeploy prior READY build
+caraer apps release rollback    # redeploy prior READY build
 ```
 
 New apps default to workspace `platformVersion: 2026.2` (App platform V2: one async
 container runtime per app). Use `caraer apps init --platform 2026.1` only for the
 legacy per-function Cloud Functions model. See [docs/platform_versioning.md](docs/platform_versioning.md).
 
-`apps push` syncs the full app: marketplace manifest (including pricing + app bars),
+`apps push` syncs the full app: marketplace manifest (including settings + pricing),
 functions, webhooks, schedules, inbound routes, and external OAuth providers.
 There is no separate upload command.
 
 Add local scaffolds inside an app folder:
 
 ```bash
-caraer apps add-function my-action
-caraer apps add-webhook --topic record.created --function my-action
-caraer apps add-schedule renew-watch --function my-action --cron "0 0 */6 * * *"
-caraer apps add-inbound gmail-push --function my-action --auth SHARED_SECRET
-caraer apps add-setting          # wizard → appends to app.caraer.yaml
-caraer apps add-pricing-plan     # wizard → appends to app.caraer.yaml
-caraer apps add-app-bar          # wizard → appends to app.caraer.yaml
-caraer apps add-lifecycle-hook   # wizard → lifecycle/*.json + function
-caraer apps add-webhook --topic app.bar.triggered --mode HTTP --url https://example.com/hook
+caraer apps add function my-action
+caraer apps add options-function list-items   # LOAD_SETTING_OPTIONS loader
+caraer apps add webhook --topic record.created --function my-action
+caraer apps add schedule renew-watch --function my-action --cron "0 0 */6 * * *"
+caraer apps add schedule         # wizard → cron presets / custom + function picker
+caraer apps add inbound gmail-push --function my-action --auth SHARED_SECRET
+caraer apps add setting          # wizard → appends to app.caraer.yaml
+caraer apps add pricing-plan     # wizard → appends to app.caraer.yaml
+caraer apps add lifecycle-hook   # wizard → lifecycle/*.json + function
+caraer apps add webhook --topic app.bar.triggered --mode HTTP --url https://example.com/hook
 ```
 
-`add-setting` / `add-pricing-plan` / `add-app-bar` write into `app.caraer.yaml` by
-default (use `--modular` for separate JSON files). Lifecycle hooks stay under
-`src/app/lifecycle/` because they pair with function folders.
+`add schedule` prompts for cron (presets or custom Spring 5–6 field expression),
+function, description, and enabled when run interactively without those flags.
+`add setting` / `add pricing-plan` write into `app.caraer.yaml` by default
+(use `--modular` for separate JSON files under `settings/` / `pricing/`).
+`add options-function` (or `add function --template options`) scaffolds a
+dynamic select options loader; wire via `optionsSource.serverlessFunctionName`
+and optional `optionsSource.dependsOn`.
+`apps init` does not create empty `settings/` or `pricing/` folders.
+Lifecycle hooks stay under `src/app/lifecycle/` because they pair with function folders.
 
 Lifecycle hooks (`install` / `uninstall` / `rotate` / `update`) and matching
 `functions/on-*` folders are created automatically by `caraer apps init`.
 
+### Payload types (Node / Python)
+
+Do **not** run `caraer apps typegen` (deprecated no-op). Import serverless
+payload helpers from the published clients:
+
+```ts
+import type { LifecyclePayload, WebhookPayload } from "@caraer/client";
+```
+
+```python
+from caraer_client import LifecyclePayload, WebhookPayload
+```
+
+Node scaffolds add `@caraer/client` as a `devDependency`.
 
 Only the **app creator company** (or super-admin) can push builds for an app.
 
@@ -154,10 +175,10 @@ my_app/
     inbound/*.json            # public inbound routes → function
 ```
 
-`add-setting` / `add-pricing-plan` / `add-app-bar` append to `app.caraer.yaml`.
-Optional modular JSON files (`settings/`, `pricing/`, `app-bars/`) still merge on
-push when present (`--modular`). `apps init` always creates all four lifecycle
-hooks + `on-*` functions. See [docs/app_lifecycle.md](docs/app_lifecycle.md).
+`add setting` / `add pricing-plan` append to `app.caraer.yaml` by default.
+Optional modular JSON files (`settings/`, `pricing/`) still merge on push when
+present (`--modular`). `apps init` always creates all four lifecycle hooks +
+`on-*` functions. See [docs/app_lifecycle.md](docs/app_lifecycle.md).
 
 See [`examples/webhook-inbox`](examples/webhook-inbox) for a minimal sample
 (inbound route, settings, lifecycle, app bar).

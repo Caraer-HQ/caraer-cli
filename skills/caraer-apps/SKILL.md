@@ -3,7 +3,7 @@ name: caraer-apps
 description: >-
   Scaffolds, edits, validates, and deploys Caraer Apps V2 projects with the
   caraer CLI (app.caraer.yaml, serverless functions, inbound routes, schedules,
-  lifecycle hooks, settings, app bars). Use when creating or changing a Caraer
+  lifecycle hooks, settings). Use when creating or changing a Caraer
   public app, marketplace app, serverless function, webhook, inbound route, or
   when the user mentions caraer apps, app.caraer.yaml, or caraer-cli.
 ---
@@ -38,36 +38,38 @@ caraer apps init --name my_app --label "My App"
 cd my_app
 # edit src/app/app.caraer.yaml + functions
 caraer apps validate
-caraer apps typegen
 caraer apps push --dry-run
 caraer apps push --deploy
 caraer apps install
 caraer apps status
-caraer apps logs --follow
+caraer apps local logs --follow
 ```
 
 Local loop without deploy:
 
 ```bash
-caraer apps dev
-caraer apps test --function <name> --sample-only
+caraer apps local dev
+caraer apps local test --function <name> --sample-only
 ```
 
 ## Project layout (V2)
 
 ```text
 caraer.json
-package.json                # npm-style scripts (dev/validate/push/deploy)
+package.json                # npm-style scripts (dev/validate/push/deploy); Node adds @caraer/client
 src/app/
-  app.caraer.yaml           # identity, auth, settings, pricing, app bars, OAuth
+  app.caraer.yaml           # identity, auth, settings, pricing, OAuth
   functions/<name>/         # index.js|main.py (function.caraer.json optional)
   shared/                   # code shared by all functions (require "../../shared/...")
   lifecycle/*.json          # install|uninstall|rotate|update → function
   inbound/*.json            # public HTTP → function
   schedules/*.json          # cron → function
   webhooks/*.json           # platform events → function
-src/types/                  # from `caraer apps typegen`
 ```
+
+Payload types: import from `@caraer/client` (Node) or `caraer-client` (Python),
+e.g. `LifecyclePayload`, `WebhookPayload`, `SchedulePayload`. Do **not** run
+`caraer apps typegen` (deprecated no-op).
 
 `function.caraer.json` is only needed to override conventions (custom entry,
 description); a folder with `index.js` / `main.py` is a function named after
@@ -95,7 +97,7 @@ App progress:
 - [ ] `caraer apps init` or open existing app
 - [ ] Edit manifest settings (user-facing only)
 - [ ] Add/edit functions (shared helpers in `src/app/shared/`)
-- [ ] Wire inbound / schedule / webhook / app bar / lifecycle
+- [ ] Wire inbound / schedule / webhook / lifecycle
 - [ ] `caraer apps validate` → fix until 0 errors
 - [ ] `caraer apps push --dry-run` then `--deploy` when user asks
 ```
@@ -104,9 +106,10 @@ App progress:
 
 Ask only what blocks design:
 
-- Trigger: inbound HTTP, schedule, record event, app bar, or install lifecycle?
+- Trigger: inbound HTTP, schedule, record event, or install lifecycle?
 - Runtime: `nodejs22` (default) or `python312`?
 - Need installation state/secrets? → `authMethod: API_KEY` (gets `installationToken`).
+  Prefer `hideApiKeyField: true` so installers do not see the API key in the UI.
 - Need Caraer user OAuth app install? → `OAUTH2` + redirect URIs.
 - External provider (Google, etc.)? → `externalOAuthProviders` + `${ENV}` secrets.
 
@@ -142,14 +145,14 @@ Installation settings are for **admins installing the app**, not developers.
 
 | Need | Command |
 |------|---------|
-| New function | `caraer apps add-function` |
-| Inbound route | `caraer apps add-inbound` |
-| Schedule | `caraer apps add-schedule` |
-| Webhook | `caraer apps add-webhook` |
-| Setting | `caraer apps add-setting` |
-| App bar | `caraer apps add-app-bar` |
-| Lifecycle | `caraer apps add-lifecycle-hook` |
-| Pricing | `caraer apps add-pricing-plan` |
+| New function | `caraer apps add function` |
+| Options loader | `caraer apps add options-function` (or `function --template options`) |
+| Inbound route | `caraer apps add inbound` |
+| Schedule | `caraer apps add schedule` (wizard prompts for cron presets / custom) |
+| Webhook | `caraer apps add webhook` |
+| Setting | `caraer apps add setting` (YAML by default; `--modular` → `settings/`) |
+| Lifecycle | `caraer apps add lifecycle-hook` |
+| Pricing | `caraer apps add pricing-plan` |
 
 ### Validate loop
 

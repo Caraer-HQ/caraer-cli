@@ -160,3 +160,14 @@ def complete_app_list_type(ctx: typer.Context, incomplete: str) -> list[tuple[st
         incomplete,
     )
 
+
+def complete_setting_field_type(
+    ctx: typer.Context, incomplete: str
+) -> list[tuple[str, str]]:
+    from caraer_cli.wizard.catalog import SETTING_FIELD_TYPES
+
+    return complete_from_pairs(
+        [(key, label) for key, label in SETTING_FIELD_TYPES],
+        incomplete,
+    )
+

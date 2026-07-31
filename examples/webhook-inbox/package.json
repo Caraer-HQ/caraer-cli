@@ -1,0 +1,14 @@
+{
+  "name": "webhook-inbox",
+  "private": true,
+  "scripts": {
+    "dev": "caraer apps local dev",
+    "validate": "caraer apps validate",
+    "push": "caraer apps push",
+    "deploy": "caraer apps push --deploy",
+    "logs": "caraer apps local logs --all"
+  },
+  "devDependencies": {
+    "@caraer/client": "^2.0.366"
+  }
+}
