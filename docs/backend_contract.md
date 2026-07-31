@@ -10,7 +10,8 @@ This document maps the backend API surface currently used by the Python CLI.
 - `GET /api/v2/auth/companies`
 - `POST /api/v2/auth/device/start` — device-code login; returns `{deviceCode, userCode, verificationUri, expiresIn, interval}`
 - `POST /api/v2/auth/device/poll` — body `{deviceCode}` → `{status: pending|approved|expired|denied}` (+ tokens when approved)
-- `POST /api/v2/auth/device/approve` — authenticated; body `{userCode}`
+- `GET /api/v2/auth/device/approve?userCode=` — browser HTML login/approve UI (public)
+- `POST /api/v2/auth/device/approve` — authenticated JSON; body `{userCode}`
 - `POST /api/v2/auth/refresh` — body `{refreshToken}` → new access (+ rotated refresh) token
 
 Headers:
