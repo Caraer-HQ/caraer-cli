@@ -23,7 +23,7 @@ from caraer_cli.project.pricing_sync import (
     write_pricing_files,
 )
 from caraer_cli.project.schema import ProjectConfig
-from caraer_cli.project.settings_sync import discover_local_settings, write_settings_files
+from caraer_cli.project.settings_sync import discover_local_settings, resolve_setting_options_source, write_settings_files
 from caraer_cli.project.state import load_state
 
 
@@ -103,6 +103,17 @@ def assemble_local_manifest(
         file_settings,
         identity=lambda i: str(i.get("name") or "").strip().lower(),
     )
+    if resolve_functions:
+        resolved_settings: list[dict[str, Any]] = []
+        for field in out["settingsSchema"]:
+            if not isinstance(field, dict):
+                continue
+            resolved_settings.append(
+                resolve_setting_options_source(
+                    field, fn_by_name=fn_by_name, strict=strict_function_refs
+                )
+            )
+        out["settingsSchema"] = resolved_settings
 
     yaml_pricing = out.get("pricingPlans") if isinstance(out.get("pricingPlans"), list) else []
     file_pricing = [item for _path, item in discover_local_pricing(root, config)]

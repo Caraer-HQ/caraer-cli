@@ -57,6 +57,49 @@ def test_assemble_merges_settings_files_over_yaml(tmp_path: Path) -> None:
     assert assembled["settingsSchema"][0]["label"] == "API base"
 
 
+def test_resolve_setting_options_source_by_name(tmp_path: Path) -> None:
+    root = tmp_path / "demo"
+    scaffold_app_project(
+        root,
+        app_payload=build_public_app_placeholder(label="Demo", name="demo"),
+        sample_function=None,
+        force=True,
+    )
+    config = load_workspace(root)
+    save_state(
+        root,
+        {
+            "functions": {
+                "list-calendars": {"uuid": "fn-list-uuid"},
+                "on-install": {"uuid": "fn-install-uuid"},
+                "on-uninstall": {"uuid": "fn-uninstall-uuid"},
+                "on-rotate": {"uuid": "fn-rotate-uuid"},
+                "on-update": {"uuid": "fn-update-uuid"},
+            }
+        },
+    )
+    local = {
+        "name": "demo",
+        "settingsSchema": [
+            {
+                "name": "google_calendars",
+                "label": "Calendars",
+                "type": "MULTI_SELECT",
+                "optionsSource": {
+                    "type": "SERVERLESS",
+                    "serverlessFunctionName": "list-calendars",
+                },
+            }
+        ],
+        "pricingPlans": [],
+        "appBars": [],
+    }
+    assembled = assemble_local_manifest(root, config, local, resolve_functions=True)
+    source = assembled["settingsSchema"][0]["optionsSource"]
+    assert source["serverlessFunctionUuid"] == "fn-list-uuid"
+    assert source["serverlessFunctionName"] == "list-calendars"
+
+
 def test_split_and_lifecycle_resolve(tmp_path: Path) -> None:
     root = tmp_path / "demo"
     result = scaffold_app_project(

@@ -37,6 +37,44 @@ def setting_filename(item: dict[str, Any]) -> str:
     return f"{_slug(name)}.json"
 
 
+def resolve_setting_options_source(
+    field: dict[str, Any],
+    *,
+    fn_by_name: dict[str, str],
+    strict: bool = True,
+) -> dict[str, Any]:
+    """Resolve optionsSource.serverlessFunctionName to serverlessFunctionUuid."""
+    out = dict(field)
+    source = out.get("optionsSource")
+    if not isinstance(source, dict):
+        return out
+    resolved = dict(source)
+    uuid = resolved.get("serverlessFunctionUuid")
+    name = resolved.get("serverlessFunctionName")
+    if uuid and not name:
+        for candidate_name, candidate_uuid in fn_by_name.items():
+            if candidate_uuid == uuid:
+                name = candidate_name
+                break
+    if uuid:
+        resolved["serverlessFunctionUuid"] = str(uuid)
+        if name:
+            resolved["serverlessFunctionName"] = name
+        out["optionsSource"] = resolved
+        return out
+    if name and name in fn_by_name:
+        resolved["serverlessFunctionUuid"] = fn_by_name[name]
+        resolved["serverlessFunctionName"] = name
+        out["optionsSource"] = resolved
+        return out
+    if name and strict:
+        raise ValueError(
+            f"Setting '{out.get('name')}' optionsSource references function "
+            f"'{name}' but no UUID is known. Push functions first."
+        )
+    return out
+
+
 def sanitize_setting(item: dict[str, Any]) -> dict[str, Any]:
     payload: dict[str, Any] = {}
     for key in LOCAL_SETTING_KEYS:
