@@ -137,12 +137,24 @@ def resolve_app_bar_functions(
     webhook.pop("uuid", None)
     sf = webhook.get("serverlessFunction")
     if isinstance(sf, dict):
-        if sf.get("uuid"):
-            webhook["serverlessFunction"] = {"uuid": sf["uuid"]}
+        name = sf.get("name")
+        uuid = sf.get("uuid")
+        if uuid:
+            if not name:
+                for candidate_name, candidate_uuid in fn_by_name.items():
+                    if candidate_uuid == uuid:
+                        name = candidate_name
+                        break
+            ref: dict[str, str] = {"uuid": str(uuid)}
+            if name:
+                ref["name"] = name
+            webhook["serverlessFunction"] = ref
         else:
-            name = sf.get("name")
             if name and name in fn_by_name:
-                webhook["serverlessFunction"] = {"uuid": fn_by_name[name]}
+                webhook["serverlessFunction"] = {
+                    "uuid": fn_by_name[name],
+                    "name": name,
+                }
             elif name:
                 if strict:
                     raise ValueError(

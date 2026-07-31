@@ -87,12 +87,21 @@ def _resolve_serverless_for_api(
     sf = out.get("serverlessFunction")
     if not isinstance(sf, dict):
         return out
-    if sf.get("uuid"):
-        out["serverlessFunction"] = {"uuid": sf["uuid"]}
-        return out
     name = sf.get("name")
+    uuid = sf.get("uuid")
+    if uuid:
+        if not name:
+            for candidate_name, candidate_uuid in fn_by_name.items():
+                if candidate_uuid == uuid:
+                    name = candidate_name
+                    break
+        ref: dict[str, str] = {"uuid": str(uuid)}
+        if name:
+            ref["name"] = name
+        out["serverlessFunction"] = ref
+        return out
     if name and name in fn_by_name:
-        out["serverlessFunction"] = {"uuid": fn_by_name[name]}
+        out["serverlessFunction"] = {"uuid": fn_by_name[name], "name": name}
         return out
     if name:
         raise ValueError(

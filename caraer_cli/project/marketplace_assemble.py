@@ -37,6 +37,16 @@ def _fn_by_name(root: Path) -> dict[str, str]:
     }
 
 
+def _fn_meta_by_name(root: Path) -> dict[str, dict[str, Any]]:
+    state = load_state(root)
+    fn_state = state.get("functions") or {}
+    return {
+        name: meta
+        for name, meta in fn_state.items()
+        if isinstance(meta, dict) and meta.get("uuid")
+    }
+
+
 def _merge_by_key(
     yaml_items: list[Any],
     file_items: list[dict[str, Any]],
@@ -81,6 +91,10 @@ def assemble_local_manifest(
     """
     out = dict(local)
     fn_by_name = _fn_by_name(root) if resolve_functions else {}
+    fn_meta_by_name = _fn_meta_by_name(root) if resolve_functions else {}
+    default_runtime = (
+        str(local.get("runtime") or config.runtime or "").strip() or None
+    )
 
     yaml_settings = out.get("settingsSchema") if isinstance(out.get("settingsSchema"), list) else []
     file_settings = [item for _path, item in discover_local_settings(root, config)]
@@ -123,7 +137,11 @@ def assemble_local_manifest(
             payload["topic"] = expected_topic
         if resolve_functions:
             resolved = resolve_lifecycle_functions(
-                payload, fn_by_name=fn_by_name, strict=strict_function_refs
+                payload,
+                fn_by_name=fn_by_name,
+                fn_meta_by_name=fn_meta_by_name,
+                strict=strict_function_refs,
+                default_runtime=default_runtime,
             )
             if resolved is None:
                 out.pop(manifest_key, None)

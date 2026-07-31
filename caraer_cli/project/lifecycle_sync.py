@@ -92,22 +92,69 @@ def write_lifecycle_files(
     return count
 
 
+def _serverless_ref(
+    uuid: str,
+    name: str | None = None,
+    *,
+    runtime: str | None = None,
+    label: str | None = None,
+) -> dict[str, str]:
+    """UUID + identity fields so App.update depth>=2 does not wipe the SF node."""
+    ref: dict[str, str] = {"uuid": uuid}
+    if name:
+        ref["name"] = name
+    if label or name:
+        ref["label"] = label or name or ""
+    if runtime:
+        ref["runtime"] = runtime
+    return ref
+
+
 def resolve_lifecycle_functions(
     webhook: dict[str, Any],
     *,
     fn_by_name: dict[str, str],
+    fn_meta_by_name: dict[str, dict[str, Any]] | None = None,
     strict: bool = True,
+    default_runtime: str | None = None,
 ) -> dict[str, Any] | None:
     out = dict(webhook)
     sf = out.get("serverlessFunction")
     if not isinstance(sf, dict):
         return out
-    if sf.get("uuid"):
-        out["serverlessFunction"] = {"uuid": sf["uuid"]}
-        return out
+    meta_by_name = fn_meta_by_name or {}
     name = sf.get("name")
+    uuid = sf.get("uuid")
+    if uuid and not name:
+        for candidate_name, candidate_uuid in fn_by_name.items():
+            if candidate_uuid == uuid:
+                name = candidate_name
+                break
+
+    def _ref_for(resolved_uuid: str, resolved_name: str | None) -> dict[str, str]:
+        meta = meta_by_name.get(resolved_name or "") if resolved_name else {}
+        runtime = (
+            (sf.get("runtime") if isinstance(sf.get("runtime"), str) else None)
+            or (meta.get("runtime") if isinstance(meta, dict) else None)
+            or default_runtime
+        )
+        label = (
+            (sf.get("label") if isinstance(sf.get("label"), str) else None)
+            or (meta.get("label") if isinstance(meta, dict) else None)
+            or resolved_name
+        )
+        return _serverless_ref(
+            str(resolved_uuid),
+            resolved_name,
+            runtime=runtime if isinstance(runtime, str) else None,
+            label=label if isinstance(label, str) else None,
+        )
+
+    if uuid:
+        out["serverlessFunction"] = _ref_for(str(uuid), name)
+        return out
     if name and name in fn_by_name:
-        out["serverlessFunction"] = {"uuid": fn_by_name[name]}
+        out["serverlessFunction"] = _ref_for(fn_by_name[name], name)
         return out
     if name:
         if strict:
