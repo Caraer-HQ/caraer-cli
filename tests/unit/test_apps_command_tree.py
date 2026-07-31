@@ -30,7 +30,6 @@ def test_visible_apps_groups_and_golden_path_leaves() -> None:
         "validate",
         "typegen",
         "status",
-        "migrate-v2",
         "add",
         "local",
         "release",

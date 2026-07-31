@@ -144,14 +144,11 @@ Only the **app creator company** (or super-admin) can push builds for an app.
 | `2026.2` (default) | V2 | One container per app; async deploy; poll `runtimeStatus` |
 | `2026.1` | V1 | One Cloud Function per serverless function (legacy) |
 
-Migrate an existing V1 app in place with:
-
-```bash
-caraer apps migrate-v2 [--runtime nodejs22|python312]
-```
-
-This provisions the shared container, keeps webhook delivery on legacy function URLs
-until `runtimeStatus=READY`, then updates local `caraer.json` to `2026.2`.
+Existing V1 apps are migrated to V2 via the backend Neo4j migration
+`apps-platform-v2` (`run-migration apps-platform-v2 up`). New private apps and
+CLI scaffolds (`2026.2`) already use the V2 runtime. After a backend migration,
+set local `caraer.json` to `platformVersion: 2026.2` (and matching `runtime`)
+before the next `caraer apps push`.
 
 ## Command groups
 

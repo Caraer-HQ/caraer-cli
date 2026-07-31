@@ -49,7 +49,8 @@ Headers:
 
 - `GET /api/v2/apps/{appUuid}/runtime/logs?since=&limit=` — shared container logs
 - `GET /api/v2/apps/{appUuid}/runtime/logs/stream` — SSE stream of runtime logs (`text/event-stream`)
-- `POST /api/v2/apps/{uuid}/migrate-v2` — body `{runtime?}`
+- `POST /api/v2/apps/{uuid}/migrate-v2` — body `{runtime?}` (ops/retry; V1→V2 batch
+  migration is `run-migration apps-platform-v2 up` on the Java backend)
 
 ## App integration runtime
 

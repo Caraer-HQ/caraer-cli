@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Removed `caraer apps migrate-v2`. Existing V1 apps are migrated via the backend
+  Neo4j migration `apps-platform-v2` (`run-migration apps-platform-v2 up`).
 - **Deprecated:** `caraer apps typegen` no longer writes `src/types/`. Import
   serverless payload helpers from the Caraer clients instead:
   `@caraer/client` (Node: `LifecyclePayload`, …) /
@@ -77,7 +79,6 @@
 - App platform **V2** (`platformVersion: 2026.2`): one async container runtime per app;
   `apps push --deploy` polls `runtimeStatus`; `apps status` shows runtime fields
 - Default scaffold is `2026.2`; use `--platform 2026.1` for legacy per-function Cloud Functions
-- `caraer apps migrate-v2` — opt-in in-place V1 → V2 migration with runtime polling
 - Collapsed local **project** into **app**: `caraer.json` replaces `caraer.project.json`;
   opaque developer-project id lives in `.caraer/state.json`
 - Single sync pair: `caraer apps pull` / `caraer apps push` syncs manifest, functions,

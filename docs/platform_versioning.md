@@ -9,16 +9,14 @@ Set in `caraer.json` as `platformVersion`.
 | `2026.1` | `1` | Legacy: one sync Cloud Function per serverless function |
 | `2026.2` (default) | `2` | One async container runtime per app |
 
-Migrate an existing V1 app in place with:
+Existing V1 apps are batch-migrated on the backend with the Neo4j CLI migration
+`apps-platform-v2` (`run-migration apps-platform-v2 up`). That flips
+`platformVersion` to `2`, schedules the shared container rebuild, keeps invoking
+via legacy `gcpReference` until `runtimeStatus=READY`, then GCs old Cloud
+Functions. Apps with mixed function runtimes fail the migration until aligned.
+After migration, update local `caraer.json` to `platformVersion: 2026.2`.
 
-```bash
-caraer apps migrate-v2 [--runtime nodejs22|python312]
-```
-
-The API flips `platformVersion` to `2`, schedules the shared container rebuild, keeps
-invoking via legacy `gcpReference` until `runtimeStatus=READY`, then GCs old Cloud
-Functions. The CLI polls until READY and sets local `caraer.json` to `2026.2`.
-Use `--runtime` when functions disagree or have no runtime set.
+New private apps are always created as V2 (`runtime` defaults to `nodejs22`).
 
 ## 2026.2
 
