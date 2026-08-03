@@ -844,6 +844,14 @@ def _validate_oauth_providers(
                     f"{rel}:{url_key}",
                     f"{url_key} must be an http(s) URL.",
                 )
+        owner = str(item.get("connectionOwner") or "").strip().upper()
+        if owner and owner not in ("COMPANY", "USER"):
+            _issue(
+                issues,
+                "error",
+                f"{rel}:connectionOwner",
+                "connectionOwner must be COMPANY or USER.",
+            )
         logo = str(item.get("logo") or "").strip()
         if not logo:
             _issue(
@@ -925,6 +933,14 @@ def _validate_settings(
         if key in seen:
             _issue(issues, "error", f"{rel}:name", f"Duplicate setting name '{name}'.")
         seen.add(key)
+        value_scope = str(item.get("valueScope") or "").strip().upper()
+        if value_scope and value_scope not in ("COMPANY", "USER"):
+            _issue(
+                issues,
+                "error",
+                f"{rel}:valueScope",
+                "valueScope must be COMPANY or USER.",
+            )
         field_type = str(item.get("type") or "").strip().upper()
         if not field_type:
             _issue(issues, "error", f"{rel}:type", "type is required.")

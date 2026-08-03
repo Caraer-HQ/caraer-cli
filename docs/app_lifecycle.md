@@ -94,7 +94,8 @@ Notes:
 - `event` is the domain event simple name (`Installed`, `Updated`, `Uninstalled`, `Rotated`).
 - `installationToken` is present for `API_KEY` apps (use it for installation state/secrets APIs).
 - `settingsSchema` includes filled `value` / `hasValue` for the installation.
-- **Updated** also includes booleans such as `settingsChanged`, `scopesChanged`, `filtersChanged`.
+- **Updated** also includes booleans such as `settingsChanged`, `scopesChanged`, `filtersChanged`, `userSettingsChanged`.
+- When USER-scoped settings are saved, `userSettingsChanged` is true and `userUuid` identifies the user. Payload may include `userSettings` (map of userUuid → field values) and `connections` (external OAuth connection instances with access tokens).
 
 ## Reading settings in a Node handler
 
@@ -121,8 +122,9 @@ OAuth **Connect** / **Disconnect** (`ConnectionConnected` / `ConnectionRevoked`)
 company config over websockets but are **not** delivered to `installWebhook` /
 `updateWebhook`. That includes Connect during the post-install dialog (or Skip):
 install still fires `app.installed` only for the install itself, not for OAuth.
-Use the Connections card + installation secrets
-(`{provider}_access_token`) from your functions instead.
+Use the Connections card + runtime `body.connections` / legacy secrets
+(`{provider}_access_token` for COMPANY providers). For USER-owned providers,
+provision after the user saves USER-scoped settings (`userSettingsChanged`).
 
 ## Related marketplace modules
 

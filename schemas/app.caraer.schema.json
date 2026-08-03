@@ -131,7 +131,12 @@
             }
           }
         },
-        "optionsSource": { "$ref": "#/$defs/optionsSource" }
+        "optionsSource": { "$ref": "#/$defs/optionsSource" },
+        "valueScope": {
+          "type": "string",
+          "enum": ["COMPANY", "USER"],
+          "description": "COMPANY (default) stores the value on the install; USER stores it per Caraer user."
+        }
       }
     },
     "optionsSource": {
@@ -207,6 +212,11 @@
         "tokenUrl": { "type": "string" },
         "clientId": { "type": "string" },
         "logo": { "type": "string" },
+        "connectionOwner": {
+          "type": "string",
+          "enum": ["COMPANY", "USER"],
+          "description": "COMPANY (default) = one shared connection per install; USER = one connection per Caraer user."
+        },
         "scopes": {
           "type": "array",
           "items": { "type": "string" }

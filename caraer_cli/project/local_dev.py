@@ -474,13 +474,26 @@ def serve_functions(
         current = _load_dev_store(root)
 
         if not rest:
+            raw_connections = current.get("connections") or []
+            if isinstance(raw_connections, dict):
+                raw_connections = [
+                    {
+                        "id": None,
+                        "name": name,
+                        "label": name,
+                        "connected": bool(connected),
+                        "ownerType": "COMPANY",
+                    }
+                    for name, connected in raw_connections.items()
+                ]
             _json_response(
                 handler,
                 200,
                 {
                     "state": current.get("state") or {},
                     "secrets": sorted((current.get("secrets") or {}).keys()),
-                    "connections": current.get("connections") or {},
+                    "connections": raw_connections,
+                    "userSettings": current.get("userSettings") or {},
                 },
             )
             return True
@@ -553,14 +566,54 @@ def serve_functions(
 
         if resource == "connections":
             connections = current.setdefault("connections", {})
-            if not isinstance(connections, dict):
+            if not isinstance(connections, (dict, list)):
                 connections = {}
                 current["connections"] = connections
             if len(rest) == 1 and method == "GET":
-                _json_response(handler, 200, {"message": "Success", "data": connections})
+                # Prefer list-of-instances (new API); coerce legacy provider→bool map.
+                if isinstance(connections, list):
+                    data = connections
+                else:
+                    data = [
+                        {
+                            "id": None,
+                            "name": name,
+                            "label": name,
+                            "connected": bool(connected),
+                            "ownerType": "COMPANY",
+                        }
+                        for name, connected in connections.items()
+                    ]
+                _json_response(handler, 200, {"message": "Success", "data": data})
                 return True
             if len(rest) == 2 and method == "DELETE":
-                connections.pop(rest[1], None)
+                key = rest[1]
+                if isinstance(connections, list):
+                    current["connections"] = [
+                        c
+                        for c in connections
+                        if not (
+                            isinstance(c, dict)
+                            and (
+                                str(c.get("id") or "") == key
+                                or str(c.get("name") or "") == key
+                            )
+                        )
+                    ]
+                else:
+                    connections.pop(key, None)
+                _save_dev_store(root, current)
+                _json_response(handler, 200, {"message": "Success", "data": True})
+                return True
+
+        if resource == "settings" and len(rest) >= 2 and rest[1] == "user":
+            user_settings = current.setdefault("userSettings", {})
+            if not isinstance(user_settings, dict):
+                user_settings = {}
+                current["userSettings"] = user_settings
+            if method == "PUT":
+                # Local emulator stores a single acting-user blob under "default".
+                user_settings["default"] = body if isinstance(body, list) else []
                 _save_dev_store(root, current)
                 _json_response(handler, 200, {"message": "Success", "data": True})
                 return True

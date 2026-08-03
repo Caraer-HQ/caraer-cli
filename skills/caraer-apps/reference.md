@@ -14,7 +14,16 @@ Set `hideApiKeyField: true` (CLI scaffold default) to hide the installation API
 key from the Caraer UI. Use `false` only when installers must copy the key.
 
 External providers (`externalOAuthProviders`) are separate from `authMethod`.
-Connected tokens arrive as installation secrets (e.g. `gmail_access_token`).
+
+- `connectionOwner: COMPANY` (default) — one shared connection per install;
+  tokens also mirrored as `{provider}_access_token`.
+- `connectionOwner: USER` — one connection per Caraer user under the company
+  install; tokens arrive on `body.connections[]` (and connection-scoped secret
+  keys). Prefer `POST .../installation/oauth/{provider}/start` to begin OAuth.
+
+Settings may set `valueScope: USER` so values are saved per user
+(`PUT .../installation/settings/user`) and delivered via `userSettings` /
+overlay on `settingsSchema` when that user acts.
 
 ## Handler envelope (SERVERLESS)
 
@@ -32,6 +41,8 @@ Approximate JSON body (also wrapped as `req.body` for Node):
     { "name": "inbox_label", "type": "SINGLE_LINE", "value": "Main" }
   ],
   "secrets": {},
+  "connections": [],
+  "userSettings": {},
   "payload": {}
 }
 ```
