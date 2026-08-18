@@ -36,6 +36,10 @@ from caraer_cli.project.oauth_providers_sync import (
     pull_external_oauth_providers,
     push_external_oauth_providers,
 )
+from caraer_cli.project.app_bars_sync import (
+    persist_app_bar_identities,
+    stamp_app_bar_identities,
+)
 from caraer_cli.project.marketplace_assemble import (
     assemble_local_manifest,
     split_marketplace_to_disk,
@@ -156,12 +160,18 @@ def push_manifest(
     current = apps_api.get_public_app(client, config.appUuid).get("data", {})
     if not isinstance(current, dict):
         current = {}
+    local_bars = local.get("appBars") if isinstance(local.get("appBars"), list) else []
+    current_bars = current.get("appBars") if isinstance(current.get("appBars"), list) else []
+    if local_bars:
+        local["appBars"] = stamp_app_bar_identities(local_bars, current_bars)
     merged = deep_merge(dict(current), local)
     if patch:
         merged = deep_merge(merged, patch)
     response = apps_api.update_public_app(client, config.appUuid, merged)
     data = response.get("data") or {}
-    # Keep local uuid in sync (do not rewrite modular files from push response).
+    # Keep local app and app-bar UUIDs in sync with the remote nodes.
+    remote_bars = data.get("appBars") if isinstance(data.get("appBars"), list) else []
+    persist_app_bar_identities(root, config, remote_bars)
     if data.get("uuid") and local.get("uuid") != data.get("uuid"):
         raw = load_local_app(manifest_path)
         raw["uuid"] = data["uuid"]

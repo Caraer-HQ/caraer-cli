@@ -12,6 +12,7 @@ from caraer_cli.project.schema import ProjectConfig
 
 LOCAL_APP_BAR_KEYS = (
     "uuid",
+    "name",
     "location",
     "label",
     "tooltipLabel",
@@ -39,6 +40,9 @@ def app_bar_filename(item: dict[str, Any]) -> str:
 
 
 def app_bar_identity(item: dict[str, Any]) -> str:
+    name = str(item.get("name") or "").strip().lower()
+    if name:
+        return name
     location = str(item.get("location") or "").strip().upper()
     label = str(item.get("label") or "").strip().lower()
     return f"{location}|{label}"
@@ -122,6 +126,61 @@ def write_app_bars_files(
     return count
 
 
+def stamp_app_bar_identities(
+    local_bars: list[Any],
+    remote_bars: list[Any],
+) -> list[dict[str, Any]]:
+    """Copy remote bar and webhook UUIDs onto local bars matched by location|label."""
+    remote_by_identity: dict[str, dict[str, Any]] = {}
+    for item in remote_bars:
+        if not isinstance(item, dict):
+            continue
+        key = app_bar_identity(item)
+        if not key.strip("|"):
+            continue
+        remote_by_identity[key] = item
+    stamped: list[dict[str, Any]] = []
+    for item in local_bars:
+        if not isinstance(item, dict):
+            continue
+        copied = dict(item)
+        remote = remote_by_identity.get(app_bar_identity(copied))
+        if remote:
+            if remote.get("uuid"):
+                copied["uuid"] = remote["uuid"]
+            local_webhook = copied.get("webhook")
+            remote_webhook = remote.get("webhook")
+            if isinstance(local_webhook, dict) and isinstance(remote_webhook, dict):
+                if remote_webhook.get("uuid"):
+                    webhook = dict(local_webhook)
+                    webhook["uuid"] = remote_webhook["uuid"]
+                    copied["webhook"] = webhook
+        stamped.append(copied)
+    return stamped
+
+
+def persist_app_bar_identities(
+    root: Path,
+    config: ProjectConfig,
+    remote_bars: list[Any],
+) -> None:
+    """Write remote bar/webhook UUIDs back into modular app-bar files.
+
+    YAML manifests are left untouched so comments stay intact. The next push
+    still stamps UUIDs from the live app before update.
+    """
+    if not remote_bars:
+        return
+    for path, item in discover_local_app_bars(root, config):
+        stamped_items = stamp_app_bar_identities([item], remote_bars)
+        if not stamped_items:
+            continue
+        stamped = stamped_items[0]
+        if stamped == item:
+            continue
+        path.write_text(json.dumps(stamped, indent=2) + "\n", encoding="utf-8")
+
+
 def resolve_app_bar_functions(
     item: dict[str, Any],
     *,
@@ -129,12 +188,10 @@ def resolve_app_bar_functions(
     strict: bool = True,
 ) -> dict[str, Any] | None:
     out = dict(item)
-    out.pop("uuid", None)
     webhook = out.get("webhook")
     if not isinstance(webhook, dict):
         return out
     webhook = dict(webhook)
-    webhook.pop("uuid", None)
     sf = webhook.get("serverlessFunction")
     if isinstance(sf, dict):
         name = sf.get("name")

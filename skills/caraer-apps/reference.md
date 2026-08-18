@@ -62,6 +62,10 @@ from caraer_client import LifecyclePayload, WebhookPayload
 
 Lifecycle `event` values: `Installed`, `Updated`, `Uninstalled`, `Rotated`.
 
+Set `waitUntilComplete: true` on `lifecycle/install.json` (and `update.json` if
+settings save must show hook-written mappings) so the install request waits for
+the function and returns filled settings. Default is fire-and-forget.
+
 Connect / Disconnect for external OAuth are **not** lifecycle webhooks — read
 secrets from the payload / secrets API after the user connects.
 

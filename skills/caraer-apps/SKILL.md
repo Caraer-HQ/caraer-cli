@@ -190,6 +190,9 @@ to leave for the installer when documented in README.
 - Use `caraer apps push --dry-run` first for non-trivial changes.
 - Do not commit secrets (`.env`, OAuth client secrets, inbound shared secrets).
 - Expand `${ENV_VAR}` OAuth client fields from the **process environment** on push.
+- Root `.env` is packed on push and applied to the Cloud Run runtime as
+  environment variables (`AFFINDA_API_KEY`, …). It is not stored on the
+  persisted build manifest.
 
 ## Anti-patterns
 

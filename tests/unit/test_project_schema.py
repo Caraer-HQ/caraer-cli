@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from caraer_cli.api.projects import pack_project_archive
 from caraer_cli.project.schema import (
     FunctionManifest,
     ProjectConfig,
@@ -154,3 +155,22 @@ def test_discover_and_push_webhooks_create(tmp_path: Path) -> None:
     assert result["webhooks"][0]["uuid"] == "wh-1"
     written = json.loads((wh_dir / "record-created.json").read_text(encoding="utf-8"))
     assert written["uuid"] == "wh-1"
+
+
+def test_pack_project_archive_includes_root_dotenv(tmp_path: Path) -> None:
+    import zipfile
+
+    (tmp_path / "caraer.json").write_text(
+        '{"platformVersion":"2026.2","name":"demo"}', encoding="utf-8"
+    )
+    src = tmp_path / "src" / "app"
+    src.mkdir(parents=True)
+    (src / "app.caraer.yaml").write_text("name: demo\n", encoding="utf-8")
+    (tmp_path / ".env").write_text("AFFINDA_API_KEY=aff_test\n", encoding="utf-8")
+    config = ProjectConfig(name="demo", srcDir="src", platformVersion="2026.2")
+
+    archive = pack_project_archive(tmp_path, config)
+
+    with zipfile.ZipFile(archive) as zf:
+        assert ".env" in zf.namelist()
+        assert "AFFINDA_API_KEY=aff_test" in zf.read(".env").decode("utf-8")

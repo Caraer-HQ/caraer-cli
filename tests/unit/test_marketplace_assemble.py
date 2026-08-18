@@ -202,3 +202,19 @@ def test_assemble_merges_settings_sections(tmp_path: Path) -> None:
     assert split["settingsSections"] == []
     titles = [item["title"] for _p, item in discover_local_settings_sections(root, config)]
     assert "Candidate" in titles
+
+
+def test_sanitize_lifecycle_keeps_wait_until_complete() -> None:
+    from caraer_cli.project.lifecycle_sync import sanitize_lifecycle
+
+    sanitized = sanitize_lifecycle(
+        {
+            "topic": "app.installed",
+            "deliveryMode": "SERVERLESS",
+            "waitUntilComplete": True,
+            "serverlessFunction": {"name": "on-install"},
+            "uuid": "should-drop",
+        }
+    )
+    assert sanitized["waitUntilComplete"] is True
+    assert "uuid" not in sanitized

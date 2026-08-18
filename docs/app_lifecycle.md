@@ -41,9 +41,15 @@ SERVERLESS example:
   "topic": "app.installed",
   "deliveryMode": "SERVERLESS",
   "enabled": true,
+  "waitUntilComplete": true,
   "serverlessFunction": { "name": "on-install" }
 }
 ```
+
+Set `waitUntilComplete: true` when the installer UI must show settings the hook
+writes (object mappings, workspace ids). The install / settings-save request then
+invokes the function on the request thread and returns the filled app. Leave it
+off (the default) for fire-and-forget hooks that can finish after the UI returns.
 
 HTTP receivers are also supported (`deliveryMode: HTTP`, `url`).
 

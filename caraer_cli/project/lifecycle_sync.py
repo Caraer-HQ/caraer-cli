@@ -30,6 +30,7 @@ LOCAL_LIFECYCLE_KEYS = (
     "webhookFormat",
     "secret",
     "serverlessFunction",
+    "waitUntilComplete",
 )
 
 

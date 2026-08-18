@@ -35,6 +35,9 @@ def pack_project_archive(root: Path, config: ProjectConfig) -> Path:
             for path in src.rglob("*"):
                 if path.is_file():
                     zf.write(path, arcname=str(path.relative_to(root)))
+        env_file = root / ".env"
+        if env_file.is_file():
+            zf.write(env_file, arcname=".env")
     return out
 
 

@@ -260,6 +260,16 @@
             "TRAIT_BAR"
           ]
         },
+        "uuid": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Stable AppBar node UUID. Optional when name is unique and already deployed."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique bar name. Used to reuse the existing AppBar node when uuid is omitted."
+        },
         "label": { "type": "string", "minLength": 1 },
         "actionLabel": { "type": "string" },
         "iframeUrl": { "type": "string" },

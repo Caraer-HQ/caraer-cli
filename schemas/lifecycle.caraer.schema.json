@@ -31,6 +31,10 @@
     "serverlessFunction": {
       "$ref": "#/$defs/serverlessFunctionRef",
       "description": "Required when deliveryMode is SERVERLESS."
+    },
+    "waitUntilComplete": {
+      "type": "boolean",
+      "description": "When true, install or settings save waits for this hook and returns the settings it wrote."
     }
   },
   "$defs": {
