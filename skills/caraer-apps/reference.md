@@ -364,6 +364,24 @@ def handler(request):
     return {"statusCode": 200, "body": {"ok": True}}
 ```
 
+## Required scopes
+
+`requiredScopes` may mix concrete scopes, macros (`records.candidate.all`,
+`tools.forms.all`), and **setting placeholders**:
+
+```yaml
+requiredScopes:
+  - tools.objects_schemas.write
+  - records.<candidate_mapping>.all
+  - records.<candidate_mapping>.properties_all
+  - records.<candidate_mapping>.relations_all
+```
+
+`<fieldName>` is replaced from the installation setting. Object-select fields
+use the selected object name. Mapping fields use `mappingValue.objectName`.
+Empty mappings grant no extra record scopes. Scopes update when the installer
+saves settings.
+
 ## Useful CLI
 
 ```bash
