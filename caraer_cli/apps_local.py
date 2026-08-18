@@ -31,6 +31,7 @@ LOCAL_APP_KEYS = (
     "authMethod",
     "hideApiKeyField",
     "oauthRedirectUris",
+    "brandmark",
     "details",
     "requiredScopes",
     "settingsSchema",

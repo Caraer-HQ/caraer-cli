@@ -25,12 +25,14 @@ def _write_manifest(root: Path, **overrides: object) -> None:
         "runtime": "nodejs22",
         "authMethod": "OAUTH2",
         "oauthRedirectUris": ["http://localhost:3000/oauth/callback"],
+        "brandmark": "https://example.com/brandmark.svg",
         "details": {
             "title": "Demo App",
             "description": "A real marketplace description",
             "category": "developer_tools",
             "subcategories": ["apis"],
             "url": "https://example.com",
+            "image": "https://example.com/logo.svg",
             "brandColor": "#E74363",
             "textColor": "#FFFFFF",
         },
@@ -81,6 +83,40 @@ def test_validate_missing_details(tmp_path: Path) -> None:
     assert any(i.path.endswith(":details") for i in report.issues)
 
 
+def test_validate_missing_brandmark(tmp_path: Path) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(tmp_path)
+    path = tmp_path / "src" / "app" / "app.caraer.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data.pop("brandmark", None)
+    path.write_text(json.dumps(data), encoding="utf-8")
+    report = validate_local_app(tmp_path)
+    assert not report.ok
+    assert any(i.path.endswith(":brandmark") for i in report.issues)
+
+
+def test_validate_missing_logo(tmp_path: Path) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(tmp_path)
+    path = tmp_path / "src" / "app" / "app.caraer.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["details"].pop("image", None)
+    path.write_text(json.dumps(data), encoding="utf-8")
+    report = validate_local_app(tmp_path)
+    assert not report.ok
+    assert any(i.path.endswith(":details.image") for i in report.issues)
+
+
+def test_validate_brandmark_must_be_svg(tmp_path: Path) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(tmp_path, brandmark="https://example.com/brandmark.png")
+    report = validate_local_app(tmp_path)
+    assert not report.ok
+    assert any(
+        i.path.endswith(":brandmark") and "SVG" in i.message for i in report.issues
+    )
+
+
 def test_validate_webhook_unknown_function(tmp_path: Path) -> None:
     _write_workspace(tmp_path)
     _write_manifest(tmp_path)
@@ -112,6 +148,7 @@ def test_validate_strict_treats_warnings_as_failure(tmp_path: Path) -> None:
             "category": "developer_tools",
             "subcategories": ["apis"],
             "url": "https://example.com",
+            "image": "https://example.com/logo.svg",
             "brandColor": "#E74363",
             "textColor": "#FFFFFF",
         },

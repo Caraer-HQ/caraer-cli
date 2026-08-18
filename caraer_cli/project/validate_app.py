@@ -281,6 +281,42 @@ def _looks_like_url(value: str) -> bool:
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
+def _looks_like_svg_url(value: str) -> bool:
+    if not _looks_like_url(value):
+        return False
+    path = urlparse(value).path.lower()
+    return path.endswith(".svg")
+
+
+def _require_svg_url(
+    issues: list[ValidationIssue],
+    rel_manifest: str,
+    field: str,
+    value: object,
+    *,
+    required_message: str,
+) -> None:
+    text = str(value or "").strip()
+    if not text:
+        _issue(issues, "error", f"{rel_manifest}:{field}", required_message)
+        return
+    if not _looks_like_url(text):
+        _issue(
+            issues,
+            "error",
+            f"{rel_manifest}:{field}",
+            f"{field.split('.')[-1]} must be an http(s) URL.",
+        )
+        return
+    if not _looks_like_svg_url(text):
+        _issue(
+            issues,
+            "error",
+            f"{rel_manifest}:{field}",
+            f"{field.split('.')[-1]} must be an SVG URL.",
+        )
+
+
 def validate_local_app(
     root: Path,
     *,
@@ -367,6 +403,14 @@ def _validate_manifest(
         _issue(issues, "error", f"{rel_manifest}:name", "name is required.")
     if not label:
         _issue(issues, "error", f"{rel_manifest}:label", "label is required.")
+
+    _require_svg_url(
+        issues,
+        rel_manifest,
+        "brandmark",
+        manifest.get("brandmark"),
+        required_message="brandmark is required.",
+    )
 
     uuid = str(manifest.get("uuid") or "").strip()
     if uuid and not UUID_RE.match(uuid):
@@ -536,14 +580,13 @@ def _validate_manifest(
             "url must be an http(s) URL when set.",
         )
 
-    image = str(details.get("image") or "").strip()
-    if image and not _looks_like_url(image):
-        _issue(
-            issues,
-            "error",
-            f"{rel_manifest}:details.image",
-            "image must be an http(s) URL when set.",
-        )
+    _require_svg_url(
+        issues,
+        rel_manifest,
+        "details.image",
+        details.get("image"),
+        required_message="image is required.",
+    )
 
 
 def _validate_functions(

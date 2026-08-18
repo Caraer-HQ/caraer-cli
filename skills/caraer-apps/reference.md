@@ -13,6 +13,9 @@ marketplace modules.
 Set `hideApiKeyField: true` (CLI scaffold default) to hide the installation API
 key from the Caraer UI. Use `false` only when installers must copy the key.
 
+Public apps require both `brandmark` (square SVG URL, top-level) and
+`details.image` (marketplace logo SVG URL). Private apps may omit them.
+
 External providers (`externalOAuthProviders`) are separate from `authMethod`.
 
 - `connectionOwner: COMPANY` (default) — one shared connection per install;

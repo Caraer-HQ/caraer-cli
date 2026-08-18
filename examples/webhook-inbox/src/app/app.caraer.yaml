@@ -3,6 +3,7 @@ name: webhook_inbox
 runtime: nodejs22
 authMethod: API_KEY
 oauthRedirectUris: []
+brandmark: https://www.svgrepo.com/show/448238/webhook.svg
 details:
   brandColor: "#0F766E"
   category: developer_tools

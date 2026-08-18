@@ -58,7 +58,7 @@ caraer apps local test --function <name> --sample-only
 caraer.json
 package.json                # npm-style scripts (dev/validate/push/deploy); Node adds @caraer/client
 src/app/
-  app.caraer.yaml           # identity, auth, settings, pricing, OAuth
+  app.caraer.yaml           # identity, auth, brandmark, logo, settings, pricing, OAuth
   functions/<name>/         # index.js|main.py (function.caraer.json optional)
   shared/                   # code shared by all functions (require "../../shared/...")
   settings/*.json           # modular settingsSchema fields

@@ -20,6 +20,8 @@ def test_build_public_app_placeholder() -> None:
     assert payload["hideApiKeyField"] is True
     assert payload["oauthRedirectUris"] == ["http://localhost:3000/oauth/callback"]
     assert payload["details"]["category"] == "developer_tools"
+    assert payload["brandmark"].endswith(".svg")
+    assert payload["details"]["image"].endswith(".svg")
     assert payload["details"]["brandColor"].startswith("#")
     assert payload["pricingPlans"] == []
     assert payload["appBars"] == []
@@ -56,9 +58,11 @@ def test_build_public_app_payload_from_answers() -> None:
             "title": "Hello world",
             "category": "productivity",
             "subcategories": ["agenda", "tasks"],
+            "image": "https://example.com/logo.svg",
             "brandColor": "#E74363",
             "textColor": "#FFFFFF",
         },
+        brandmark="https://example.com/brandmark.svg",
         required_scopes=["tools.forms.all", "records.candidate.properties_all"],
         settings_schema=[
             {

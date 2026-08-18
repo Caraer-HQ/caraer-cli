@@ -3,7 +3,7 @@
   "$id": "https://raw.githubusercontent.com/caraer/caraer-cli/main/schemas/app.caraer.schema.json",
   "title": "Caraer app manifest (app.caraer.yaml)",
   "type": "object",
-  "required": ["name", "label", "authMethod", "details"],
+  "required": ["name", "label", "authMethod", "brandmark", "details"],
   "additionalProperties": true,
   "properties": {
     "uuid": {
@@ -41,6 +41,11 @@
       "items": { "type": "string", "format": "uri" },
       "description": "Required when authMethod is OAUTH2."
     },
+    "brandmark": {
+      "type": "string",
+      "format": "uri",
+      "description": "Square brandmark SVG URL used in compact app surfaces. Required for public apps."
+    },
     "requiredScopes": {
       "type": "array",
       "items": { "type": "string" }
@@ -70,7 +75,7 @@
     "billFailedWebhookRequests": { "type": "boolean" },
     "details": {
       "type": "object",
-      "required": ["category", "brandColor"],
+      "required": ["category", "brandColor", "image"],
       "additionalProperties": true,
       "properties": {
         "title": { "type": "string" },
@@ -84,7 +89,11 @@
           "items": { "type": "string" }
         },
         "url": { "type": "string", "format": "uri" },
-        "image": { "type": "string" },
+        "image": {
+          "type": "string",
+          "format": "uri",
+          "description": "App logo SVG URL for marketplace listing. Required for public apps."
+        },
         "brandColor": {
           "type": "string",
           "pattern": "^#[0-9A-Fa-f]{6}$"

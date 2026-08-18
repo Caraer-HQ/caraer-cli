@@ -91,7 +91,7 @@ def _prompt_core() -> tuple[str, str]:
     return label, name
 
 
-def _prompt_details() -> dict[str, Any]:
+def _prompt_details() -> tuple[dict[str, Any], str]:
     _print_section("Marketplace details")
     title = ask_text("Title", default="")
     description = ask_text("Description", default="")
@@ -111,7 +111,8 @@ def _prompt_details() -> dict[str, Any]:
     )
 
     url = ask_text("Details URL (optional)", default="")
-    image = ask_text("Image URL (optional)", default="")
+    image = ask_text("Logo SVG URL", required=True)
+    brandmark = ask_text("Brandmark SVG URL", required=True)
     brand_color = ask_text("Brand color (#RRGGBB)", default=DEFAULT_BRAND_COLOR)
     text_color = ask_text("Text color (#RRGGBB)", default=DEFAULT_TEXT_COLOR)
 
@@ -120,14 +121,16 @@ def _prompt_details() -> dict[str, Any]:
         "description": description or None,
         "category": category_key,
         "subcategories": subcategory_keys,
+        "image": image.strip(),
         "brandColor": brand_color or DEFAULT_BRAND_COLOR,
         "textColor": text_color or DEFAULT_TEXT_COLOR,
     }
     if _optional(url):
         details["url"] = url.strip()
-    if _optional(image):
-        details["image"] = image.strip()
-    return {key: value for key, value in details.items() if value is not None}
+    return (
+        {key: value for key, value in details.items() if value is not None},
+        brandmark.strip(),
+    )
 
 
 def _print_scope_overview(scopes: list[str]) -> None:
@@ -374,6 +377,7 @@ def build_public_app_payload_from_answers(
     label: str,
     name: str,
     details: dict[str, Any],
+    brandmark: str,
     required_scopes: list[str],
     settings_schema: list[dict[str, Any]],
     pricing_plans: list[dict[str, Any]],
@@ -398,6 +402,7 @@ def build_public_app_payload_from_answers(
         "authMethod": method,
         "hideApiKeyField": True,
         "oauthRedirectUris": redirects,
+        "brandmark": brandmark,
         "details": details,
         "requiredScopes": required_scopes,
         "settingsSchema": settings_schema,
@@ -426,7 +431,7 @@ def run_public_app_wizard(
     from caraer_cli.commands.apps import DEFAULT_OAUTH_CALLBACK
 
     label, name = _prompt_core()
-    details = _prompt_details()
+    details, brandmark = _prompt_details()
     required_scopes = _prompt_scopes()
     settings_schema = _prompt_settings_schema()
     pricing_plans = _prompt_pricing_plans()
@@ -482,6 +487,7 @@ def run_public_app_wizard(
         label=label,
         name=name,
         details=details,
+        brandmark=brandmark,
         required_scopes=required_scopes,
         settings_schema=settings_schema,
         pricing_plans=pricing_plans,
