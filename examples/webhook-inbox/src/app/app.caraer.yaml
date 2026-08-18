@@ -1,4 +1,3 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/caraer/caraer-cli/main/schemas/app.caraer.schema.json
 label: Webhook Inbox
 name: webhook_inbox
 runtime: nodejs22

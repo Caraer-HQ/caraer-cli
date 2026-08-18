@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from typing import Any
 
@@ -13,10 +14,13 @@ from caraer_cli.project.validate_app import CRON_RE
 from caraer_cli.wizard.catalog import (
     ACTION_BASED_LOCATIONS,
     APP_BAR_LOCATIONS,
+    CONDITION_OPERATORS,
     DYNAMIC_OPTIONS_FIELD_TYPES,
+    LIST_CONDITION_OPERATORS,
     SCHEMA_PICKER_FIELD_TYPES,
     SETTING_FIELD_TYPES,
     STATIC_OPTIONS_FIELD_TYPES,
+    VALUELESS_CONDITION_OPERATORS,
 )
 from caraer_cli.wizard.prompts import (
     ask_checkbox,
@@ -99,6 +103,30 @@ def _coerce_number(raw: str) -> int | float | str:
         return text
 
 
+def normalize_setting_field_name(value: str) -> str:
+    """Lowercase identifier using only ``a-z``, with ``_`` for other characters."""
+    normalized = value.strip().lower()
+    normalized = re.sub(r"[^a-z]+", "_", normalized)
+    normalized = re.sub(r"_+", "_", normalized).strip("_")
+    return normalized
+
+
+def _next_tier_start_units(previous_tiers: list[dict[str, Any]]) -> int | None:
+    if not previous_tiers:
+        return 0
+    end_units = previous_tiers[-1].get("endUnits")
+    if end_units is None:
+        return None
+    try:
+        end_value = int(end_units) if not isinstance(end_units, float) else int(end_units)
+    except (TypeError, ValueError):
+        try:
+            end_value = int(float(str(end_units).strip()))
+        except (TypeError, ValueError):
+            return None
+    return end_value + 1
+
+
 def _parse_static_options(raw: str) -> list[dict[str, str]]:
     """Parse ``label=name`` / ``name`` tokens into SettingOption-shaped dicts."""
     options: list[dict[str, str]] = []
@@ -151,6 +179,63 @@ def _prompt_depends_on(
         default="",
     )
     return _parse_depends_on(raw)
+
+
+def _coerce_condition_value(operator: str, raw: str) -> Any:
+    """Parses the expected value a condition compares against."""
+    text = (raw or "").strip()
+    if operator in LIST_CONDITION_OPERATORS:
+        return [part.strip() for part in text.split(",") if part.strip()]
+    lowered = text.lower()
+    if lowered in {"true", "yes", "y", "1"}:
+        return True
+    if lowered in {"false", "no", "n", "0"}:
+        return False
+    return text
+
+
+def _prompt_visible_when(
+    *,
+    field_name: str,
+    sibling_names: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Ask for the conditions that must hold before the field is shown."""
+    siblings = [n for n in (sibling_names or []) if n and n != field_name]
+    if not siblings or not _is_tty():
+        return []
+    console.print(
+        "[dim]visibleWhen: the installer only sees this field while every "
+        "condition holds (stored on settingsSchema[].visibleWhen).[/dim]"
+    )
+    if not ask_confirm("Show this field conditionally?", default=False):
+        return []
+
+    conditions: list[dict[str, Any]] = []
+    while True:
+        controlling = ask_select(
+            "Controlling field",
+            [Choice(title=n, value=n) for n in siblings],
+            default=siblings[0],
+        )
+        operator = ask_select(
+            "Condition",
+            [Choice(title=f"{key} — {lbl}", value=key) for key, lbl in CONDITION_OPERATORS],
+            default="EQUALS",
+        )
+        condition: dict[str, Any] = {"field": controlling, "operator": operator}
+        if operator not in VALUELESS_CONDITION_OPERATORS:
+            prompt = (
+                "Expected values (comma-separated)"
+                if operator in LIST_CONDITION_OPERATORS
+                else "Expected value"
+            )
+            condition["value"] = _coerce_condition_value(
+                operator, ask_text(prompt, required=True)
+            )
+        conditions.append(condition)
+        if not ask_confirm("Add another condition?", default=False):
+            break
+    return conditions
 
 
 def _prompt_options_source(
@@ -287,6 +372,7 @@ def prompt_setting_field(
     options_function: str | None = None,
     depends_on: list[str] | None = None,
     static_options: str | None = None,
+    visible_when: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Prompt for one settingsSchema field (wizard-style).
 
@@ -295,19 +381,35 @@ def prompt_setting_field(
     """
     interactive = _is_tty()
     resolved_name = (name or "").strip()
-    if not resolved_name:
-        if not interactive:
+    resolved_label = (label or "").strip() if label is not None else ""
+
+    if interactive and not resolved_name:
+        if not resolved_label:
+            resolved_label = ask_text("Field label", required=True)
+        default_name = normalize_setting_field_name(resolved_label) or "field"
+        name_raw = ask_text(
+            "Field name (Enter to keep default)",
+            default=default_name,
+            required=True,
+        )
+        resolved_name = normalize_setting_field_name(name_raw) or default_name
+        if resolved_name != name_raw.strip():
+            console.print(
+                f"[dim]Normalized name to[/dim] [bold]{resolved_name}[/bold]"
+            )
+    elif not resolved_name:
+        if resolved_label:
+            resolved_name = normalize_setting_field_name(resolved_label) or "field"
+        else:
             raise ValueError("Missing required value: name")
-        resolved_name = ask_text("Field name", required=True)
-    resolved_label = (
-        label
-        if label is not None and str(label).strip()
-        else (
+        if not resolved_label:
+            resolved_label = resolved_name
+    elif not resolved_label:
+        resolved_label = (
             ask_text("Field label", default=resolved_name)
             if interactive
             else resolved_name
         )
-    )
     resolved_type = (field_type or "").strip().upper()
     if not resolved_type:
         if not interactive:
@@ -343,6 +445,17 @@ def prompt_setting_field(
     }
     if _optional(resolved_help):
         field["helpText"] = resolved_help.strip()
+
+    conditions = (
+        visible_when
+        if visible_when is not None
+        else _prompt_visible_when(
+            field_name=resolved_name.strip(),
+            sibling_names=sibling_setting_names,
+        )
+    )
+    if conditions:
+        field["visibleWhen"] = conditions
 
     # SECRET: no defaultValue in schema (write-only at install time).
     if resolved_type != "SECRET":
@@ -455,11 +568,66 @@ def prompt_setting_field(
     return field
 
 
-def prompt_pricing_tier() -> dict[str, Any]:
+def prompt_pricing_tier(
+    *,
+    previous_tiers: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    previous = list(previous_tiers or [])
+    tier_index = len(previous) + 1
+    resolved_label = ask_text(f"Tier {tier_index} label", required=True)
+    default_name = normalize_setting_field_name(resolved_label) or f"tier_{tier_index}"
+    name_raw = ask_text(
+        "Tier name (Enter to keep default)",
+        default=default_name,
+        required=True,
+    )
+    resolved_name = normalize_setting_field_name(name_raw) or default_name
+    if resolved_name != name_raw.strip():
+        console.print(f"[dim]Normalized name to[/dim] [bold]{resolved_name}[/bold]")
+
+    default_start = _next_tier_start_units(previous)
+    if default_start is None and previous:
+        console.print(
+            "[yellow]Previous tier has no end units — set end units on the "
+            "previous tier before adding another.[/yellow]"
+        )
+        default_start = 0
+
+    while True:
+        start_raw = ask_text(
+            "Start units",
+            default=str(default_start if default_start is not None else 0),
+            required=True,
+        )
+        start_units = _coerce_number(start_raw)
+        if not previous:
+            break
+        expected = _next_tier_start_units(previous)
+        if expected is None:
+            console.print(
+                "[yellow]Previous tier must define end units before adding "
+                "another tier.[/yellow]"
+            )
+            continue
+        try:
+            actual = int(start_units)
+        except (TypeError, ValueError):
+            try:
+                actual = int(float(str(start_units).strip()))
+            except (TypeError, ValueError):
+                console.print("[yellow]Start units must be a whole number.[/yellow]")
+                continue
+        if actual == expected:
+            break
+        console.print(
+            f"[yellow]Start units must be {expected} "
+            f"(previous tier end units + 1).[/yellow]"
+        )
+
     tier: dict[str, Any] = {
-        "startUnits": _coerce_number(
-            ask_text("Start units", default="0", required=True)
-        ),
+        "name": resolved_name,
+        "label": resolved_label.strip(),
+        "startUnits": start_units,
     }
     end_units = ask_text("End units (blank = unlimited)", default="")
     if _optional(end_units):
@@ -540,7 +708,7 @@ def prompt_pricing_plan(
         tiers: list[dict[str, Any]] = []
         console.print("[dim]Add at least one tier.[/dim]")
         while True:
-            tiers.append(prompt_pricing_tier())
+            tiers.append(prompt_pricing_tier(previous_tiers=tiers))
             if not ask_confirm("Add another tier?", default=False):
                 break
         plan["tiers"] = tiers

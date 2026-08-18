@@ -230,6 +230,9 @@ def print_app_detail(app: dict[str, Any], *, full: bool = False) -> None:
         ),
         "requiredScopes": _count_label(app.get("requiredScopes")),
         "settingsSchema": _count_label(app.get("settingsSchema"), item_label=_schema_label),
+        "settingsSections": _count_label(
+            app.get("settingsSections"), item_label=_settings_section_label
+        ),
         "oauthRedirectUris": _count_label(app.get("oauthRedirectUris")),
     }
     _print_section("Resources", resources)
@@ -276,6 +279,12 @@ def _app_bar_label(item: Any) -> str:
     if not isinstance(item, dict):
         return str(item)
     return str(item.get("label") or item.get("location") or item.get("uuid") or "appBar")
+
+
+def _settings_section_label(item: Any) -> str:
+    if not isinstance(item, dict):
+        return str(item)
+    return str(item.get("title") or "section")
 
 
 def _pricing_label(item: Any) -> str:

@@ -49,6 +49,11 @@
       "type": "array",
       "items": { "$ref": "#/$defs/settingField" }
     },
+    "settingsSections": {
+      "type": "array",
+      "description": "Optional UI grouping of settingsSchema fields into installer cards. Settings values stay on the flat settingsSchema list.",
+      "items": { "$ref": "#/$defs/settingsSection" }
+    },
     "pricingPlans": {
       "type": "array",
       "items": { "$ref": "#/$defs/pricingPlan" }
@@ -92,6 +97,28 @@
     }
   },
   "$defs": {
+    "settingsSection": {
+      "type": "object",
+      "required": ["title", "settings"],
+      "additionalProperties": true,
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Installer card heading."
+        },
+        "subtitle": {
+          "type": "string",
+          "description": "Optional card description under the title."
+        },
+        "settings": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Ordered settingsSchema field names shown on this card."
+        }
+      }
+    },
     "settingField": {
       "type": "object",
       "required": ["name", "type"],
@@ -114,6 +141,7 @@
             "PROPERTY_MULTI_SELECT",
             "SWITCH",
             "MAPPING",
+            "FILE",
             "SECRET"
           ]
         },
@@ -132,10 +160,39 @@
           }
         },
         "optionsSource": { "$ref": "#/$defs/optionsSource" },
+        "hidden": {
+          "type": "boolean",
+          "description": "Never show this field. The value is still stored so the app can keep provisioned ids."
+        },
+        "visibleWhen": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/settingCondition" },
+          "description": "Show and validate this field only while every condition holds."
+        },
         "valueScope": {
           "type": "string",
           "enum": ["COMPANY", "USER"],
           "description": "COMPANY (default) stores the value on the install; USER stores it per Caraer user."
+        }
+      }
+    },
+    "settingCondition": {
+      "type": "object",
+      "required": ["field"],
+      "additionalProperties": true,
+      "properties": {
+        "field": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name of another field in the same settingsSchema."
+        },
+        "operator": {
+          "type": "string",
+          "enum": ["EQUALS", "NOT_EQUALS", "IN", "NOT_IN", "IS_SET", "IS_NOT_SET"],
+          "default": "EQUALS"
+        },
+        "value": {
+          "description": "Expected value; a list for IN / NOT_IN, omitted for IS_SET / IS_NOT_SET."
         }
       }
     },

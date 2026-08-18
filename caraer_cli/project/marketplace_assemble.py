@@ -23,6 +23,11 @@ from caraer_cli.project.pricing_sync import (
     write_pricing_files,
 )
 from caraer_cli.project.schema import ProjectConfig
+from caraer_cli.project.settings_sections_sync import (
+    discover_local_settings_sections,
+    settings_section_identity,
+    write_settings_sections_files,
+)
 from caraer_cli.project.settings_sync import discover_local_settings, resolve_setting_options_source, write_settings_files
 from caraer_cli.project.state import load_state
 
@@ -115,6 +120,16 @@ def assemble_local_manifest(
             )
         out["settingsSchema"] = resolved_settings
 
+    yaml_sections = (
+        out.get("settingsSections") if isinstance(out.get("settingsSections"), list) else []
+    )
+    file_sections = [item for _path, item in discover_local_settings_sections(root, config)]
+    out["settingsSections"] = _merge_by_key(
+        yaml_sections,
+        file_sections,
+        identity=settings_section_identity,
+    )
+
     yaml_pricing = out.get("pricingPlans") if isinstance(out.get("pricingPlans"), list) else []
     file_pricing = [item for _path, item in discover_local_pricing(root, config)]
     out["pricingPlans"] = _merge_by_key(
@@ -174,6 +189,10 @@ def split_marketplace_to_disk(
     settings = out.get("settingsSchema") if isinstance(out.get("settingsSchema"), list) else []
     write_settings_files(root, config, [i for i in settings if isinstance(i, dict)])
     out["settingsSchema"] = []
+
+    sections = out.get("settingsSections") if isinstance(out.get("settingsSections"), list) else []
+    write_settings_sections_files(root, config, [i for i in sections if isinstance(i, dict)])
+    out["settingsSections"] = []
 
     pricing = out.get("pricingPlans") if isinstance(out.get("pricingPlans"), list) else []
     write_pricing_files(root, config, [i for i in pricing if isinstance(i, dict)])

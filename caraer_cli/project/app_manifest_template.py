@@ -20,6 +20,7 @@ _EXAMPLE_REQUIRED_SCOPES = """\
 _EXAMPLE_SETTINGS_SCHEMA = """\
 # Edit settingsSchema above, or: caraer apps add setting
 # Optional modular files also work: src/app/settings/<name>.json (--modular)
+# Group installer cards with settingsSections or src/app/settings-sections/*.json
 """
 
 _EXAMPLE_PRICING_PLANS = """\
@@ -34,9 +35,12 @@ _EXAMPLE_APP_BARS = """\
 
 
 def render_app_manifest(payload: dict[str, Any], *, include_examples: bool = True) -> str:
-    """Serialize an app manifest as YAML, optionally with commented-out examples."""
-    from caraer_cli.project.json_schemas import YAML_LANGUAGE_SERVER_COMMENT
+    """Serialize an app manifest as YAML, optionally with commented-out examples.
 
+    No ``# yaml-language-server`` schema directive is emitted: the schemas live in
+    a private repo, so editors could only ever report a load failure on it.
+    ``caraer apps validate`` checks the manifest against the bundled schemas.
+    """
     data = dict(payload)
     for key in ("requiredScopes", "settingsSchema", "pricingPlans", "appBars"):
         data.setdefault(key, [])
@@ -47,12 +51,11 @@ def render_app_manifest(payload: dict[str, Any], *, include_examples: bool = Tru
         allow_unicode=True,
         default_flow_style=False,
     ).rstrip() + "\n"
-    header = YAML_LANGUAGE_SERVER_COMMENT + "\n"
     if not include_examples:
-        return header + body
+        return body
 
     lines = body.splitlines()
-    out: list[str] = [YAML_LANGUAGE_SERVER_COMMENT]
+    out: list[str] = []
     for line in lines:
         out.append(line)
         stripped = line.strip()

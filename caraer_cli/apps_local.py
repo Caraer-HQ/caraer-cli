@@ -34,6 +34,7 @@ LOCAL_APP_KEYS = (
     "details",
     "requiredScopes",
     "settingsSchema",
+    "settingsSections",
     "pricingPlans",
     "appBars",
     "webhookRateLimitPerMinute",

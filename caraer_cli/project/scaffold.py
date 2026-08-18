@@ -157,6 +157,8 @@ def scaffold_pricing_plan(
     else:
         payload["tiers"] = [
             {
+                "name": "tier_1",
+                "label": "Tier 1",
                 "startUnits": 0,
                 "endUnits": None,
                 "pricePerMonth": 0,

@@ -10,6 +10,7 @@ from caraer_cli.project.sync import scaffold_options_function
 from caraer_cli.wizard.catalog import SETTING_FIELD_TYPES
 from caraer_cli.wizard.marketplace import (
     _parse_static_options,
+    normalize_setting_field_name,
     prompt_setting_field,
 )
 
@@ -35,6 +36,23 @@ def test_parse_static_options_uses_name_label() -> None:
         {"name": "a", "label": "Alpha"},
         {"name": "Beta", "label": "Beta"},
     ]
+
+
+def test_normalize_setting_field_name() -> None:
+    assert normalize_setting_field_name("My Field!") == "my_field"
+    assert normalize_setting_field_name("API Key 2") == "api_key"
+
+
+def test_prompt_setting_field_derives_name_from_label_noninteractive() -> None:
+    field = prompt_setting_field(
+        label="API Key",
+        field_type="SECRET",
+        required=True,
+        help_text="",
+        default_value="",
+    )
+    assert field["name"] == "api_key"
+    assert field["label"] == "API Key"
 
 
 def test_prompt_object_select_noninteractive() -> None:

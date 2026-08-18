@@ -36,6 +36,42 @@ def normalize_function_name(value: str) -> str:
     return normalized
 
 
+def parse_visible_when(raw: str) -> list[dict[str, object]]:
+    """Parses `--visible-when` entries into settingsSchema conditions.
+
+    Each comma-separated entry is `field[:operator[:value]]`; `IN` / `NOT_IN`
+    values are split on `|`.
+    """
+    from caraer_cli.wizard.catalog import (
+        LIST_CONDITION_OPERATORS,
+        VALUELESS_CONDITION_OPERATORS,
+    )
+
+    conditions: list[dict[str, object]] = []
+    for entry in raw.split(","):
+        text = entry.strip()
+        if not text:
+            continue
+        parts = text.split(":", 2)
+        field = parts[0].strip()
+        if not field:
+            raise ValueError(f"visible-when entry '{text}' is missing a field name.")
+        operator = (parts[1].strip().upper() if len(parts) > 1 and parts[1].strip() else "EQUALS")
+        condition: dict[str, object] = {"field": field, "operator": operator}
+        if operator not in VALUELESS_CONDITION_OPERATORS:
+            if len(parts) < 3 or not parts[2].strip():
+                raise ValueError(f"visible-when entry '{text}' needs a value for {operator}.")
+            value = parts[2].strip()
+            if operator in LIST_CONDITION_OPERATORS:
+                condition["value"] = [p.strip() for p in value.split("|") if p.strip()]
+            elif value.lower() in {"true", "false"}:
+                condition["value"] = value.lower() == "true"
+            else:
+                condition["value"] = value
+        conditions.append(condition)
+    return conditions
+
+
 def register_aliases(root: typer.Typer) -> None:
     """Register hidden flat aliases (e.g. add-function → add function)."""
     for source_name, alias_name in _ADD_ALIASES:
@@ -397,6 +433,14 @@ def add_setting(
         "--depends-on",
         help="Comma-separated sibling setting names for optionsSource.dependsOn.",
     ),
+    visible_when: str | None = typer.Option(
+        None,
+        "--visible-when",
+        help=(
+            "Conditional visibility as field[:operator[:value]] "
+            "(repeat with commas, e.g. 'custom_mapping:EQUALS:true')."
+        ),
+    ),
     modular: bool = typer.Option(
         False,
         "--modular",
@@ -446,6 +490,7 @@ def add_setting(
         if depends_on is not None
         else None
     )
+    conditions = parse_visible_when(visible_when) if visible_when is not None else None
     raw = prompt_setting_field(
         name=name,
         label=label,
@@ -462,6 +507,7 @@ def add_setting(
         ),
         depends_on=deps,
         static_options=options,
+        visible_when=conditions,
     )
     scaffold_fn = raw.pop("_scaffoldOptionsFunction", None)
     field = sanitize_setting(raw)

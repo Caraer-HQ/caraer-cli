@@ -19,6 +19,7 @@ from caraer_cli.project.paths import (
 )
 from caraer_cli.project.schedules_sync import discover_local_schedules
 from caraer_cli.project.schema import ProjectConfig, load_workspace
+from caraer_cli.project.settings_sections_sync import discover_local_settings_sections
 from caraer_cli.project.settings_sync import discover_local_settings
 from caraer_cli.project.pricing_sync import discover_local_pricing, pricing_identity
 from caraer_cli.project.app_bars_sync import discover_local_app_bars
@@ -50,6 +51,7 @@ SETTING_FIELD_TYPES = frozenset(
         "PROPERTY_MULTI_SELECT",
         "SWITCH",
         "MAPPING",
+        "FILE",
         "SECRET",
     }
 )
@@ -59,7 +61,13 @@ SELECT_FIELD_TYPES = frozenset(
         "MULTI_SELECT",
     }
 )
+CONDITION_OPERATORS = frozenset(
+    {"EQUALS", "NOT_EQUALS", "IN", "NOT_IN", "IS_SET", "IS_NOT_SET"}
+)
+VALUELESS_CONDITION_OPERATORS = frozenset({"IS_SET", "IS_NOT_SET"})
+LIST_CONDITION_OPERATORS = frozenset({"IN", "NOT_IN"})
 PRICING_TYPES = frozenset({"FLAT", "TIERED"})
+SETTING_FIELD_NAME_RE = re.compile(r"^[a-z]+(?:_[a-z]+)*$")
 APP_BAR_LOCATIONS = frozenset(
     {"RECORD_PREVIEW", "RECORD_OVERVIEW", "RECORD_DETAIL", "TOOL_BAR", "TRAIT_BAR"}
 )
@@ -318,6 +326,7 @@ def validate_local_app(
     oauth_count = _validate_oauth_providers(manifest, rel_manifest, issues)
     function_names = set(list_local_function_names(root, config))
     settings_count = _validate_settings(root, config, manifest, rel_manifest, issues)
+    _validate_settings_sections(root, config, manifest, issues)
     pricing_count = _validate_pricing(root, config, manifest, rel_manifest, issues)
     app_bars_count = _validate_app_bars(
         root, config, manifest, rel_manifest, function_names, issues
@@ -923,6 +932,11 @@ def _validate_settings(
     issues: list[ValidationIssue],
 ) -> int:
     rows = _merged_settings(root, config, manifest)
+    known_names = {
+        str(item.get("name") or "").strip()
+        for _rel, item in rows
+        if str(item.get("name") or "").strip()
+    }
     seen: set[str] = set()
     for rel, item in rows:
         name = str(item.get("name") or "").strip()
@@ -933,6 +947,7 @@ def _validate_settings(
         if key in seen:
             _issue(issues, "error", f"{rel}:name", f"Duplicate setting name '{name}'.")
         seen.add(key)
+        _validate_visible_when(item, name, known_names, rel, issues)
         value_scope = str(item.get("valueScope") or "").strip().upper()
         if value_scope and value_scope not in ("COMPANY", "USER"):
             _issue(
@@ -962,6 +977,165 @@ def _validate_settings(
                     "SELECT fields require options or optionsSource.",
                 )
     return len(rows)
+
+
+def _merged_settings_sections(
+    root: Path, config: ProjectConfig, manifest: dict[str, Any]
+) -> list[tuple[str, dict[str, Any]]]:
+    assembled = assemble_local_manifest(
+        root, config, manifest, resolve_functions=False, strict_function_refs=False
+    )
+    items = assembled.get("settingsSections") or []
+    out: list[tuple[str, dict[str, Any]]] = []
+    file_by_title = {
+        str(item.get("title") or "").strip().lower(): path
+        for path, item in discover_local_settings_sections(root, config)
+    }
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "").strip()
+        path = file_by_title.get(title.lower())
+        rel = (
+            str(path.relative_to(root))
+            if path is not None
+            else "app.caraer.yaml:settingsSections"
+        )
+        out.append((rel, item))
+    return out
+
+
+def _validate_settings_sections(
+    root: Path,
+    config: ProjectConfig,
+    manifest: dict[str, Any],
+    issues: list[ValidationIssue],
+) -> int:
+    rows = _merged_settings_sections(root, config, manifest)
+    if not rows:
+        return 0
+    known_names = {
+        str(item.get("name") or "").strip()
+        for _rel, item in _merged_settings(root, config, manifest)
+        if str(item.get("name") or "").strip()
+    }
+    assigned: set[str] = set()
+    for rel, item in rows:
+        title = str(item.get("title") or "").strip()
+        if not title:
+            _issue(issues, "error", f"{rel}:title", "title is required.")
+        settings = item.get("settings")
+        if not isinstance(settings, list) or not settings:
+            _issue(
+                issues,
+                "error",
+                f"{rel}:settings",
+                "settings must be a non-empty list of settingsSchema field names.",
+            )
+            continue
+        for index, raw in enumerate(settings):
+            name = str(raw or "").strip()
+            where = f"{rel}:settings[{index}]"
+            if not name:
+                _issue(issues, "error", where, "Setting name is required.")
+                continue
+            if name not in known_names:
+                _issue(
+                    issues,
+                    "error",
+                    where,
+                    f"Setting '{name}' is not defined in settingsSchema.",
+                )
+            key = name.lower()
+            if key in assigned:
+                _issue(
+                    issues,
+                    "error",
+                    where,
+                    f"Setting '{name}' is assigned to more than one settings section.",
+                )
+            assigned.add(key)
+    for setting_rel, item in _merged_settings(root, config, manifest):
+        name = str(item.get("name") or "").strip()
+        if name and name.lower() not in assigned:
+            _issue(
+                issues,
+                "warning",
+                f"{setting_rel}:name",
+                f"Setting '{name}' is not assigned to a settings section "
+                "and will appear under Other settings.",
+            )
+    return len(rows)
+
+
+def _validate_visible_when(
+    item: dict[str, Any],
+    name: str,
+    known_names: set[str],
+    rel: str,
+    issues: list[ValidationIssue],
+) -> None:
+    """Validate conditional visibility rules on one settings field."""
+    conditions = item.get("visibleWhen")
+    if conditions is None:
+        return
+    if not isinstance(conditions, list):
+        _issue(issues, "error", f"{rel}:visibleWhen", "visibleWhen must be a list.")
+        return
+
+    for index, condition in enumerate(conditions):
+        where = f"{rel}:visibleWhen[{index}]"
+        if not isinstance(condition, dict):
+            _issue(issues, "error", where, "Each visibleWhen entry must be an object.")
+            continue
+
+        field = str(condition.get("field") or "").strip()
+        if not field:
+            _issue(issues, "error", f"{where}.field", "field is required.")
+        elif field == name:
+            _issue(
+                issues,
+                "error",
+                f"{where}.field",
+                f"field '{field}' cannot reference the field itself.",
+            )
+        elif field not in known_names:
+            _issue(
+                issues,
+                "error",
+                f"{where}.field",
+                f"Unknown field '{field}'; must match another setting name.",
+            )
+
+        operator = str(condition.get("operator") or "EQUALS").strip().upper()
+        if operator not in CONDITION_OPERATORS:
+            _issue(
+                issues,
+                "error",
+                f"{where}.operator",
+                f"operator must be one of: {', '.join(sorted(CONDITION_OPERATORS))}.",
+            )
+            continue
+
+        has_value = "value" in condition and condition.get("value") is not None
+        if operator not in VALUELESS_CONDITION_OPERATORS and not has_value:
+            _issue(
+                issues,
+                "error",
+                f"{where}.value",
+                f"operator {operator} requires a value.",
+            )
+        if (
+            operator in LIST_CONDITION_OPERATORS
+            and has_value
+            and not isinstance(condition.get("value"), list)
+        ):
+            _issue(
+                issues,
+                "error",
+                f"{where}.value",
+                f"operator {operator} requires a list of values.",
+            )
 
 
 def _validate_pricing(
@@ -1018,7 +1192,104 @@ def _validate_pricing(
                     f"{rel}:tiers",
                     "TIERED plans require a non-empty tiers list.",
                 )
+            else:
+                _validate_pricing_tiers(issues, rel, tiers)
     return count
+
+
+def _parse_unit_count(value: Any) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return int(text)
+    except ValueError:
+        try:
+            return int(float(text))
+        except ValueError:
+            return None
+
+
+def _validate_pricing_tiers(
+    issues: list[ValidationIssue],
+    rel: str,
+    tiers: list[Any],
+) -> None:
+    previous_end: int | None = None
+    for index, tier in enumerate(tiers):
+        tier_rel = f"{rel}:tiers[{index}]"
+        if not isinstance(tier, dict):
+            _issue(
+                issues,
+                "error",
+                tier_rel,
+                "Each tier must be an object.",
+            )
+            continue
+        tier_name = str(tier.get("name") or "").strip()
+        if not tier_name:
+            _issue(
+                issues,
+                "error",
+                f"{tier_rel}:name",
+                "Tier name is required.",
+            )
+        elif not SETTING_FIELD_NAME_RE.match(tier_name):
+            _issue(
+                issues,
+                "error",
+                f"{tier_rel}:name",
+                "Tier name must use lowercase letters and underscores only.",
+            )
+        tier_label = str(tier.get("label") or "").strip()
+        if not tier_label:
+            _issue(
+                issues,
+                "error",
+                f"{tier_rel}:label",
+                "Tier label is required.",
+            )
+        start_units = _parse_unit_count(tier.get("startUnits"))
+        if start_units is None:
+            _issue(
+                issues,
+                "error",
+                f"{tier_rel}:startUnits",
+                "startUnits must be a whole number.",
+            )
+        elif index > 0:
+            if previous_end is None:
+                _issue(
+                    issues,
+                    "error",
+                    f"{rel}:tiers[{index - 1}]:endUnits",
+                    "A tier with a following tier must define endUnits.",
+                )
+            elif start_units != previous_end + 1:
+                _issue(
+                    issues,
+                    "error",
+                    f"{tier_rel}:startUnits",
+                    f"startUnits must be {previous_end + 1} "
+                    f"(previous tier endUnits + 1).",
+                )
+        end_units = _parse_unit_count(tier.get("endUnits"))
+        if end_units is not None and start_units is not None and end_units < start_units:
+            _issue(
+                issues,
+                "error",
+                f"{tier_rel}:endUnits",
+                "endUnits must be greater than or equal to startUnits.",
+            )
+        previous_end = end_units
 
 
 def _validate_app_bars(

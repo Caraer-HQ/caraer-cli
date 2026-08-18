@@ -10,6 +10,7 @@ from caraer_cli.project.marketplace_assemble import (
 )
 from caraer_cli.project.scaffold import scaffold_app_project, scaffold_lifecycle_hook
 from caraer_cli.project.schema import load_workspace
+from caraer_cli.project.settings_sections_sync import discover_local_settings_sections
 from caraer_cli.project.settings_sync import discover_local_settings
 from caraer_cli.project.state import load_state, save_state
 
@@ -145,3 +146,59 @@ def test_split_and_lifecycle_resolve(tmp_path: Path) -> None:
     names = [item["name"] for _p, item in discover_local_settings(root, config)]
     assert "topic" in names
     assert result["lifecycle_dir"].is_dir()
+
+
+def test_assemble_merges_settings_sections(tmp_path: Path) -> None:
+    root = tmp_path / "demo"
+    scaffold_app_project(
+        root,
+        app_payload=build_public_app_placeholder(label="Demo", name="demo"),
+        sample_function=None,
+        force=True,
+    )
+    config = load_workspace(root)
+    sections = root / "src" / "app" / "settings-sections"
+    sections.mkdir(parents=True, exist_ok=True)
+    (sections / "01-candidate.json").write_text(
+        json.dumps(
+            {
+                "title": "Candidate",
+                "subtitle": "From disk",
+                "settings": ["candidate_mapping"],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    local = {
+        "name": "demo",
+        "settingsSchema": [{"name": "candidate_mapping", "type": "MAPPING"}],
+        "settingsSections": [
+            {
+                "title": "Candidate",
+                "subtitle": "From YAML",
+                "settings": ["candidate_mapping"],
+            }
+        ],
+        "pricingPlans": [],
+        "appBars": [],
+    }
+    assembled = assemble_local_manifest(
+        root, config, local, resolve_functions=False
+    )
+    assert len(assembled["settingsSections"]) == 1
+    assert assembled["settingsSections"][0]["subtitle"] == "From disk"
+
+    split = split_marketplace_to_disk(
+        root,
+        config,
+        {
+            "settingsSchema": [{"name": "candidate_mapping", "type": "MAPPING"}],
+            "settingsSections": assembled["settingsSections"],
+            "pricingPlans": [],
+            "appBars": [],
+        },
+    )
+    assert split["settingsSections"] == []
+    titles = [item["title"] for _p, item in discover_local_settings_sections(root, config)]
+    assert "Candidate" in titles

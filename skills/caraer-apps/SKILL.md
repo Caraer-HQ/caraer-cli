@@ -61,6 +61,8 @@ src/app/
   app.caraer.yaml           # identity, auth, settings, pricing, OAuth
   functions/<name>/         # index.js|main.py (function.caraer.json optional)
   shared/                   # code shared by all functions (require "../../shared/...")
+  settings/*.json           # modular settingsSchema fields
+  settings-sections/*.json  # optional installer cards (title, subtitle, field names)
   lifecycle/*.json          # install|uninstall|rotate|update → function
   inbound/*.json            # public HTTP → function
   schedules/*.json          # cron → function
@@ -75,15 +77,10 @@ e.g. `LifecyclePayload`, `WebhookPayload`, `SchedulePayload`. Do **not** run
 description); a folder with `index.js` / `main.py` is a function named after
 the folder.
 
-JSON Schema for IDE hints:
-
-`https://raw.githubusercontent.com/Caraer-HQ/caraer-cli/main/schemas/app.caraer.schema.json`
-
-Point the YAML at it:
-
-```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/Caraer-HQ/caraer-cli/main/schemas/app.caraer.schema.json
-```
+Do **not** add a `# yaml-language-server: $schema=…` line pointing at
+`raw.githubusercontent.com`: caraer-cli is private, so an editor can only report
+that the schema failed to load. `caraer apps validate` checks the manifest
+against the schemas bundled with the CLI (`schemas/*.caraer.schema.json`).
 
 Reference example: `examples/webhook-inbox` in the caraer-cli repo.
 
@@ -123,6 +120,25 @@ Installation settings are for **admins installing the app**, not developers.
   `body.caraerApiBase`.
 - Do **not** ask for object/property names as raw strings when a select type exists.
 - Keep required settings to the minimum that makes the app work.
+- Group related fields into installer cards with `settingsSections` (or
+  `src/app/settings-sections/*.json`). Do not invent a grid; Caraer lays
+  cards out left-to-right, top-to-bottom, max 3 across.
+- Hide advanced settings behind a `SWITCH` + `visibleWhen` instead of showing
+  everything at once:
+
+```yaml
+- name: custom_mapping
+  type: SWITCH
+  defaultValue: false
+- name: field_mapping
+  type: MAPPING
+  visibleWhen:
+    - field: custom_mapping
+      value: true
+```
+
+  Hidden fields are not required and their values are dropped. Use `FILE` when an
+  action dialog needs an upload.
 
 ### Functions
 

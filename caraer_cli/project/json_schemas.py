@@ -17,10 +17,6 @@ SCHEDULE_SCHEMA_URL = f"{SCHEMA_REPO_BASE}/schedule.caraer.schema.json"
 INBOUND_SCHEMA_URL = f"{SCHEMA_REPO_BASE}/inbound.caraer.schema.json"
 LIFECYCLE_SCHEMA_URL = f"{SCHEMA_REPO_BASE}/lifecycle.caraer.schema.json"
 
-YAML_LANGUAGE_SERVER_COMMENT = (
-    f"# yaml-language-server: $schema={APP_MANIFEST_SCHEMA_URL}"
-)
-
 SCHEMA_FILENAMES = {
     "app": "app.caraer.schema.json",
     "function": "function.caraer.schema.json",

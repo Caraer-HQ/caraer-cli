@@ -106,6 +106,7 @@ def build_public_app_placeholder(
         },
         "requiredScopes": [],
         "settingsSchema": [],
+        "settingsSections": [],
         "pricingPlans": [],
         "appBars": [],
         "webhookRateLimitPerMinute": 100,

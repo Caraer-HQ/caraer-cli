@@ -178,3 +178,260 @@ def test_validate_inbound_bad_auth_mode(tmp_path: Path) -> None:
     report = validate_local_app(tmp_path)
     assert not report.ok
     assert any("authMode" in i.path for i in report.issues)
+
+
+def _settings_report(tmp_path: Path, settings: list[dict[str, object]]):
+    _write_workspace(tmp_path)
+    _write_manifest(tmp_path, settingsSchema=settings)
+    _write_function(tmp_path)
+    return validate_local_app(tmp_path)
+
+
+def test_validate_visible_when_ok(tmp_path: Path) -> None:
+    report = _settings_report(
+        tmp_path,
+        [
+            {"name": "custom_mapping", "type": "SWITCH", "defaultValue": False},
+            {
+                "name": "work_experience_mapping",
+                "type": "MAPPING",
+                "visibleWhen": [
+                    {"field": "custom_mapping", "operator": "EQUALS", "value": True}
+                ],
+            },
+        ],
+    )
+    assert report.ok
+    assert report.settings == 2
+
+
+def test_validate_visible_when_unknown_field(tmp_path: Path) -> None:
+    report = _settings_report(
+        tmp_path,
+        [
+            {
+                "name": "mapping",
+                "type": "MAPPING",
+                "visibleWhen": [{"field": "missing", "operator": "EQUALS", "value": True}],
+            }
+        ],
+    )
+    assert not report.ok
+    assert any("visibleWhen[0].field" in i.path for i in report.issues)
+
+
+def test_validate_visible_when_self_reference(tmp_path: Path) -> None:
+    report = _settings_report(
+        tmp_path,
+        [
+            {
+                "name": "mapping",
+                "type": "MAPPING",
+                "visibleWhen": [{"field": "mapping", "operator": "EQUALS", "value": True}],
+            }
+        ],
+    )
+    assert not report.ok
+    assert any("cannot reference the field itself" in i.message for i in report.issues)
+
+
+def test_validate_visible_when_unknown_operator(tmp_path: Path) -> None:
+    report = _settings_report(
+        tmp_path,
+        [
+            {"name": "toggle", "type": "SWITCH"},
+            {
+                "name": "mapping",
+                "type": "MAPPING",
+                "visibleWhen": [{"field": "toggle", "operator": "STARTS_WITH", "value": "x"}],
+            },
+        ],
+    )
+    assert not report.ok
+    assert any("visibleWhen[0].operator" in i.path for i in report.issues)
+
+
+def test_validate_visible_when_missing_value(tmp_path: Path) -> None:
+    report = _settings_report(
+        tmp_path,
+        [
+            {"name": "toggle", "type": "SWITCH"},
+            {
+                "name": "mapping",
+                "type": "MAPPING",
+                "visibleWhen": [{"field": "toggle", "operator": "EQUALS"}],
+            },
+        ],
+    )
+    assert not report.ok
+    assert any("visibleWhen[0].value" in i.path for i in report.issues)
+
+
+def test_validate_visible_when_in_requires_list(tmp_path: Path) -> None:
+    report = _settings_report(
+        tmp_path,
+        [
+            {"name": "region", "type": "SINGLE_LINE"},
+            {
+                "name": "workspace",
+                "type": "SINGLE_LINE",
+                "visibleWhen": [{"field": "region", "operator": "IN", "value": "eu1"}],
+            },
+        ],
+    )
+    assert not report.ok
+    assert any("requires a list" in i.message for i in report.issues)
+
+
+def test_validate_visible_when_is_set_needs_no_value(tmp_path: Path) -> None:
+    report = _settings_report(
+        tmp_path,
+        [
+            {"name": "candidate_object", "type": "OBJECT_SINGLE_SELECT"},
+            {
+                "name": "cv_property",
+                "type": "PROPERTY_SINGLE_SELECT",
+                "visibleWhen": [{"field": "candidate_object", "operator": "IS_SET"}],
+            },
+        ],
+    )
+    assert report.ok
+
+
+def test_validate_file_setting_type(tmp_path: Path) -> None:
+    report = _settings_report(tmp_path, [{"name": "cv_file", "type": "FILE", "required": True}])
+    assert report.ok
+
+
+def test_validate_pricing_tiers_ok(tmp_path: Path) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(
+        tmp_path,
+        pricingPlans=[
+            {
+                "title": "Pro",
+                "pricingType": "TIERED",
+                "tiers": [
+                    {
+                        "name": "starter",
+                        "label": "Starter",
+                        "startUnits": 0,
+                        "endUnits": 100,
+                    },
+                    {
+                        "name": "growth",
+                        "label": "Growth",
+                        "startUnits": 101,
+                        "endUnits": 1000,
+                    },
+                ],
+            }
+        ],
+    )
+    report = validate_local_app(tmp_path)
+    assert report.ok
+
+
+def test_validate_pricing_tiers_require_name_label_and_start_sequence(tmp_path: Path) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(
+        tmp_path,
+        pricingPlans=[
+            {
+                "title": "Pro",
+                "pricingType": "TIERED",
+                "tiers": [
+                    {
+                        "startUnits": 0,
+                        "endUnits": 100,
+                    },
+                    {
+                        "name": "growth",
+                        "label": "Growth",
+                        "startUnits": 100,
+                        "endUnits": 1000,
+                    },
+                ],
+            }
+        ],
+    )
+    report = validate_local_app(tmp_path)
+    assert not report.ok
+    messages = " ".join(i.message for i in report.issues)
+    assert "Tier name is required" in messages
+    assert "Tier label is required" in messages
+    assert "previous tier endUnits + 1" in messages
+
+
+def test_validate_settings_sections_ok(tmp_path: Path) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(
+        tmp_path,
+        settingsSchema=[
+            {"name": "candidate_mapping", "type": "MAPPING"},
+            {"name": "parse_on_cv_change", "type": "SWITCH"},
+        ],
+        settingsSections=[
+            {
+                "title": "Candidate",
+                "subtitle": "Map CV fields",
+                "settings": ["candidate_mapping", "parse_on_cv_change"],
+            }
+        ],
+    )
+    _write_function(tmp_path)
+    report = validate_local_app(tmp_path)
+    assert report.ok
+    assert not any("settings section" in i.message for i in report.issues)
+
+
+def test_validate_settings_sections_unknown_field(tmp_path: Path) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(
+        tmp_path,
+        settingsSchema=[{"name": "candidate_mapping", "type": "MAPPING"}],
+        settingsSections=[
+            {"title": "Candidate", "settings": ["missing_field"]},
+        ],
+    )
+    _write_function(tmp_path)
+    report = validate_local_app(tmp_path)
+    assert not report.ok
+    assert any("not defined in settingsSchema" in i.message for i in report.issues)
+
+
+def test_validate_settings_sections_duplicate_assignment(tmp_path: Path) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(
+        tmp_path,
+        settingsSchema=[{"name": "candidate_mapping", "type": "MAPPING"}],
+        settingsSections=[
+            {"title": "Candidate", "settings": ["candidate_mapping"]},
+            {"title": "Other", "settings": ["candidate_mapping"]},
+        ],
+    )
+    _write_function(tmp_path)
+    report = validate_local_app(tmp_path)
+    assert not report.ok
+    assert any("more than one settings section" in i.message for i in report.issues)
+
+
+def test_validate_settings_sections_unassigned_warning(tmp_path: Path) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(
+        tmp_path,
+        settingsSchema=[
+            {"name": "candidate_mapping", "type": "MAPPING"},
+            {"name": "parse_on_cv_change", "type": "SWITCH"},
+        ],
+        settingsSections=[
+            {"title": "Candidate", "settings": ["candidate_mapping"]},
+        ],
+    )
+    _write_function(tmp_path)
+    report = validate_local_app(tmp_path)
+    assert report.ok
+    assert any(
+        i.severity == "warning" and "Other settings" in i.message
+        for i in report.issues
+    )

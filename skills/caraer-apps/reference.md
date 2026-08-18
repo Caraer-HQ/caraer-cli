@@ -77,11 +77,97 @@ Base: `{caraerApiBase}` (no trailing slash).
 `SINGLE_LINE`, `MULTI_LINE`, `SINGLE_SELECT`, `MULTI_SELECT`,
 `RECORD_SINGLE_SELECT`, `RECORD_MULTI_SELECT`, `OBJECT_SINGLE_SELECT`,
 `OBJECT_MULTI_SELECT`, `PROPERTY_SINGLE_SELECT`, `PROPERTY_MULTI_SELECT`,
-`SWITCH`, `MAPPING`, `SECRET`.
+`SWITCH`, `MAPPING`, `FILE`, `SECRET`.
 
 Use `caraer apps add setting` for the interactive picker (includes object /
 property selects). For `SINGLE_SELECT` / `MULTI_SELECT` choose static
 `options[]` or dynamic `optionsSource`.
+
+`FILE` lets the installer upload a file; the stored value is the file key.
+Resolve it to a download URL from a function with
+`GET {caraerApiBase}/v2/files/?key=<value>` (already-absolute URLs pass through).
+
+### Settings sections (UI layout)
+
+`settingsSchema` stays a flat list of fields (values, `visibleWhen`,
+`optionsSource.dependsOn`, webhook payloads). Optional `settingsSections`
+only groups those fields into installer cards.
+
+```yaml
+settingsSchema:
+  - name: candidate_mapping
+  - name: parse_on_cv_change
+  - name: work_experience_mapping
+
+settingsSections:
+  - title: Candidate
+    subtitle: Map CV fields and parsing behavior
+    settings:
+      - candidate_mapping
+      - parse_on_cv_change
+  - title: Work experience
+    subtitle: Map Affinda work history to your objects
+    settings:
+      - work_experience_mapping
+```
+
+Modular files under `src/app/settings-sections/` (sorted, files win on title
+slug):
+
+```json
+{
+  "title": "Candidate",
+  "subtitle": "Map CV fields and control automatic reparsing",
+  "settings": ["candidate_mapping", "parse_on_cv_change"]
+}
+```
+
+Rules:
+
+- Omit `settingsSections` to keep the current single "Settings" card.
+- Card order is the array / filename order. Caraer wraps them automatically
+  (1–3 columns). Do not define rows, columns, or spans.
+- Unassigned `settingsSchema` fields appear in a final **Other settings** card.
+- `caraer apps validate` errors on unknown or duplicate field names; unassigned
+  fields are a warning.
+- Runtime payloads still send the flat `settingsSchema` only.
+
+### Conditional visibility (`visibleWhen`)
+
+A field is shown, required and submitted only while **all** of its conditions
+hold. Use it for progressive settings instead of asking for everything up front.
+
+```yaml
+- name: custom_work_experience_mapping
+  label: Custom mapping for work experience
+  type: SWITCH
+  defaultValue: false
+- name: work_experience_mapping
+  type: MAPPING
+  visibleWhen:
+    - field: custom_work_experience_mapping
+      operator: EQUALS          # default when omitted
+      value: true
+```
+
+Operators: `EQUALS`, `NOT_EQUALS`, `IN`, `NOT_IN` (list value), `IS_SET`,
+`IS_NOT_SET` (no value). Comparison is loose, so a switch matches `true` and
+`"true"`.
+
+- `visibleWhen` controls **presentation and validation**; `optionsSource.dependsOn`
+  controls **when option lists reload**. They are independent.
+- A field whose controlling field is itself hidden is hidden too.
+- Hidden fields are not required, their value is dropped from the saved
+  configuration, and their options loader is not called.
+- Conditions may reference fields declared later in the schema, but not the field
+  itself.
+
+Non-interactive scaffold:
+
+```bash
+caraer apps add setting work_experience_mapping --type MAPPING \
+  --visible-when 'custom_work_experience_mapping:EQUALS:true'
+```
 
 ### Dynamic options (`optionsSource`)
 
@@ -123,6 +209,40 @@ const settings = body.settingsValues
 
 `OBJECT_*_SELECT` values may be a string name or an object with `name` /
 `internalName` — normalize before API calls.
+
+## Record webhook topics
+
+`src/app/webhooks/<name>.json` declares one topic each:
+
+| Topic | Fires on |
+|-------|----------|
+| `record.<object>.created` / `.updated` / `.deleted` | any change to a record |
+| `record.<object>.property_changed.<property>` | one property's value changing |
+| `record.<object>.date_due.<property>` | a date property coming due |
+| `record.<object>.formsubmission[.<form>]` | a form submission |
+| `record.<object>.relation_created` / `_updated` / `_deleted`[`.<relation>`] | relation changes |
+
+`<object>` is lower case. Object and property scoping lives entirely in the topic
+string — there is no separate filter block.
+
+When the object or property is chosen at **install** time, register the webhook
+from a lifecycle hook instead of declaring it locally:
+
+```js
+const functionUuid = await resolveFunctionUuidByName(ctx, "cv-changed");
+await caraerFetch(ctx, `/v2/apps/${ctx.appUuid}/webhooks`, {
+  method: "POST",
+  body: JSON.stringify({
+    topic: `record.${objectName.toLowerCase()}.property_changed.${propertyName}`,
+    deliveryMode: "SERVERLESS",
+    webhookFormat: "USER_FRIENDLY",
+    serverlessFunction: { uuid: functionUuid },
+  }),
+});
+```
+
+List with `POST /v2/apps/{appUuid}/webhooks/index` and remove stale topics on
+`app.updated` / `app.uninstalled`.
 
 ## Inbound routes
 
@@ -177,6 +297,38 @@ Action locations can use SERVERLESS without `iframeUrl`:
 - `RECORD_PREVIEW`, `RECORD_OVERVIEW`, `RECORD_DETAIL`, `TOOL_BAR`, `TRAIT_BAR`
 
 Wire `webhook.serverlessFunction.name` to a local function folder name.
+
+### Action dialogs
+
+`RECORD_PREVIEW` and `RECORD_OVERVIEW` are actions. Give the bar its own
+`settingsSchema` and Caraer shows it as a dialog before triggering the webhook —
+that is how an action collects input (including a `FILE` upload):
+
+```yaml
+appBars:
+  - location: RECORD_OVERVIEW
+    label: Upload CV
+    actionLabel: Parse CV
+    webhook:
+      topic: app.bar.triggered
+      deliveryMode: SERVERLESS
+      serverlessFunction:
+        name: upload-cv
+    settingsSchema:
+      - name: cv_file
+        label: CV
+        type: FILE
+        required: true
+```
+
+In the handler the dialog values arrive as **`appBarSettingsValues`** (flat
+`name → value`) and `appBarSettingsSchema`. `settingsSchema` always carries the
+app's *installation* settings, for both record events and app bars:
+
+```js
+const dialog = body.appBarSettingsValues || {};
+const ctx = buildCtx(body);   // ctx.settings = installation settings
+```
 
 ## Node handler skeleton
 

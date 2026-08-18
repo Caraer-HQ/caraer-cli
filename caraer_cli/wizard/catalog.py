@@ -168,7 +168,24 @@ SETTING_FIELD_TYPES: tuple[tuple[str, str], ...] = (
     ("RECORD_SINGLE_SELECT", "Record select (single, static options)"),
     ("RECORD_MULTI_SELECT", "Record select (multi, static options)"),
     ("MAPPING", "Property mapping"),
+    ("FILE", "File upload"),
 )
+
+# Operators available to settingsSchema[].visibleWhen conditions.
+CONDITION_OPERATORS: tuple[tuple[str, str], ...] = (
+    ("EQUALS", "equals the value"),
+    ("NOT_EQUALS", "does not equal the value"),
+    ("IN", "is one of the values"),
+    ("NOT_IN", "is none of the values"),
+    ("IS_SET", "has any value"),
+    ("IS_NOT_SET", "has no value"),
+)
+
+# Operators that carry no expected value.
+VALUELESS_CONDITION_OPERATORS = frozenset({"IS_SET", "IS_NOT_SET"})
+
+# Operators whose expected value is a list.
+LIST_CONDITION_OPERATORS = frozenset({"IN", "NOT_IN"})
 
 # Types that may load options via optionsSource.serverlessFunctionName.
 DYNAMIC_OPTIONS_FIELD_TYPES = frozenset({"SINGLE_SELECT", "MULTI_SELECT"})

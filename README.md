@@ -114,11 +114,58 @@ function, description, and enabled when run interactively without those flags.
 `add options-function` (or `add function --template options`) scaffolds a
 dynamic select options loader; wire via `optionsSource.serverlessFunctionName`
 and optional `optionsSource.dependsOn`.
+`add setting` also asks for conditional visibility, or takes
+`--visible-when 'other_field:EQUALS:true'`; see
+[Conditional settings](#conditional-settings).
 `apps init` does not create empty `settings/` or `pricing/` folders.
 Lifecycle hooks stay under `src/app/lifecycle/` because they pair with function folders.
 
 Lifecycle hooks (`install` / `uninstall` / `rotate` / `update`) and matching
 `functions/on-*` folders are created automatically by `caraer apps init`.
+
+### Settings sections
+
+Optional `settingsSections` groups the flat `settingsSchema` into multiple
+installer cards (title, subtitle, field names). Caraer lays the cards out
+left-to-right, top-to-bottom, max 3 across — do not define a grid yourself.
+
+```yaml
+settingsSections:
+  - title: Candidate
+    subtitle: Map CV fields and parsing behavior
+    settings:
+      - candidate_mapping
+      - parse_on_cv_change
+```
+
+Modular files also work: `src/app/settings-sections/01-candidate.json`.
+Apps without `settingsSections` keep a single Settings card.
+
+### Conditional settings
+
+A settings field can declare `visibleWhen`; it is shown, required and submitted
+only while **all** of its conditions hold:
+
+```yaml
+settingsSchema:
+  - name: custom_mapping
+    label: Custom mapping for work experience
+    type: SWITCH
+    defaultValue: false
+  - name: work_experience_mapping
+    type: MAPPING
+    visibleWhen:
+      - field: custom_mapping
+        operator: EQUALS      # default when omitted
+        value: true
+```
+
+Operators: `EQUALS`, `NOT_EQUALS`, `IN`, `NOT_IN` (list value), `IS_SET`,
+`IS_NOT_SET` (no value).
+
+`visibleWhen` controls presentation and validation; `optionsSource.dependsOn`
+controls when option lists reload. Hidden fields are not required, their values
+are dropped, and their options loader is not called.
 
 ### Payload types (Node / Python)
 

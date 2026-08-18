@@ -18,11 +18,13 @@ LOCAL_SETTING_KEYS = (
     "helpText",
     "options",
     "optionsSource",
+    "visibleWhen",
     "defaultValue",
     "hidden",
     "value",
     "hasValue",
     "mappingValue",
+    "valueScope",
 )
 
 
@@ -32,9 +34,12 @@ def _slug(value: str) -> str:
     return text.strip("-") or "setting"
 
 
-def setting_filename(item: dict[str, Any]) -> str:
+def setting_filename(item: dict[str, Any], index: int | None = None) -> str:
     name = str(item.get("name") or "setting")
-    return f"{_slug(name)}.json"
+    slug = _slug(name)
+    if index is None:
+        return f"{slug}.json"
+    return f"{index:02d}-{slug}.json"
 
 
 def resolve_setting_options_source(
@@ -105,11 +110,11 @@ def write_settings_files(
     for existing in base.glob("*.json"):
         existing.unlink()
     count = 0
-    for item in items:
+    for index, item in enumerate(items, start=1):
         if not isinstance(item, dict) or not item.get("name"):
             continue
         sanitized = sanitize_setting(item)
-        path = base / setting_filename(sanitized)
+        path = base / setting_filename(sanitized, index)
         path.write_text(json.dumps(sanitized, indent=2) + "\n", encoding="utf-8")
         count += 1
     return count

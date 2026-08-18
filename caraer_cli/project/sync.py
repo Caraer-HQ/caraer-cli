@@ -349,6 +349,9 @@ _OPTIONS_FUNCTION_JS = '''\
  *     settingsValues: { [name]: value },  // flat sibling values (incl. dependsOn)
  *     dependsOn?: string[],               // from optionsSource.dependsOn
  *     scopes: string[]
+ *     appBarUuid?: string,                // when the field is on an action dialog
+ *     recordUuid?: string,                // open record for RECORD_* app bars
+ *     object?: string                     // open object for RECORD_* app bars
  *   }
  *
  * Response MUST be: { options: [{ name, label, helpText? }, ...] }
@@ -408,7 +411,10 @@ Request body (approx):
     "settingsSchema": [{"name", "type", "value", "defaultValue", ...}],
     "settingsValues": {"<name>": "<value>"},
     "dependsOn": ["sibling_field"],
-    "scopes": [...]
+    "scopes": [...],
+    "appBarUuid": "<app bar uuid>",
+    "recordUuid": "<open record>",
+    "object": "<open object>"
   }
 
 Response body MUST be: {"options": [{"name", "label", "helpText?"}, ...]}

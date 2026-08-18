@@ -63,6 +63,7 @@ Headers:
 - `GET /api/v2/apps/{appUuid}/installation/connections`
 - `DELETE /api/v2/apps/{appUuid}/installation/connections/{providerOrConnectionId}`
 - `POST /api/v2/apps/{appUuid}/installation/oauth/{provider}/start`
+- `PUT /api/v2/apps/{appUuid}/installation/settings`
 - `PUT /api/v2/apps/{appUuid}/installation/settings/user`
 - CRUD `/api/v2/apps/{appUuid}/schedules`
 - CRUD `/api/v2/apps/{appUuid}/inbound-routes`
