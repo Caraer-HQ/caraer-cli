@@ -151,6 +151,7 @@
             "SWITCH",
             "MAPPING",
             "FILE",
+            "MULTI_FILE",
             "SECRET"
           ]
         },

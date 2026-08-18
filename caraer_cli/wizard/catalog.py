@@ -169,6 +169,7 @@ SETTING_FIELD_TYPES: tuple[tuple[str, str], ...] = (
     ("RECORD_MULTI_SELECT", "Record select (multi, static options)"),
     ("MAPPING", "Property mapping"),
     ("FILE", "File upload"),
+    ("MULTI_FILE", "Multiple file upload"),
 )
 
 # Operators available to settingsSchema[].visibleWhen conditions.

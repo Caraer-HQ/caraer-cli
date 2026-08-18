@@ -141,7 +141,7 @@ Installation settings are for **admins installing the app**, not developers.
 ```
 
   Hidden fields are not required and their values are dropped. Use `FILE` when an
-  action dialog needs an upload.
+  action dialog needs one upload, or `MULTI_FILE` for several.
 
 ### Functions
 

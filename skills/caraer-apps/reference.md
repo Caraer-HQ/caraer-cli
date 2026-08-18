@@ -84,14 +84,15 @@ Base: `{caraerApiBase}` (no trailing slash).
 `SINGLE_LINE`, `MULTI_LINE`, `SINGLE_SELECT`, `MULTI_SELECT`,
 `RECORD_SINGLE_SELECT`, `RECORD_MULTI_SELECT`, `OBJECT_SINGLE_SELECT`,
 `OBJECT_MULTI_SELECT`, `PROPERTY_SINGLE_SELECT`, `PROPERTY_MULTI_SELECT`,
-`SWITCH`, `MAPPING`, `FILE`, `SECRET`.
+`SWITCH`, `MAPPING`, `FILE`, `MULTI_FILE`, `SECRET`.
 
 Use `caraer apps add setting` for the interactive picker (includes object /
 property selects). For `SINGLE_SELECT` / `MULTI_SELECT` choose static
 `options[]` or dynamic `optionsSource`.
 
-`FILE` lets the installer upload a file; the stored value is the file key.
-Resolve it to a download URL from a function with
+`FILE` lets the installer upload one file; the stored value is the file key.
+`MULTI_FILE` lets them upload several; the stored value is a list of keys.
+Resolve a key to a download URL from a function with
 `GET {caraerApiBase}/v2/files/?key=<value>` (already-absolute URLs pass through).
 
 ### Settings sections (UI layout)

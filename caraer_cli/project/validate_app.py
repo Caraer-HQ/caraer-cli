@@ -52,6 +52,7 @@ SETTING_FIELD_TYPES = frozenset(
         "SWITCH",
         "MAPPING",
         "FILE",
+        "MULTI_FILE",
         "SECRET",
     }
 )

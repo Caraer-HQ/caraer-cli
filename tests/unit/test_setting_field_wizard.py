@@ -25,6 +25,8 @@ def test_setting_field_types_include_object_and_property_selects() -> None:
         "RECORD_SINGLE_SELECT",
         "RECORD_MULTI_SELECT",
         "MAPPING",
+        "FILE",
+        "MULTI_FILE",
         "SECRET",
         "SINGLE_SELECT",
         "MULTI_SELECT",
