@@ -400,6 +400,88 @@ def test_validate_pricing_tiers_require_name_label_and_start_sequence(tmp_path: 
     assert "previous tier endUnits + 1" in messages
 
 
+def test_validate_pricing_line_items_ok(tmp_path: Path) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(
+        tmp_path,
+        pricingPlans=[
+            {
+                "title": "Pro",
+                "pricingType": "TIERED",
+                "lineItems": [
+                    {
+                        "name": "documents_parsed",
+                        "label": "CVs parsed",
+                        "countType": "meter",
+                        "countingSource": "MANUAL",
+                        "unit": "document",
+                        "tiers": [
+                            {
+                                "name": "included",
+                                "label": "Included",
+                                "startUnits": 0,
+                                "endUnits": 500,
+                            }
+                        ],
+                    },
+                    {
+                        "name": "active_candidates",
+                        "label": "Active candidates",
+                        "countType": "static_query",
+                        "unit": "candidate",
+                        "staticQuery": {
+                            "schedule": "period_end",
+                            "cypher": "MATCH (c:Candidate) RETURN count(c) AS count",
+                        },
+                        "tiers": [
+                            {
+                                "name": "cap",
+                                "label": "Cap",
+                                "startUnits": 0,
+                                "endUnits": 1000,
+                            }
+                        ],
+                    },
+                ],
+            }
+        ],
+    )
+    report = validate_local_app(tmp_path)
+    assert report.ok
+
+
+def test_validate_pricing_line_items_require_source_and_cypher(tmp_path: Path) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(
+        tmp_path,
+        pricingPlans=[
+            {
+                "title": "Pro",
+                "pricingType": "FLAT",
+                "lineItems": [
+                    {
+                        "name": "documents_parsed",
+                        "label": "CVs parsed",
+                        "countType": "meter",
+                    },
+                    {
+                        "name": "pages",
+                        "label": "Pages",
+                        "countType": "static_query",
+                        "countingSource": "WEBHOOK",
+                    },
+                ],
+            }
+        ],
+    )
+    report = validate_local_app(tmp_path)
+    assert not report.ok
+    messages = " ".join(i.message for i in report.issues)
+    assert "countingSource" in messages
+    assert "staticQuery.cypher" in messages
+    assert "includedUnits" in messages
+
+
 def test_validate_settings_sections_ok(tmp_path: Path) -> None:
     _write_workspace(tmp_path)
     _write_manifest(

@@ -68,6 +68,10 @@ CONDITION_OPERATORS = frozenset(
 VALUELESS_CONDITION_OPERATORS = frozenset({"IS_SET", "IS_NOT_SET"})
 LIST_CONDITION_OPERATORS = frozenset({"IN", "NOT_IN"})
 PRICING_TYPES = frozenset({"FLAT", "TIERED"})
+COUNT_TYPES = frozenset({"meter", "static_query"})
+COUNTING_SOURCES = frozenset({"WEBHOOK", "MANUAL", "WEBHOOK_AND_MANUAL"})
+COMMITMENTS = frozenset({"MONTHLY", "ANNUAL"})
+STATIC_QUERY_SCHEDULES = frozenset({"period_end", "period_start"})
 SETTING_FIELD_NAME_RE = re.compile(r"^[a-z]+(?:_[a-z]+)*$")
 APP_BAR_LOCATIONS = frozenset(
     {"RECORD_PREVIEW", "RECORD_OVERVIEW", "RECORD_DETAIL", "TOOL_BAR", "TRAIT_BAR"}
@@ -1217,16 +1221,42 @@ def _validate_pricing(
                 f"{rel}:pricingType",
                 "pricingType must be FLAT or TIERED.",
             )
+        commitments = item.get("commitments")
+        if commitments is not None:
+            if not isinstance(commitments, list):
+                _issue(
+                    issues,
+                    "error",
+                    f"{rel}:commitments",
+                    "commitments must be a list of MONTHLY and/or ANNUAL.",
+                )
+            else:
+                for idx, commitment in enumerate(commitments):
+                    if str(commitment or "").strip().upper() not in COMMITMENTS:
+                        _issue(
+                            issues,
+                            "error",
+                            f"{rel}:commitments[{idx}]",
+                            "commitment must be MONTHLY or ANNUAL.",
+                        )
+        line_items = item.get("lineItems")
+        if isinstance(line_items, list) and line_items:
+            _validate_pricing_line_items(issues, rel, pricing_type, line_items)
         elif pricing_type == "FLAT":
             if item.get("pricePerUnit") is None:
                 _issue(
                     issues,
                     "error",
                     f"{rel}:pricePerUnit",
-                    "FLAT plans require pricePerUnit.",
+                    "FLAT plans require pricePerUnit or lineItems.",
                 )
             if not str(item.get("unit") or "").strip():
-                _issue(issues, "error", f"{rel}:unit", "FLAT plans require unit.")
+                _issue(
+                    issues,
+                    "error",
+                    f"{rel}:unit",
+                    "FLAT plans require unit or lineItems.",
+                )
         elif pricing_type == "TIERED":
             tiers = item.get("tiers")
             if not isinstance(tiers, list) or not tiers:
@@ -1234,11 +1264,122 @@ def _validate_pricing(
                     issues,
                     "error",
                     f"{rel}:tiers",
-                    "TIERED plans require a non-empty tiers list.",
+                    "TIERED plans require a non-empty tiers list or lineItems.",
                 )
             else:
                 _validate_pricing_tiers(issues, rel, tiers)
     return count
+
+
+def _validate_pricing_line_items(
+    issues: list[ValidationIssue],
+    rel: str,
+    pricing_type: str,
+    line_items: list[Any],
+) -> None:
+    seen_names: set[str] = set()
+    for index, line_item in enumerate(line_items):
+        item_rel = f"{rel}:lineItems[{index}]"
+        if not isinstance(line_item, dict):
+            _issue(issues, "error", item_rel, "Each line item must be an object.")
+            continue
+        name = str(line_item.get("name") or "").strip()
+        if not name:
+            _issue(issues, "error", f"{item_rel}:name", "Line item name is required.")
+        elif not SETTING_FIELD_NAME_RE.match(name):
+            _issue(
+                issues,
+                "error",
+                f"{item_rel}:name",
+                "Line item name must use lowercase letters and underscores only.",
+            )
+        elif name in seen_names:
+            _issue(
+                issues,
+                "error",
+                f"{item_rel}:name",
+                f"Line item name '{name}' is duplicated on this plan.",
+            )
+        else:
+            seen_names.add(name)
+        if not str(line_item.get("label") or "").strip():
+            _issue(
+                issues,
+                "error",
+                f"{item_rel}:label",
+                "Line item label is required.",
+            )
+        count_type = str(line_item.get("countType") or "").strip()
+        if count_type not in COUNT_TYPES:
+            _issue(
+                issues,
+                "error",
+                f"{item_rel}:countType",
+                "countType must be meter or static_query.",
+            )
+        counting_source = str(line_item.get("countingSource") or "").strip().upper()
+        if count_type == "meter":
+            if counting_source not in COUNTING_SOURCES:
+                _issue(
+                    issues,
+                    "error",
+                    f"{item_rel}:countingSource",
+                    "meter line items require countingSource "
+                    "WEBHOOK, MANUAL, or WEBHOOK_AND_MANUAL.",
+                )
+            if line_item.get("staticQuery") not in (None, {}):
+                _issue(
+                    issues,
+                    "error",
+                    f"{item_rel}:staticQuery",
+                    "meter line items cannot define staticQuery.",
+                )
+        elif count_type == "static_query":
+            if counting_source:
+                _issue(
+                    issues,
+                    "error",
+                    f"{item_rel}:countingSource",
+                    "static_query line items cannot define countingSource.",
+                )
+            static_query = line_item.get("staticQuery")
+            if not isinstance(static_query, dict) or not str(
+                static_query.get("cypher") or ""
+            ).strip():
+                _issue(
+                    issues,
+                    "error",
+                    f"{item_rel}:staticQuery.cypher",
+                    "static_query line items require staticQuery.cypher.",
+                )
+            else:
+                schedule = str(static_query.get("schedule") or "period_end").strip()
+                if schedule not in STATIC_QUERY_SCHEDULES:
+                    _issue(
+                        issues,
+                        "error",
+                        f"{item_rel}:staticQuery.schedule",
+                        "staticQuery.schedule must be period_end or period_start.",
+                    )
+        if pricing_type == "FLAT":
+            if line_item.get("includedUnits") is None:
+                _issue(
+                    issues,
+                    "error",
+                    f"{item_rel}:includedUnits",
+                    "FLAT line items require includedUnits.",
+                )
+        elif pricing_type == "TIERED":
+            tiers = line_item.get("tiers")
+            if not isinstance(tiers, list) or not tiers:
+                _issue(
+                    issues,
+                    "error",
+                    f"{item_rel}:tiers",
+                    "TIERED line items require a non-empty tiers list.",
+                )
+            else:
+                _validate_pricing_tiers(issues, item_rel, tiers)
 
 
 def _parse_unit_count(value: Any) -> int | None:

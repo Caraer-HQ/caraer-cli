@@ -6,6 +6,7 @@ from caraer_cli import __version__
 from caraer_cli.commands import (
     apps,
     auth,
+    billing,
     company,
     profile,
     publish,
@@ -33,6 +34,7 @@ app.add_typer(publish.app, name="publish")
 app.add_typer(sandbox.app, name="sandbox")
 app.add_typer(profile.app, name="profile")
 app.add_typer(skill.app, name="skill")
+app.add_typer(billing.app, name="billing")
 
 
 def _version_callback(value: bool) -> None:

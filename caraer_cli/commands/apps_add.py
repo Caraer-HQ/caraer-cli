@@ -611,6 +611,103 @@ def add_pricing_plan(
         raise ValueError(str(exc)) from None
 
 
+@add_app.command("pricing-line-item")
+def add_pricing_line_item(
+    ctx: typer.Context,
+    plan_title: str | None = typer.Option(
+        None, "--plan", help="Existing plan title or name to attach the line item to."
+    ),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing line item."),
+) -> None:
+    """Add a meter or static_query line item to an existing pricing plan."""
+    from questionary import Choice
+
+    from caraer_cli.app_sync import resolve_app_root
+    from caraer_cli.local_app import load_local_app
+    from caraer_cli.project.manifest_edit import append_manifest_list_item
+    from caraer_cli.project.marketplace_assemble import assemble_local_manifest
+    from caraer_cli.project.paths import app_manifest_path
+    from caraer_cli.project.pricing_sync import (
+        discover_local_pricing,
+        pricing_identity,
+        write_pricing_files,
+    )
+    from caraer_cli.project.schema import load_workspace
+    from caraer_cli.wizard.marketplace import prompt_pricing_line_item
+    from caraer_cli.wizard.prompts import ask_select
+
+    app_ctx: AppContext = ctx.obj
+    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    config = load_workspace(root)
+    manifest_path = app_manifest_path(root, config.srcDir)
+    raw_manifest = load_local_app(manifest_path) if manifest_path.is_file() else {}
+    assembled = assemble_local_manifest(
+        root, config, raw_manifest, resolve_functions=False, strict_function_refs=False
+    )
+    plans = [p for p in (assembled.get("pricingPlans") or []) if isinstance(p, dict)]
+    if not plans:
+        raise ValueError("No pricing plans found. Add a plan first.")
+    selected_plan = None
+    wanted = (plan_title or "").strip().lower()
+    if wanted:
+        selected_plan = next(
+            (p for p in plans if pricing_identity(p) == wanted),
+            None,
+        )
+        if selected_plan is None:
+            raise ValueError(f"Pricing plan '{plan_title}' was not found.")
+    elif len(plans) == 1:
+        selected_plan = plans[0]
+    else:
+        selected_plan = ask_select(
+            "Pricing plan",
+            [
+                Choice(
+                    title=str(p.get("title") or p.get("name") or "plan"),
+                    value=p,
+                )
+                for p in plans
+            ],
+        )
+    line_item = prompt_pricing_line_item(
+        pricing_type=str(selected_plan.get("pricingType") or "FLAT").upper()
+    )
+    existing = selected_plan.get("lineItems")
+    line_items = list(existing) if isinstance(existing, list) else []
+    incoming_name = str(line_item.get("name") or "").strip().lower()
+    replaced = False
+    for index, current in enumerate(line_items):
+        if (
+            isinstance(current, dict)
+            and str(current.get("name") or "").strip().lower() == incoming_name
+        ):
+            if not force:
+                raise ValueError(
+                    f"Line item '{incoming_name}' already exists. Use --force to overwrite."
+                )
+            line_items[index] = line_item
+            replaced = True
+            break
+    if not replaced:
+        line_items.append(line_item)
+    selected_plan["lineItems"] = line_items
+    if discover_local_pricing(root, config):
+        write_pricing_files(root, config, plans)
+    else:
+        append_manifest_list_item(
+            root,
+            config,
+            list_key="pricingPlans",
+            item=selected_plan,
+            identity=pricing_identity,
+            force=True,
+        )
+    print_success(
+        f"{'Updated' if replaced else 'Added'} line item '{line_item.get('name')}' "
+        f"on plan '{selected_plan.get('title') or selected_plan.get('name')}'."
+    )
+
+
 @add_app.command("lifecycle-hook")
 def add_lifecycle_hook(
     ctx: typer.Context,

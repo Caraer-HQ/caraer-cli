@@ -677,6 +677,22 @@ def prompt_pricing_plan(
     if _optional(resolved_description):
         plan["description"] = resolved_description.strip()
 
+    plan["billingPeriod"] = "month"
+    use_line_items = (
+        False
+        if price_per_unit is not None and title is not None and unit is not None
+        else ask_confirm("Add billable line items (meters / static queries)?", default=True)
+    )
+    if use_line_items:
+        line_items: list[dict[str, Any]] = []
+        console.print("[dim]Add at least one line item.[/dim]")
+        while True:
+            line_items.append(prompt_pricing_line_item(pricing_type=resolved_type))
+            if not ask_confirm("Add another line item?", default=False):
+                break
+        plan["lineItems"] = line_items
+        return plan
+
     if resolved_type == "FLAT":
         if price_per_unit is not None and title is not None and unit is not None:
             # Non-interactive-ish path with CLI flags.
@@ -713,6 +729,77 @@ def prompt_pricing_plan(
                 break
         plan["tiers"] = tiers
     return plan
+
+
+def prompt_pricing_line_item(*, pricing_type: str) -> dict[str, Any]:
+    """Prompt for one pricing line item (meter or static_query)."""
+    resolved_label = ask_text("Line item label", required=True).strip()
+    resolved_name = normalize_setting_field_name(resolved_label)
+    name_input = ask_text("Line item name", default=resolved_name)
+    if _optional(name_input):
+        resolved_name = normalize_setting_field_name(name_input)
+    count_type = ask_select(
+        "Count type",
+        [
+            Choice(title="meter — events during the billing period", value="meter"),
+            Choice(
+                title="static_query — scheduled Cypher snapshot",
+                value="static_query",
+            ),
+        ],
+        default="meter",
+    )
+    item: dict[str, Any] = {
+        "name": resolved_name,
+        "label": resolved_label,
+        "countType": count_type,
+    }
+    resolved_unit = ask_text(
+        "Unit (e.g. webhook, document, webpage)",
+        default="webhook" if count_type == "meter" else "item",
+    )
+    if _optional(resolved_unit):
+        item["unit"] = resolved_unit.strip()
+    if count_type == "meter":
+        item["countingSource"] = ask_select(
+            "Counting source",
+            [
+                Choice(title="WEBHOOK — +1 per webhook delivery", value="WEBHOOK"),
+                Choice(title="MANUAL — app reports quantity", value="MANUAL"),
+                Choice(
+                    title="WEBHOOK_AND_MANUAL — sum both sources",
+                    value="WEBHOOK_AND_MANUAL",
+                ),
+            ],
+            default="WEBHOOK",
+        )
+    else:
+        cypher = ask_text(
+            "Read-only Cypher (must RETURN count(...) AS count)",
+            required=True,
+        )
+        item["staticQuery"] = {
+            "schedule": "period_end",
+            "cypher": cypher.strip(),
+        }
+    if pricing_type == "FLAT":
+        included = ask_text("Included units", default="0")
+        item["includedUnits"] = _coerce_number(included) if _optional(included) else 0
+        price = ask_text("Base price per unit / period", default="0")
+        extra = ask_text("Price per extra unit (optional)", default="")
+        if _optional(price):
+            item["pricePerUnit"] = _coerce_number(price)
+        if _optional(extra):
+            item["pricePerExtraUnit"] = _coerce_number(extra)
+    else:
+        tiers: list[dict[str, Any]] = []
+        console.print("[dim]Add at least one tier for this line item.[/dim]")
+        while True:
+            tiers.append(prompt_pricing_tier(previous_tiers=tiers))
+            if not ask_confirm("Add another tier?", default=False):
+                break
+        item["tiers"] = tiers
+    return item
 
 
 def prompt_app_bar(

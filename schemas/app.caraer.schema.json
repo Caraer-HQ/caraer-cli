@@ -241,9 +241,71 @@
         "name": { "type": "string" },
         "description": { "type": "string" },
         "pricingType": { "type": "string", "enum": ["FLAT", "TIERED"] },
+        "billingPeriod": { "type": "string", "enum": ["month"] },
+        "commitments": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["MONTHLY", "ANNUAL"] }
+        },
         "pricePerUnit": { "type": ["number", "string"] },
         "unit": { "type": "string" },
-        "tiers": { "type": "array" }
+        "freeUnits": { "type": ["number", "string"] },
+        "freeUnitsPeriod": { "type": "string" },
+        "tiers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/pricingTier" }
+        },
+        "lineItems": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/pricingLineItem" }
+        }
+      }
+    },
+    "pricingLineItem": {
+      "type": "object",
+      "required": ["name", "countType"],
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "label": { "type": "string" },
+        "countType": { "type": "string", "enum": ["meter", "static_query"] },
+        "countingSource": {
+          "type": "string",
+          "enum": ["WEBHOOK", "MANUAL", "WEBHOOK_AND_MANUAL"]
+        },
+        "unit": { "type": "string" },
+        "includedUnits": { "type": ["number", "string"] },
+        "pricePerUnit": { "type": ["number", "string"] },
+        "pricePerExtraUnit": { "type": ["number", "string"] },
+        "staticQuery": { "$ref": "#/$defs/staticQuery" },
+        "tiers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/pricingTier" }
+        }
+      }
+    },
+    "staticQuery": {
+      "type": "object",
+      "required": ["cypher"],
+      "additionalProperties": true,
+      "properties": {
+        "cypher": { "type": "string", "minLength": 1 },
+        "schedule": {
+          "type": "string",
+          "enum": ["period_end", "period_start"]
+        }
+      }
+    },
+    "pricingTier": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+        "label": { "type": "string" },
+        "startUnits": { "type": ["number", "string"] },
+        "endUnits": { "type": ["number", "string", "null"] },
+        "pricePerMonth": { "type": ["number", "string"] },
+        "pricePerYear": { "type": ["number", "string"] },
+        "pricePerExtraUnit": { "type": ["number", "string"] }
       }
     },
     "appBar": {

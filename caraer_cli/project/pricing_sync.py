@@ -16,11 +16,14 @@ LOCAL_PRICING_KEYS = (
     "title",
     "description",
     "pricingType",
+    "billingPeriod",
+    "commitments",
     "pricePerUnit",
     "unit",
     "freeUnits",
     "freeUnitsPeriod",
     "tiers",
+    "lineItems",
 )
 
 
