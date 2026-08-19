@@ -19,7 +19,7 @@ def get_platform_billing_status(
     params: dict[str, Any] = {"page": page, "limit": limit}
     if app_uuid:
         params["appUuid"] = app_uuid
-    return client.request("GET", "/api/v2/billing/status", params=params)
+    return client.request("GET", "/api/v2/apps/billing/status", params=params)
 
 
 def get_installation_billing_status(client: CaraerApiClient, app_uuid: str) -> dict[str, Any]:
