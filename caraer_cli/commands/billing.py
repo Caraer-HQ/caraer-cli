@@ -27,17 +27,25 @@ def billing_status(
     ctx: typer.Context,
     app_uuid: str | None = typer.Option(None, "--app", help="App UUID."),
     all_apps: bool = typer.Option(False, "--all", help="Platform-wide status (super admin)."),
+    app_wide: bool = typer.Option(
+        False,
+        "--app-wide",
+        help="Creator rollup across every installation (developer).",
+    ),
     period: str = typer.Option("current", "--period", help="Billing period (current)."),
 ) -> None:
-    """Show current-period billing status."""
+    """Show current-period billing status for the selected company's installation."""
     del period
     app_ctx: AppContext = ctx.obj
     client = app_ctx.api_client()
     if all_apps:
         payload = billing_api.get_platform_billing_status(client)
-    else:
+    elif app_wide:
         resolved = resolve_app_uuid(app_ctx, app_uuid)
         payload = billing_api.get_app_billing_status(client, resolved)
+    else:
+        resolved = resolve_app_uuid(app_ctx, app_uuid)
+        payload = billing_api.get_installation_billing_status(client, resolved)
     print_data(_unwrap(payload), app_ctx.output)
 
 

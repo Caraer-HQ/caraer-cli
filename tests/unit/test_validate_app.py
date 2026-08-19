@@ -431,7 +431,11 @@ def test_validate_pricing_line_items_ok(tmp_path: Path) -> None:
                         "unit": "candidate",
                         "staticQuery": {
                             "schedule": "period_end",
-                            "cypher": "MATCH (c:Candidate) RETURN count(c) AS count",
+                            "cypher": (
+                                "MATCH (c:Candidate) "
+                                "WHERE c.companyUuid = $companyUuid "
+                                "RETURN count(c) AS count"
+                            ),
                         },
                         "tiers": [
                             {
@@ -480,6 +484,35 @@ def test_validate_pricing_line_items_require_source_and_cypher(tmp_path: Path) -
     assert "countingSource" in messages
     assert "staticQuery.cypher" in messages
     assert "includedUnits" in messages
+
+
+def test_validate_static_query_requires_company_uuid(tmp_path: Path) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(
+        tmp_path,
+        pricingPlans=[
+            {
+                "title": "Pro",
+                "pricingType": "FLAT",
+                "lineItems": [
+                    {
+                        "name": "pages",
+                        "label": "Pages",
+                        "countType": "static_query",
+                        "includedUnits": 10,
+                        "staticQuery": {
+                            "schedule": "period_end",
+                            "cypher": "MATCH (p:Page) RETURN count(p) AS count",
+                        },
+                    }
+                ],
+            }
+        ],
+    )
+    report = validate_local_app(tmp_path)
+    assert not report.ok
+    messages = " ".join(i.message for i in report.issues)
+    assert "$companyUuid" in messages
 
 
 def test_validate_settings_sections_ok(tmp_path: Path) -> None:

@@ -73,6 +73,10 @@ COUNTING_SOURCES = frozenset({"WEBHOOK", "MANUAL", "WEBHOOK_AND_MANUAL"})
 COMMITMENTS = frozenset({"MONTHLY", "ANNUAL"})
 STATIC_QUERY_SCHEDULES = frozenset({"period_end", "period_start"})
 SETTING_FIELD_NAME_RE = re.compile(r"^[a-z]+(?:_[a-z]+)*$")
+STATIC_QUERY_MUTATING = re.compile(
+    r"\b(CREATE|MERGE|DELETE|SET|DETACH|DROP|REMOVE|FOREACH)\b",
+    re.IGNORECASE,
+)
 APP_BAR_LOCATIONS = frozenset(
     {"RECORD_PREVIEW", "RECORD_OVERVIEW", "RECORD_DETAIL", "TOOL_BAR", "TRAIT_BAR"}
 )
@@ -1353,6 +1357,8 @@ def _validate_pricing_line_items(
                     "static_query line items require staticQuery.cypher.",
                 )
             else:
+                cypher = str(static_query.get("cypher") or "")
+                _validate_static_query_cypher(issues, item_rel, cypher)
                 schedule = str(static_query.get("schedule") or "period_end").strip()
                 if schedule not in STATIC_QUERY_SCHEDULES:
                     _issue(
@@ -1380,6 +1386,35 @@ def _validate_pricing_line_items(
                 )
             else:
                 _validate_pricing_tiers(issues, item_rel, tiers)
+
+
+def _validate_static_query_cypher(
+    issues: list[ValidationIssue], item_rel: str, cypher: str
+) -> None:
+    if STATIC_QUERY_MUTATING.search(cypher):
+        _issue(
+            issues,
+            "error",
+            f"{item_rel}:staticQuery.cypher",
+            "static_query Cypher must be read-only.",
+        )
+        return
+    upper = cypher.upper()
+    if "RETURN" not in upper or " AS COUNT" not in upper:
+        _issue(
+            issues,
+            "error",
+            f"{item_rel}:staticQuery.cypher",
+            "Query must RETURN count(...) AS count.",
+        )
+    if "$companyUuid" not in cypher:
+        _issue(
+            issues,
+            "error",
+            f"{item_rel}:staticQuery.cypher",
+            "static_query Cypher must use $companyUuid so usage is "
+            "scoped to the installing company.",
+        )
 
 
 def _parse_unit_count(value: Any) -> int | None:

@@ -775,7 +775,7 @@ def prompt_pricing_line_item(*, pricing_type: str) -> dict[str, Any]:
         )
     else:
         cypher = ask_text(
-            "Read-only Cypher (must RETURN count(...) AS count)",
+            "Read-only Cypher (must use $companyUuid and RETURN count(...) AS count)",
             required=True,
         )
         item["staticQuery"] = {
