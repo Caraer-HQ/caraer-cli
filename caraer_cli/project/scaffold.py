@@ -12,7 +12,6 @@ from caraer_cli.project.paths import (
     WORKSPACE_FILE,
     functions_dir,
     lifecycle_dir,
-    pricing_dir,
     settings_dir,
     webhooks_dir,
     workspace_file,
@@ -126,51 +125,6 @@ def scaffold_setting(
     if path.exists() and not force:
         raise FileExistsError(f"Setting file already exists: {path}. Use --force to overwrite.")
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    return path
-
-
-def scaffold_pricing_plan(
-    root: Path,
-    config: ProjectConfig,
-    *,
-    title: str,
-    pricing_type: str = "FLAT",
-    price_per_unit: float | int | None = 0,
-    unit: str = "installations",
-    description: str | None = None,
-    force: bool = False,
-) -> Path:
-    """Write a pricing plan JSON under ``src/app/pricing/``."""
-    from caraer_cli.project.pricing_sync import pricing_filename, sanitize_pricing
-
-    base = pricing_dir(root, config.srcDir)
-    base.mkdir(parents=True, exist_ok=True)
-    ptype = pricing_type.strip().upper() or "FLAT"
-    payload: dict[str, Any] = {
-        "title": title.strip(),
-        "description": description,
-        "pricingType": ptype,
-    }
-    if ptype == "FLAT":
-        payload["pricePerUnit"] = 0 if price_per_unit is None else price_per_unit
-        payload["unit"] = unit.strip() or "installations"
-    else:
-        payload["tiers"] = [
-            {
-                "name": "tier_1",
-                "label": "Tier 1",
-                "startUnits": 0,
-                "endUnits": None,
-                "pricePerMonth": 0,
-                "pricePerYear": 0,
-                "pricePerExtraUnit": 0,
-            }
-        ]
-    sanitized = sanitize_pricing(payload)
-    path = base / pricing_filename(sanitized)
-    if path.exists() and not force:
-        raise FileExistsError(f"Pricing file already exists: {path}. Use --force to overwrite.")
-    path.write_text(json.dumps(sanitized, indent=2) + "\n", encoding="utf-8")
     return path
 
 
@@ -385,8 +339,7 @@ def write_app_manifest(
     functions_dir(root, src_dir).mkdir(parents=True, exist_ok=True)
     webhooks_dir(root, src_dir).mkdir(parents=True, exist_ok=True)
     lifecycle_dir(root, src_dir).mkdir(parents=True, exist_ok=True)
-    # settings/ and pricing/ hold optional modular files; their writers create
-    # the directories on demand, so don't scaffold empty ones.
+    # settings/ holds optional modular files; writers create it on demand.
     # Always write preferred YAML for scaffolds / local edits.
     manifest = app_dir(root, src_dir) / APP_MANIFEST_YAML
     manifest.parent.mkdir(parents=True, exist_ok=True)

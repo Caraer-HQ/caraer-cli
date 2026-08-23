@@ -21,7 +21,6 @@ from caraer_cli.project.schedules_sync import discover_local_schedules
 from caraer_cli.project.schema import ProjectConfig, load_workspace
 from caraer_cli.project.settings_sections_sync import discover_local_settings_sections
 from caraer_cli.project.settings_sync import discover_local_settings
-from caraer_cli.project.pricing_sync import discover_local_pricing, pricing_identity
 from caraer_cli.project.app_bars_sync import discover_local_app_bars
 from caraer_cli.project.lifecycle_sync import LIFECYCLE_HOOKS, discover_local_lifecycle
 from caraer_cli.project.marketplace_assemble import assemble_local_manifest
@@ -67,16 +66,7 @@ CONDITION_OPERATORS = frozenset(
 )
 VALUELESS_CONDITION_OPERATORS = frozenset({"IS_SET", "IS_NOT_SET"})
 LIST_CONDITION_OPERATORS = frozenset({"IN", "NOT_IN"})
-PRICING_TYPES = frozenset({"FLAT", "TIERED"})
-COUNT_TYPES = frozenset({"meter", "static_query"})
-COUNTING_SOURCES = frozenset({"WEBHOOK", "MANUAL", "WEBHOOK_AND_MANUAL"})
-COMMITMENTS = frozenset({"MONTHLY", "ANNUAL"})
-STATIC_QUERY_SCHEDULES = frozenset({"period_end", "period_start"})
 SETTING_FIELD_NAME_RE = re.compile(r"^[a-z]+(?:_[a-z]+)*$")
-STATIC_QUERY_MUTATING = re.compile(
-    r"\b(CREATE|MERGE|DELETE|SET|DETACH|DROP|REMOVE|FOREACH)\b",
-    re.IGNORECASE,
-)
 APP_BAR_LOCATIONS = frozenset(
     {"RECORD_PREVIEW", "RECORD_OVERVIEW", "RECORD_DETAIL", "TOOL_BAR", "TRAIT_BAR"}
 )
@@ -230,7 +220,6 @@ class ValidationReport:
     inbound: int = 0
     oauth_providers: int = 0
     settings: int = 0
-    pricing_plans: int = 0
     app_bars: int = 0
     lifecycle_hooks: int = 0
 
@@ -244,7 +233,6 @@ class ValidationReport:
             "inbound": self.inbound,
             "oauthProviders": self.oauth_providers,
             "settings": self.settings,
-            "pricingPlans": self.pricing_plans,
             "appBars": self.app_bars,
             "lifecycleHooks": self.lifecycle_hooks,
             "errors": sum(1 for i in self.issues if i.severity == "error"),
@@ -372,7 +360,6 @@ def validate_local_app(
     function_names = set(list_local_function_names(root, config))
     settings_count = _validate_settings(root, config, manifest, rel_manifest, issues)
     _validate_settings_sections(root, config, manifest, issues)
-    pricing_count = _validate_pricing(root, config, manifest, rel_manifest, issues)
     app_bars_count = _validate_app_bars(
         root, config, manifest, rel_manifest, function_names, issues
     )
@@ -394,7 +381,6 @@ def validate_local_app(
         inbound=inbound_count,
         oauth_providers=oauth_count,
         settings=settings_count,
-        pricing_plans=pricing_count,
         app_bars=app_bars_count,
         lifecycle_hooks=lifecycle_count,
     )
@@ -1188,328 +1174,6 @@ def _validate_visible_when(
                 f"{where}.value",
                 f"operator {operator} requires a list of values.",
             )
-
-
-def _validate_pricing(
-    root: Path,
-    config: ProjectConfig,
-    manifest: dict[str, Any],
-    rel_manifest: str,
-    issues: list[ValidationIssue],
-) -> int:
-    assembled = assemble_local_manifest(
-        root, config, manifest, resolve_functions=False, strict_function_refs=False
-    )
-    items = assembled.get("pricingPlans") or []
-    file_items = {pricing_identity(i): p for p, i in discover_local_pricing(root, config)}
-    count = 0
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        count += 1
-        ident = pricing_identity(item)
-        path = file_items.get(ident)
-        rel = (
-            str(path.relative_to(root))
-            if path is not None
-            else f"{rel_manifest}:pricingPlans"
-        )
-        title = str(item.get("title") or item.get("name") or "").strip()
-        if not title:
-            _issue(issues, "error", f"{rel}:title", "title is required.")
-        pricing_type = str(item.get("pricingType") or "").strip().upper()
-        if pricing_type not in PRICING_TYPES:
-            _issue(
-                issues,
-                "error",
-                f"{rel}:pricingType",
-                "pricingType must be FLAT or TIERED.",
-            )
-        commitments = item.get("commitments")
-        if commitments is not None:
-            if not isinstance(commitments, list):
-                _issue(
-                    issues,
-                    "error",
-                    f"{rel}:commitments",
-                    "commitments must be a list of MONTHLY and/or ANNUAL.",
-                )
-            else:
-                for idx, commitment in enumerate(commitments):
-                    if str(commitment or "").strip().upper() not in COMMITMENTS:
-                        _issue(
-                            issues,
-                            "error",
-                            f"{rel}:commitments[{idx}]",
-                            "commitment must be MONTHLY or ANNUAL.",
-                        )
-        line_items = item.get("lineItems")
-        if isinstance(line_items, list) and line_items:
-            _validate_pricing_line_items(issues, rel, pricing_type, line_items)
-        elif pricing_type == "FLAT":
-            if item.get("pricePerUnit") is None:
-                _issue(
-                    issues,
-                    "error",
-                    f"{rel}:pricePerUnit",
-                    "FLAT plans require pricePerUnit or lineItems.",
-                )
-            if not str(item.get("unit") or "").strip():
-                _issue(
-                    issues,
-                    "error",
-                    f"{rel}:unit",
-                    "FLAT plans require unit or lineItems.",
-                )
-        elif pricing_type == "TIERED":
-            tiers = item.get("tiers")
-            if not isinstance(tiers, list) or not tiers:
-                _issue(
-                    issues,
-                    "error",
-                    f"{rel}:tiers",
-                    "TIERED plans require a non-empty tiers list or lineItems.",
-                )
-            else:
-                _validate_pricing_tiers(issues, rel, tiers)
-    return count
-
-
-def _validate_pricing_line_items(
-    issues: list[ValidationIssue],
-    rel: str,
-    pricing_type: str,
-    line_items: list[Any],
-) -> None:
-    seen_names: set[str] = set()
-    for index, line_item in enumerate(line_items):
-        item_rel = f"{rel}:lineItems[{index}]"
-        if not isinstance(line_item, dict):
-            _issue(issues, "error", item_rel, "Each line item must be an object.")
-            continue
-        name = str(line_item.get("name") or "").strip()
-        if not name:
-            _issue(issues, "error", f"{item_rel}:name", "Line item name is required.")
-        elif not SETTING_FIELD_NAME_RE.match(name):
-            _issue(
-                issues,
-                "error",
-                f"{item_rel}:name",
-                "Line item name must use lowercase letters and underscores only.",
-            )
-        elif name in seen_names:
-            _issue(
-                issues,
-                "error",
-                f"{item_rel}:name",
-                f"Line item name '{name}' is duplicated on this plan.",
-            )
-        else:
-            seen_names.add(name)
-        if not str(line_item.get("label") or "").strip():
-            _issue(
-                issues,
-                "error",
-                f"{item_rel}:label",
-                "Line item label is required.",
-            )
-        count_type = str(line_item.get("countType") or "").strip()
-        if count_type not in COUNT_TYPES:
-            _issue(
-                issues,
-                "error",
-                f"{item_rel}:countType",
-                "countType must be meter or static_query.",
-            )
-        counting_source = str(line_item.get("countingSource") or "").strip().upper()
-        if count_type == "meter":
-            if counting_source not in COUNTING_SOURCES:
-                _issue(
-                    issues,
-                    "error",
-                    f"{item_rel}:countingSource",
-                    "meter line items require countingSource "
-                    "WEBHOOK, MANUAL, or WEBHOOK_AND_MANUAL.",
-                )
-            if line_item.get("staticQuery") not in (None, {}):
-                _issue(
-                    issues,
-                    "error",
-                    f"{item_rel}:staticQuery",
-                    "meter line items cannot define staticQuery.",
-                )
-        elif count_type == "static_query":
-            if counting_source:
-                _issue(
-                    issues,
-                    "error",
-                    f"{item_rel}:countingSource",
-                    "static_query line items cannot define countingSource.",
-                )
-            static_query = line_item.get("staticQuery")
-            if not isinstance(static_query, dict) or not str(
-                static_query.get("cypher") or ""
-            ).strip():
-                _issue(
-                    issues,
-                    "error",
-                    f"{item_rel}:staticQuery.cypher",
-                    "static_query line items require staticQuery.cypher.",
-                )
-            else:
-                cypher = str(static_query.get("cypher") or "")
-                _validate_static_query_cypher(issues, item_rel, cypher)
-                schedule = str(static_query.get("schedule") or "period_end").strip()
-                if schedule not in STATIC_QUERY_SCHEDULES:
-                    _issue(
-                        issues,
-                        "error",
-                        f"{item_rel}:staticQuery.schedule",
-                        "staticQuery.schedule must be period_end or period_start.",
-                    )
-        if pricing_type == "FLAT":
-            if line_item.get("includedUnits") is None:
-                _issue(
-                    issues,
-                    "error",
-                    f"{item_rel}:includedUnits",
-                    "FLAT line items require includedUnits.",
-                )
-        elif pricing_type == "TIERED":
-            tiers = line_item.get("tiers")
-            if not isinstance(tiers, list) or not tiers:
-                _issue(
-                    issues,
-                    "error",
-                    f"{item_rel}:tiers",
-                    "TIERED line items require a non-empty tiers list.",
-                )
-            else:
-                _validate_pricing_tiers(issues, item_rel, tiers)
-
-
-def _validate_static_query_cypher(
-    issues: list[ValidationIssue], item_rel: str, cypher: str
-) -> None:
-    if STATIC_QUERY_MUTATING.search(cypher):
-        _issue(
-            issues,
-            "error",
-            f"{item_rel}:staticQuery.cypher",
-            "static_query Cypher must be read-only.",
-        )
-        return
-    upper = cypher.upper()
-    if "RETURN" not in upper or " AS COUNT" not in upper:
-        _issue(
-            issues,
-            "error",
-            f"{item_rel}:staticQuery.cypher",
-            "Query must RETURN count(...) AS count.",
-        )
-    if "$companyUuid" not in cypher:
-        _issue(
-            issues,
-            "error",
-            f"{item_rel}:staticQuery.cypher",
-            "static_query Cypher must use $companyUuid so usage is "
-            "scoped to the installing company.",
-        )
-
-
-def _parse_unit_count(value: Any) -> int | None:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value)
-    text = str(value).strip()
-    if not text:
-        return None
-    try:
-        return int(text)
-    except ValueError:
-        try:
-            return int(float(text))
-        except ValueError:
-            return None
-
-
-def _validate_pricing_tiers(
-    issues: list[ValidationIssue],
-    rel: str,
-    tiers: list[Any],
-) -> None:
-    previous_end: int | None = None
-    for index, tier in enumerate(tiers):
-        tier_rel = f"{rel}:tiers[{index}]"
-        if not isinstance(tier, dict):
-            _issue(
-                issues,
-                "error",
-                tier_rel,
-                "Each tier must be an object.",
-            )
-            continue
-        tier_name = str(tier.get("name") or "").strip()
-        if not tier_name:
-            _issue(
-                issues,
-                "error",
-                f"{tier_rel}:name",
-                "Tier name is required.",
-            )
-        elif not SETTING_FIELD_NAME_RE.match(tier_name):
-            _issue(
-                issues,
-                "error",
-                f"{tier_rel}:name",
-                "Tier name must use lowercase letters and underscores only.",
-            )
-        tier_label = str(tier.get("label") or "").strip()
-        if not tier_label:
-            _issue(
-                issues,
-                "error",
-                f"{tier_rel}:label",
-                "Tier label is required.",
-            )
-        start_units = _parse_unit_count(tier.get("startUnits"))
-        if start_units is None:
-            _issue(
-                issues,
-                "error",
-                f"{tier_rel}:startUnits",
-                "startUnits must be a whole number.",
-            )
-        elif index > 0:
-            if previous_end is None:
-                _issue(
-                    issues,
-                    "error",
-                    f"{rel}:tiers[{index - 1}]:endUnits",
-                    "A tier with a following tier must define endUnits.",
-                )
-            elif start_units != previous_end + 1:
-                _issue(
-                    issues,
-                    "error",
-                    f"{tier_rel}:startUnits",
-                    f"startUnits must be {previous_end + 1} "
-                    f"(previous tier endUnits + 1).",
-                )
-        end_units = _parse_unit_count(tier.get("endUnits"))
-        if end_units is not None and start_units is not None and end_units < start_units:
-            _issue(
-                issues,
-                "error",
-                f"{tier_rel}:endUnits",
-                "endUnits must be greater than or equal to startUnits.",
-            )
-        previous_end = end_units
 
 
 def _validate_app_bars(

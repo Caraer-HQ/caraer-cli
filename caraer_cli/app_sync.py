@@ -535,7 +535,7 @@ def push_app(
     else:
         config = ensure_linked(client, root, config, app_uuid=app_uuid)
         print_success("Pushing app manifest…")
-        # Soft resolve: settings/pricing always; lifecycle/app-bars wait for function UUIDs.
+        # Soft resolve: settings always; lifecycle/app-bars wait for function UUIDs.
         manifest_result = push_manifest(
             client, root, config, patch=patch, strict_function_refs=False
         )

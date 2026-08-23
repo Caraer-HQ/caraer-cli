@@ -88,7 +88,7 @@ New apps default to workspace `platformVersion: 2026.2` (App platform V2: one as
 container runtime per app). Use `caraer apps init --platform 2026.1` only for the
 legacy per-function Cloud Functions model. See [docs/platform_versioning.md](docs/platform_versioning.md).
 
-`apps push` syncs the full app: marketplace manifest (including settings + pricing),
+`apps push` syncs the full app: marketplace manifest (including settings),
 functions, webhooks, schedules, inbound routes, and external OAuth providers.
 There is no separate upload command.
 
@@ -102,22 +102,21 @@ caraer apps add schedule renew-watch --function my-action --cron "0 0 */6 * * *"
 caraer apps add schedule         # wizard → cron presets / custom + function picker
 caraer apps add inbound gmail-push --function my-action --auth SHARED_SECRET
 caraer apps add setting          # wizard → appends to app.caraer.yaml
-caraer apps add pricing-plan     # wizard → appends to app.caraer.yaml
 caraer apps add lifecycle-hook   # wizard → lifecycle/*.json + function
 caraer apps add webhook --topic app.bar.triggered --mode HTTP --url https://example.com/hook
 ```
 
 `add schedule` prompts for cron (presets or custom Spring 5–6 field expression),
 function, description, and enabled when run interactively without those flags.
-`add setting` / `add pricing-plan` write into `app.caraer.yaml` by default
-(use `--modular` for separate JSON files under `settings/` / `pricing/`).
+`add setting` writes into `app.caraer.yaml` by default
+(use `--modular` for a separate JSON file under `settings/`).
 `add options-function` (or `add function --template options`) scaffolds a
 dynamic select options loader; wire via `optionsSource.serverlessFunctionName`
 and optional `optionsSource.dependsOn`.
 `add setting` also asks for conditional visibility, or takes
 `--visible-when 'other_field:EQUALS:true'`; see
 [Conditional settings](#conditional-settings).
-`apps init` does not create empty `settings/` or `pricing/` folders.
+`apps init` does not create empty `settings/` folders.
 Lifecycle hooks stay under `src/app/lifecycle/` because they pair with function folders.
 
 Lifecycle hooks (`install` / `uninstall` / `rotate` / `update`) and matching
@@ -211,7 +210,7 @@ before the next `caraer apps push`.
 my_app/
   caraer.json                 # workspace metadata (platformVersion, appUuid, …)
   src/app/
-    app.caraer.yaml           # identity, auth, OAuth, settings, pricing, app bars
+    app.caraer.yaml           # identity, auth, OAuth, settings, app bars
     lifecycle/*.json          # install|uninstall|rotate|update hooks
     functions/<name>/         # function.caraer.json + entry source
     webhooks/*.json           # one webhook definition per file
@@ -219,8 +218,8 @@ my_app/
     inbound/*.json            # public inbound routes → function
 ```
 
-`add setting` / `add pricing-plan` append to `app.caraer.yaml` by default.
-Optional modular JSON files (`settings/`, `pricing/`) still merge on push when
+`add setting` appends to `app.caraer.yaml` by default.
+Optional modular JSON files (`settings/`) still merge on push when
 present (`--modular`). `apps init` always creates all four lifecycle hooks +
 `on-*` functions. See [docs/app_lifecycle.md](docs/app_lifecycle.md).
 

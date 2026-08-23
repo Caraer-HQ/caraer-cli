@@ -48,7 +48,6 @@ def test_assemble_merges_settings_files_over_yaml(tmp_path: Path) -> None:
                 "type": "SINGLE_LINE",
             }
         ],
-        "pricingPlans": [],
         "appBars": [],
     }
     assembled = assemble_local_manifest(
@@ -92,7 +91,6 @@ def test_resolve_setting_options_source_by_name(tmp_path: Path) -> None:
                 },
             }
         ],
-        "pricingPlans": [],
         "appBars": [],
     }
     assembled = assemble_local_manifest(root, config, local, resolve_functions=True)
@@ -124,7 +122,7 @@ def test_split_and_lifecycle_resolve(tmp_path: Path) -> None:
     }
     save_state(root, state)
 
-    local = {"name": "demo", "settingsSchema": [], "pricingPlans": [], "appBars": []}
+    local = {"name": "demo", "settingsSchema": [], "appBars": []}
     assembled = assemble_local_manifest(root, config, local, resolve_functions=True)
     assert assembled["installWebhook"]["serverlessFunction"]["uuid"] == "fn-install-uuid"
     assert assembled["installWebhook"]["topic"] == "app.installed"
@@ -136,7 +134,6 @@ def test_split_and_lifecycle_resolve(tmp_path: Path) -> None:
             "settingsSchema": [
                 {"name": "topic", "label": "Topic", "type": "SINGLE_LINE"}
             ],
-            "pricingPlans": [],
             "appBars": [],
             "installWebhook": assembled["installWebhook"],
         },
@@ -180,7 +177,6 @@ def test_assemble_merges_settings_sections(tmp_path: Path) -> None:
                 "settings": ["candidate_mapping"],
             }
         ],
-        "pricingPlans": [],
         "appBars": [],
     }
     assembled = assemble_local_manifest(
@@ -195,7 +191,6 @@ def test_assemble_merges_settings_sections(tmp_path: Path) -> None:
         {
             "settingsSchema": [{"name": "candidate_mapping", "type": "MAPPING"}],
             "settingsSections": assembled["settingsSections"],
-            "pricingPlans": [],
             "appBars": [],
         },
     )

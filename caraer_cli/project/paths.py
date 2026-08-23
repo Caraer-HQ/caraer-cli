@@ -78,10 +78,6 @@ def settings_sections_dir(root: Path, src_dir: str = "src") -> Path:
     return app_dir(root, src_dir) / "settings-sections"
 
 
-def pricing_dir(root: Path, src_dir: str = "src") -> Path:
-    return app_dir(root, src_dir) / "pricing"
-
-
 def app_bars_dir(root: Path, src_dir: str = "src") -> Path:
     return app_dir(root, src_dir) / "app-bars"
 

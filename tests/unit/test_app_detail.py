@@ -14,7 +14,6 @@ def test_print_app_detail_summary(capsys) -> None:
             "details": {"category": "recruitment", "brandColor": "#E74363"},
             "appPublish": {"publishState": "CHANGES_REQUESTED"},
             "appBars": [{"label": "Test overview", "location": "RECORD_PREVIEW"}],
-            "pricingPlans": [{"title": "New plan"}],
             "serverlessFunctions": [
                 {"name": "options", "runtime": "nodejs22", "code": "exports.handler = () => {}"}
             ],

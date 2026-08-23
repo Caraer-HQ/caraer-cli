@@ -108,10 +108,8 @@ def build_public_app_placeholder(
         "requiredScopes": [],
         "settingsSchema": [],
         "settingsSections": [],
-        "pricingPlans": [],
         "appBars": [],
         "webhookRateLimitPerMinute": 100,
-        "billFailedWebhookRequests": False,
     }
 
 
@@ -833,7 +831,7 @@ def validate_app(
         summary = (
             f"Validated {report.root} — "
             f"{payload['functions']} function(s), {payload['settings']} setting(s), "
-            f"{payload['pricingPlans']} pricing plan(s), {payload['appBars']} app bar(s), "
+            f"{payload['appBars']} app bar(s), "
             f"{payload['lifecycleHooks']} lifecycle hook(s), "
             f"{payload['errors']} error(s), {payload['warnings']} warning(s)."
         )

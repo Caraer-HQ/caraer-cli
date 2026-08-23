@@ -58,7 +58,6 @@ def test_nested_group_children() -> None:
         "schedule",
         "inbound",
         "setting",
-        "pricing-plan",
         "lifecycle-hook",
     }
     assert "app-bar" not in apps.commands["add"].commands

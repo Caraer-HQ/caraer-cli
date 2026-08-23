@@ -224,7 +224,6 @@ def print_app_detail(app: dict[str, Any], *, full: bool = False) -> None:
 
     resources = {
         "appBars": _count_label(app.get("appBars"), item_label=_app_bar_label),
-        "pricingPlans": _count_label(app.get("pricingPlans"), item_label=_pricing_label),
         "serverlessFunctions": _count_label(
             app.get("serverlessFunctions"), item_label=_function_label
         ),
@@ -285,12 +284,6 @@ def _settings_section_label(item: Any) -> str:
     if not isinstance(item, dict):
         return str(item)
     return str(item.get("title") or "section")
-
-
-def _pricing_label(item: Any) -> str:
-    if not isinstance(item, dict):
-        return str(item)
-    return str(item.get("title") or item.get("name") or item.get("uuid") or "plan")
 
 
 def _function_label(item: Any) -> str:

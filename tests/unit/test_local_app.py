@@ -92,7 +92,7 @@ def test_scaffold_app_project_layout(tmp_path: Path) -> None:
     assert "hideApiKeyField: true" in text
     assert "oauthRedirectUris:" in text
     assert "http://localhost:3000/oauth/callback" in text
-    assert "# Edit pricingPlans above, or: caraer apps add pricing-plan" in text
+    assert "pricingPlans" not in text
     assert "# Edit appBars above when needed" in text
     assert "# Example scopes" in text
     assert "caraer apps add setting" in text
@@ -101,7 +101,7 @@ def test_scaffold_app_project_layout(tmp_path: Path) -> None:
     app_json = load_local_app(manifest)
     assert app_json["name"] == "my_app"
     assert "requiredScopes" in app_json
-    assert app_json["pricingPlans"] == []
+    assert "pricingPlans" not in app_json
     # Function code must not live inside the app YAML.
     assert "functions" not in app_json
     assert "serverlessFunctions" not in app_json

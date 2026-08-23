@@ -23,8 +23,9 @@ def test_build_public_app_placeholder() -> None:
     assert payload["brandmark"].endswith(".svg")
     assert payload["details"]["image"].endswith(".svg")
     assert payload["details"]["brandColor"].startswith("#")
-    assert payload["pricingPlans"] == []
     assert payload["appBars"] == []
+    assert "pricingPlans" not in payload
+    assert "billFailedWebhookRequests" not in payload
 
 
 def test_category_catalog_matches_backend_keys() -> None:
@@ -73,14 +74,6 @@ def test_build_public_app_payload_from_answers() -> None:
                 "defaultValue": "hoi",
             }
         ],
-        pricing_plans=[
-            {
-                "title": "Gold",
-                "pricingType": "FLAT",
-                "pricePerUnit": "1000.00",
-                "unit": "call",
-            }
-        ],
         app_bars=[
             {
                 "location": "RECORD_PREVIEW",
@@ -90,7 +83,6 @@ def test_build_public_app_payload_from_answers() -> None:
         ],
         webhook_controls={
             "webhookRateLimitPerMinute": 100,
-            "billFailedWebhookRequests": True,
         },
     )
     assert "privateApp" not in payload
@@ -104,6 +96,7 @@ def test_build_public_app_payload_from_answers() -> None:
         "records.candidate.properties_all",
     ]
     assert payload["settingsSchema"][0]["type"] == "SINGLE_LINE"
-    assert payload["pricingPlans"][0]["pricingType"] == "FLAT"
+    assert "pricingPlans" not in payload
     assert payload["appBars"][0]["location"] == "RECORD_PREVIEW"
     assert payload["webhookRateLimitPerMinute"] == 100
+    assert "billFailedWebhookRequests" not in payload

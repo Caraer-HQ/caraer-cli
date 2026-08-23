@@ -138,7 +138,6 @@ provision after the user saves USER-scoped settings (`userSettingsChanged`).
 |----------------|---------|---------|
 | `settingsSchema` in YAML (or `settings/*.json` with `--modular`) | `caraer apps add setting` | Installation settings |
 | `settingsSections` in YAML (or `settings-sections/*.json`) | edit manifest | Installer setting cards (title, subtitle, field names) |
-| `pricingPlans` in YAML (or `pricing/*.json` with `--modular`) | `caraer apps add pricing-plan` | Marketplace pricing |
 | `appBars` in YAML | edit manifest | Record / tool / trait bars |
 
 Validate with `caraer apps validate`.

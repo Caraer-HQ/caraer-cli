@@ -23,11 +23,6 @@ _EXAMPLE_SETTINGS_SCHEMA = """\
 # Group installer cards with settingsSections or src/app/settings-sections/*.json
 """
 
-_EXAMPLE_PRICING_PLANS = """\
-# Edit pricingPlans above, or: caraer apps add pricing-plan
-# Optional modular files: src/app/pricing/<slug>.json (--modular)
-"""
-
 _EXAMPLE_APP_BARS = """\
 # Edit appBars above when needed (record / tool / trait bars).
 # Lifecycle hooks: src/app/lifecycle/ + functions/on-* (caraer apps add lifecycle-hook)
@@ -42,7 +37,7 @@ def render_app_manifest(payload: dict[str, Any], *, include_examples: bool = Tru
     ``caraer apps validate`` checks the manifest against the bundled schemas.
     """
     data = dict(payload)
-    for key in ("requiredScopes", "settingsSchema", "pricingPlans", "appBars"):
+    for key in ("requiredScopes", "settingsSchema", "appBars"):
         data.setdefault(key, [])
 
     body = yaml.safe_dump(
@@ -63,8 +58,6 @@ def render_app_manifest(payload: dict[str, Any], *, include_examples: bool = Tru
             out.append(_EXAMPLE_REQUIRED_SCOPES.rstrip("\n"))
         elif stripped == "settingsSchema: []":
             out.append(_EXAMPLE_SETTINGS_SCHEMA.rstrip("\n"))
-        elif stripped == "pricingPlans: []":
-            out.append(_EXAMPLE_PRICING_PLANS.rstrip("\n"))
         elif stripped == "appBars: []":
             out.append(_EXAMPLE_APP_BARS.rstrip("\n"))
     return "\n".join(out) + "\n"

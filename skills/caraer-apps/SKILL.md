@@ -58,7 +58,7 @@ caraer apps local test --function <name> --sample-only
 caraer.json
 package.json                # npm-style scripts (dev/validate/push/deploy); Node adds @caraer/client
 src/app/
-  app.caraer.yaml           # identity, auth, brandmark, logo, settings, pricing, OAuth
+  app.caraer.yaml           # identity, auth, brandmark, logo, settings, OAuth
   functions/<name>/         # index.js|main.py (function.caraer.json optional)
   shared/                   # code shared by all functions (require "../../shared/...")
   settings/*.json           # modular settingsSchema fields
@@ -171,7 +171,6 @@ Installation settings are for **admins installing the app**, not developers.
 | Webhook | `caraer apps add webhook` |
 | Setting | `caraer apps add setting` (YAML by default; `--modular` → `settings/`) |
 | Lifecycle | `caraer apps add lifecycle-hook` |
-| Pricing | `caraer apps add pricing-plan` |
 
 ### Validate loop
 

@@ -18,7 +18,6 @@ from caraer_cli.wizard.catalog import (
 )
 from caraer_cli.wizard.marketplace import (
     prompt_app_bar as _prompt_app_bar,
-    prompt_pricing_plan as _prompt_pricing_plan,
     prompt_setting_field as _prompt_setting_field,
 )
 from caraer_cli.wizard.prompts import (
@@ -323,19 +322,6 @@ def _prompt_settings_schema() -> list[dict[str, Any]]:
     return fields
 
 
-def _prompt_pricing_plans() -> list[dict[str, Any]]:
-    _print_section("Pricing plans")
-    plans: list[dict[str, Any]] = []
-    while ask_confirm("Add a pricing plan?", default=False):
-        plans.append(_prompt_pricing_plan())
-        _print_overview(
-            "Pricing plans",
-            plans,
-            ["#", "title", "pricingType", "pricePerUnit", "unit", "freeUnits"],
-        )
-    return plans
-
-
 def _prompt_app_bars() -> list[dict[str, Any]]:
     _print_section("App bars")
     bars: list[dict[str, Any]] = []
@@ -358,17 +344,6 @@ def _prompt_webhook_controls() -> dict[str, Any]:
             controls["webhookRateLimitPerMinute"] = int(rate.strip())
         except ValueError:
             console.print("[yellow]Ignored invalid rate limit; leaving unset.[/yellow]")
-    bill_failed = ask_select(
-        "Bill failed webhook requests?",
-        [
-            Choice(title="No", value="false"),
-            Choice(title="Yes", value="true"),
-            Choice(title="Skip / leave unset", value=""),
-        ],
-        default="false",
-    )
-    if bill_failed:
-        controls["billFailedWebhookRequests"] = bill_failed == "true"
     return controls
 
 
@@ -380,7 +355,6 @@ def build_public_app_payload_from_answers(
     brandmark: str,
     required_scopes: list[str],
     settings_schema: list[dict[str, Any]],
-    pricing_plans: list[dict[str, Any]],
     app_bars: list[dict[str, Any]],
     webhook_controls: dict[str, Any],
     runtime: str = "nodejs22",
@@ -406,7 +380,6 @@ def build_public_app_payload_from_answers(
         "details": details,
         "requiredScopes": required_scopes,
         "settingsSchema": settings_schema,
-        "pricingPlans": pricing_plans,
         "appBars": app_bars,
     }
     payload.update(webhook_controls)
@@ -434,7 +407,6 @@ def run_public_app_wizard(
     details, brandmark = _prompt_details()
     required_scopes = _prompt_scopes()
     settings_schema = _prompt_settings_schema()
-    pricing_plans = _prompt_pricing_plans()
     app_bars = _prompt_app_bars()
     webhook_controls = _prompt_webhook_controls()
 
@@ -459,7 +431,6 @@ def run_public_app_wizard(
         f"- label: [bold]{label}[/bold]\n"
         f"- name: [bold]{name}[/bold]\n"
         f"- settings: {len(settings_schema)}\n"
-        f"- pricingPlans: {len(pricing_plans)}\n"
         f"- appBars: {len(app_bars)}"
     )
     console.print(
@@ -490,7 +461,6 @@ def run_public_app_wizard(
         brandmark=brandmark,
         required_scopes=required_scopes,
         settings_schema=settings_schema,
-        pricing_plans=pricing_plans,
         app_bars=app_bars,
         webhook_controls=webhook_controls,
         runtime=resolved_runtime,

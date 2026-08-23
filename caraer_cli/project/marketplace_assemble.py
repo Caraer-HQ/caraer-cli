@@ -17,11 +17,6 @@ from caraer_cli.project.lifecycle_sync import (
     resolve_lifecycle_functions,
     write_lifecycle_files,
 )
-from caraer_cli.project.pricing_sync import (
-    discover_local_pricing,
-    pricing_identity,
-    write_pricing_files,
-)
 from caraer_cli.project.schema import ProjectConfig
 from caraer_cli.project.settings_sections_sync import (
     discover_local_settings_sections,
@@ -95,6 +90,8 @@ def assemble_local_manifest(
     When ``strict_function_refs`` is False, hooks/bars that cannot resolve are omitted.
     """
     out = dict(local)
+    out.pop("pricingPlans", None)
+    out.pop("billFailedWebhookRequests", None)
     fn_by_name = _fn_by_name(root) if resolve_functions else {}
     fn_meta_by_name = _fn_meta_by_name(root) if resolve_functions else {}
     default_runtime = (
@@ -128,14 +125,6 @@ def assemble_local_manifest(
         yaml_sections,
         file_sections,
         identity=settings_section_identity,
-    )
-
-    yaml_pricing = out.get("pricingPlans") if isinstance(out.get("pricingPlans"), list) else []
-    file_pricing = [item for _path, item in discover_local_pricing(root, config)]
-    out["pricingPlans"] = _merge_by_key(
-        yaml_pricing,
-        file_pricing,
-        identity=pricing_identity,
     )
 
     yaml_bars = out.get("appBars") if isinstance(out.get("appBars"), list) else []
@@ -185,6 +174,8 @@ def split_marketplace_to_disk(
 ) -> dict[str, Any]:
     """Write modular files from a remote/local payload and clear arrays/hooks in YAML copy."""
     out = dict(payload)
+    out.pop("pricingPlans", None)
+    out.pop("billFailedWebhookRequests", None)
 
     settings = out.get("settingsSchema") if isinstance(out.get("settingsSchema"), list) else []
     write_settings_files(root, config, [i for i in settings if isinstance(i, dict)])
@@ -193,10 +184,6 @@ def split_marketplace_to_disk(
     sections = out.get("settingsSections") if isinstance(out.get("settingsSections"), list) else []
     write_settings_sections_files(root, config, [i for i in sections if isinstance(i, dict)])
     out["settingsSections"] = []
-
-    pricing = out.get("pricingPlans") if isinstance(out.get("pricingPlans"), list) else []
-    write_pricing_files(root, config, [i for i in pricing if isinstance(i, dict)])
-    out["pricingPlans"] = []
 
     bars = out.get("appBars") if isinstance(out.get("appBars"), list) else []
     write_app_bars_files(root, config, [i for i in bars if isinstance(i, dict)])

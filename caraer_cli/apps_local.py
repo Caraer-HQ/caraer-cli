@@ -36,11 +36,9 @@ LOCAL_APP_KEYS = (
     "requiredScopes",
     "settingsSchema",
     "settingsSections",
-    "pricingPlans",
     "appBars",
     "webhookRateLimitPerMinute",
     "jobRateLimitPerMinute",
-    "billFailedWebhookRequests",
     "installWebhook",
     "uninstallWebhook",
     "rotateWebhook",
@@ -208,7 +206,7 @@ def write_pulled_app(
     # Pulled remote data is authoritative; skip scaffold example comments.
     include_examples = not any(
         isinstance(payload.get(key), list) and payload.get(key)
-        for key in ("pricingPlans", "appBars", "settingsSchema", "requiredScopes")
+        for key in ("appBars", "settingsSchema", "requiredScopes")
     )
     target.write_text(
         render_app_manifest(payload, include_examples=include_examples),

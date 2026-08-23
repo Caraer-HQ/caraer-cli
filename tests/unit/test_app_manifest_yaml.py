@@ -15,16 +15,15 @@ def test_render_app_manifest_yaml_with_examples(tmp_path: Path) -> None:
             "oauthRedirectUris": ["http://localhost:3000/oauth/callback"],
             "requiredScopes": [],
             "settingsSchema": [],
-            "pricingPlans": [],
             "appBars": [],
         },
         include_examples=True,
     )
     path = tmp_path / "app.caraer.yaml"
     path.write_text(text, encoding="utf-8")
-    assert "# Edit pricingPlans above, or: caraer apps add pricing-plan" in text
+    assert "pricingPlans" not in text
     assert "# Edit appBars above when needed" in text
     loaded = load_local_app(path)
     assert loaded["name"] == "demo"
-    assert loaded["pricingPlans"] == []
+    assert "pricingPlans" not in loaded
     assert loaded["appBars"] == []

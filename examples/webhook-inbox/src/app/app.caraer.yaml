@@ -41,14 +41,5 @@ appBars:
       deliveryMode: SERVERLESS
       serverlessFunction:
         name: clear-inbox
-pricingPlans:
-  - title: Free
-    description: Included with your Caraer workspace
-    pricingType: FLAT
-    pricePerUnit: 0
-    unit: month
-    freeUnits: 0
-    freeUnitsPeriod: month
 webhookRateLimitPerMinute: 100
 jobRateLimitPerMinute: 30
-billFailedWebhookRequests: false
