@@ -1,106 +1,235 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/caraer/caraer-cli/main/schemas/app.caraer.schema.json",
+  "$id": "https://raw.githubusercontent.com/Caraer-HQ/caraer-app-schemas/main/schemas/app.caraer.schema.json",
   "title": "Caraer app manifest (app.caraer.yaml)",
+  "description": "Identity, auth, marketplace listing, installer settings, app bars, and external OAuth for a Caraer app. Functions, webhooks, schedules, inbound routes, and lifecycle hooks live in sibling folders and are not listed here. Public marketplace apps need brandmark plus details (category, brandColor, image). Private company apps may omit listing fields. Use ${ENV_VAR} for OAuth client secrets; the CLI expands them on push from the process environment or root .env.",
   "type": "object",
-  "required": ["name", "label", "authMethod", "brandmark", "details"],
+  "required": ["name", "label", "authMethod"],
   "additionalProperties": true,
+  "examples": [
+    {
+      "label": "Google Calendar Sync",
+      "name": "google_calendar_sync",
+      "runtime": "nodejs22",
+      "authMethod": "API_KEY",
+      "hideApiKeyField": true,
+      "oauthRedirectUris": [],
+      "details": {
+        "title": "Google Calendar Sync",
+        "description": "Two-way sync between Google Calendar and Caraer.",
+        "category": "productivity",
+        "subcategories": ["agenda", "automation"],
+        "url": "https://caraer.com",
+        "image": "https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg",
+        "brandColor": "#4285F4",
+        "textColor": "#FFFFFF"
+      },
+      "requiredScopes": [
+        "tools.objects_schemas.write",
+        "records.google_calendar_event.all",
+        "records.<attendee_object>.all"
+      ],
+      "settingsSchema": [
+        {
+          "name": "google_calendars",
+          "label": "Calendars to sync",
+          "type": "MULTI_SELECT",
+          "required": true,
+          "valueScope": "USER",
+          "helpText": "Connect Google first, then pick calendars for your account.",
+          "optionsSource": {
+            "type": "SERVERLESS",
+            "serverlessFunctionName": "list-calendars",
+            "searchable": false
+          }
+        },
+        {
+          "name": "attendee_object",
+          "label": "Attendee object",
+          "type": "OBJECT_SINGLE_SELECT",
+          "required": true,
+          "helpText": "Object where event attendees are stored (for example Contacts)."
+        }
+      ],
+      "webhookRateLimitPerMinute": 100,
+      "jobRateLimitPerMinute": 120,
+      "externalOAuthProviders": [
+        {
+          "name": "gmail",
+          "label": "Google Calendar",
+          "connectionOwner": "USER",
+          "authorizeUrl": "https://accounts.google.com/o/oauth2/v2/auth",
+          "tokenUrl": "https://oauth2.googleapis.com/token",
+          "clientId": "${GOOGLE_CLIENT_ID}",
+          "clientSecret": "${GOOGLE_CLIENT_SECRET}",
+          "logo": "https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg",
+          "scopes": [
+            "https://www.googleapis.com/auth/calendar.events",
+            "https://www.googleapis.com/auth/calendar.readonly",
+            "https://www.googleapis.com/auth/userinfo.email"
+          ]
+        }
+      ]
+    }
+  ],
   "properties": {
     "uuid": {
       "type": "string",
       "format": "uuid",
-      "description": "Remote app UUID (filled after push)."
+      "description": "Remote app UUID. Leave unset on first push; the CLI writes it back after create."
     },
     "name": {
       "type": "string",
       "minLength": 1,
-      "description": "Stable machine name."
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Stable machine name (snake_case). Used in APIs and as the default folder name."
     },
     "label": {
       "type": "string",
       "minLength": 1,
-      "description": "Human-readable display name."
+      "description": "Human-readable display name shown in Caraer (for example Google Calendar Sync)."
     },
-    "description": { "type": "string" },
+    "description": {
+      "type": "string",
+      "description": "Short developer-facing summary. Marketplace copy belongs in details.description."
+    },
     "runtime": {
       "type": "string",
       "enum": ["nodejs22", "python312"],
-      "description": "App-level runtime for platformVersion 2026.2."
+      "description": "App-level runtime for platformVersion 2026.2. Every function in the app uses this runtime."
     },
     "authMethod": {
       "type": "string",
-      "enum": ["OAUTH2", "API_KEY"]
+      "enum": ["OAUTH2", "API_KEY"],
+      "description": "How a company authenticates the install. OAUTH2 runs Caraer user consent (preferred; will be required for public apps). API_KEY is the legacy installer key. Both methods inject body.installationToken into webhooks so functions can call Caraer as Bearer."
     },
     "hideApiKeyField": {
       "type": "boolean",
       "default": true,
-      "description": "When true, hide the installation API key field in the Caraer UI. Defaults to true for new scaffolds."
+      "description": "When true (scaffold default), hide the installation token in the Caraer UI. Functions still receive it on the webhook envelope."
     },
     "oauthRedirectUris": {
       "type": "array",
-      "items": { "type": "string", "format": "uri" },
-      "description": "Required when authMethod is OAUTH2."
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Registered Caraer OAuth callback URLs. Required when authMethod is OAUTH2. HTTPS in production; http is allowed only for localhost."
+    },
+    "installUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "Optional external install link (for example a ChatGPT connector page). Not generated by Caraer."
     },
     "brandmark": {
       "type": "string",
       "format": "uri",
-      "description": "Square brandmark SVG URL used in compact app surfaces. Required for public apps."
+      "description": "Square SVG URL used in compact app surfaces. Required for public marketplace apps; optional for private apps."
     },
     "requiredScopes": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Permissions requested at install. Use records.<setting_name>.all (and properties_all / relations_all) so the object is taken from a MAPPING or OBJECT_* setting instead of a hard-coded object name."
     },
     "settingsSchema": {
       "type": "array",
+      "description": "Installer fields (admins configuring the app). Prefer SWITCH, OBJECT_SINGLE_SELECT, and SINGLE_SELECT over free text. Do not ask for caraerApiBase — the runtime injects it.",
       "items": { "$ref": "#/$defs/settingField" }
     },
     "settingsSections": {
       "type": "array",
-      "description": "Optional UI grouping of settingsSchema fields into installer cards. Settings values stay on the flat settingsSchema list.",
+      "description": "Optional cards that group settingsSchema fields. Values stay on the flat settingsSchema list. Caraer lays out at most three cards across.",
       "items": { "$ref": "#/$defs/settingsSection" }
     },
     "appBars": {
       "type": "array",
+      "description": "Buttons on a record preview/overview (action + webhook) or iframe surfaces (detail / tool / trait bar).",
       "items": { "$ref": "#/$defs/appBar" }
     },
     "externalOAuthProviders": {
       "type": "array",
+      "description": "Third-party OAuth (Google, etc.). Separate from authMethod. Tokens land in body.secrets / body.connections. Expand ${ENV_VAR} client fields from the environment on push.",
       "items": { "$ref": "#/$defs/oauthProvider" }
     },
-    "webhookRateLimitPerMinute": { "type": "integer", "minimum": 0 },
+    "webhookRateLimitPerMinute": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Max platform webhook deliveries per installation per minute. Default 100."
+    },
+    "jobRateLimitPerMinute": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Max installation jobs per minute (inbound enqueue, POST .../installation/jobs, handler-enqueued work). Raise this for import bursts (Google Calendar uses 120)."
+    },
+    "details": {
+      "$ref": "#/$defs/details",
+      "description": "Marketplace listing. Required for public apps."
+    }
+  },
+  "if": {
+    "properties": { "authMethod": { "const": "OAUTH2" } },
+    "required": ["authMethod"]
+  },
+  "then": {
+    "properties": {
+      "oauthRedirectUris": { "minItems": 1 }
+    },
+    "required": ["oauthRedirectUris"]
+  },
+  "$defs": {
     "details": {
       "type": "object",
-      "required": ["category", "brandColor", "image"],
       "additionalProperties": true,
       "properties": {
-        "title": { "type": "string" },
-        "description": { "type": "string" },
+        "title": {
+          "type": "string",
+          "description": "Marketplace title. Defaults to label when omitted."
+        },
+        "description": {
+          "type": "string",
+          "description": "Marketplace description. Markdown is allowed."
+        },
         "category": {
           "type": "string",
-          "description": "Marketplace main category (e.g. developer_tools)."
+          "description": "Marketplace main category key.",
+          "enum": [
+            "productivity",
+            "communication",
+            "recruitment",
+            "hr",
+            "marketing",
+            "sales",
+            "data",
+            "finance",
+            "customer_support",
+            "developer_tools",
+            "education_and_learning"
+          ]
         },
         "subcategories": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string" },
+          "description": "Keys under the chosen category (for example agenda, automation under productivity)."
         },
-        "url": { "type": "string", "format": "uri" },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Vendor or product homepage."
+        },
         "image": {
           "type": "string",
           "format": "uri",
-          "description": "App logo SVG URL for marketplace listing. Required for public apps."
+          "description": "Marketplace logo SVG URL. Required for public apps. Prefer a CORS-friendly host."
         },
         "brandColor": {
           "type": "string",
-          "pattern": "^#[0-9A-Fa-f]{6}$"
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "description": "Listing accent color (hex), for example #4285F4."
         },
         "textColor": {
           "type": "string",
-          "pattern": "^#[0-9A-Fa-f]{6}$"
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "description": "Text color on brandColor (hex), for example #FFFFFF."
         }
       }
-    }
-  },
-  "$defs": {
+    },
     "settingsSection": {
       "type": "object",
       "required": ["title", "settings"],
@@ -128,8 +257,15 @@
       "required": ["name", "type"],
       "additionalProperties": true,
       "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "label": { "type": "string" },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable field key. Referenced by settingsSections, visibleWhen, optionsSource.dependsOn, and records.<name>.* scopes."
+        },
+        "label": {
+          "type": "string",
+          "description": "Installer-visible label."
+        },
         "type": {
           "type": "string",
           "enum": [
@@ -148,13 +284,17 @@
             "FILE",
             "MULTI_FILE",
             "SECRET"
-          ]
+          ],
+          "description": "SINGLE_SELECT / MULTI_SELECT may use static options or a SERVERLESS optionsSource (see google_calendars). OBJECT_* and PROPERTY_* pick from the company schema. MAPPING maps properties between objects."
         },
         "required": { "type": "boolean" },
         "helpText": { "type": "string" },
-        "defaultValue": {},
+        "defaultValue": {
+          "description": "Initial value before the installer saves."
+        },
         "options": {
           "type": "array",
+          "description": "Static choices for SINGLE_SELECT / MULTI_SELECT / RECORD_* when optionsSource is omitted.",
           "items": {
             "type": "object",
             "properties": {
@@ -167,7 +307,7 @@
         "optionsSource": { "$ref": "#/$defs/optionsSource" },
         "hidden": {
           "type": "boolean",
-          "description": "Never show this field. The value is still stored so the app can keep provisioned ids."
+          "description": "Never show this field. The value is still stored (provisioned ids, workspace handles)."
         },
         "visibleWhen": {
           "type": "array",
@@ -177,7 +317,7 @@
         "valueScope": {
           "type": "string",
           "enum": ["COMPANY", "USER"],
-          "description": "COMPANY (default) stores the value on the install; USER stores it per Caraer user."
+          "description": "COMPANY (default) stores the value on the install. USER stores it per Caraer user (Google Calendar uses this for google_calendars)."
         }
       }
     },
@@ -197,7 +337,7 @@
           "default": "EQUALS"
         },
         "value": {
-          "description": "Expected value; a list for IN / NOT_IN, omitted for IS_SET / IS_NOT_SET."
+          "description": "Expected value; a list for IN / NOT_IN; omit for IS_SET / IS_NOT_SET."
         }
       }
     },
@@ -208,20 +348,20 @@
         "type": {
           "type": "string",
           "const": "SERVERLESS",
-          "description": "Only SERVERLESS is supported today."
+          "description": "Only SERVERLESS is supported. The named function returns option rows for the installer."
         },
         "serverlessFunctionName": {
           "type": "string",
-          "description": "Local/deployed function name (preferred for manifests)."
+          "description": "Local/deployed function name (preferred). Example: list-calendars."
         },
         "serverlessFunctionUuid": {
           "type": "string",
-          "description": "Remote function UUID (optional if name is set)."
+          "description": "Remote function UUID. Optional when serverlessFunctionName is set; push fills it."
         },
         "dependsOn": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
-          "description": "Sibling setting names. Installer clears this field and refetches options when any dependency value changes."
+          "description": "Sibling setting names. The installer clears this field and refetches options when any dependency changes."
         },
         "searchable": { "type": "boolean" },
         "minQueryLength": { "type": "integer", "minimum": 0 }
@@ -240,7 +380,8 @@
             "RECORD_DETAIL",
             "TOOL_BAR",
             "TRAIT_BAR"
-          ]
+          ],
+          "description": "RECORD_PREVIEW and RECORD_OVERVIEW are action dialogs (webhook + optional settingsSchema). RECORD_DETAIL, TOOL_BAR, and TRAIT_BAR are iframe surfaces (iframeUrl)."
         },
         "uuid": {
           "type": "string",
@@ -253,10 +394,66 @@
           "description": "Unique bar name. Used to reuse the existing AppBar node when uuid is omitted."
         },
         "label": { "type": "string", "minLength": 1 },
-        "actionLabel": { "type": "string" },
-        "iframeUrl": { "type": "string" },
-        "webhook": { "type": "object" }
+        "actionLabel": {
+          "type": "string",
+          "description": "Primary button label in the action dialog."
+        },
+        "tooltipLabel": {
+          "type": "string",
+          "description": "Tooltip for buttons and sidebar entries."
+        },
+        "description": {
+          "type": "string",
+          "description": "Copy under the dialog title for action-based bars."
+        },
+        "icon": { "type": "string" },
+        "iframeUrl": {
+          "type": "string",
+          "description": "Iframe URL. Supports {recordUuid}, {object}, {viewId}, {trait}, {companyUuid}."
+        },
+        "settingsSchema": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/settingField" },
+          "description": "Fields collected in the action dialog before the webhook runs."
+        },
+        "webhook": {
+          "$ref": "#/$defs/appBarWebhook"
+        }
       }
+    },
+    "appBarWebhook": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "topic": {
+          "type": "string",
+          "description": "Use app.bar.triggered for action bars."
+        },
+        "deliveryMode": {
+          "type": "string",
+          "enum": ["SERVERLESS", "HTTP"]
+        },
+        "serverlessFunction": {
+          "$ref": "#/$defs/serverlessFunctionRef"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Required when deliveryMode is HTTP."
+        }
+      }
+    },
+    "serverlessFunctionRef": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+        "uuid": { "type": "string", "format": "uuid" }
+      },
+      "anyOf": [
+        { "required": ["name"] },
+        { "required": ["uuid"] }
+      ]
     },
     "oauthProvider": {
       "type": "object",
@@ -264,16 +461,31 @@
       "additionalProperties": true,
       "properties": {
         "uuid": { "type": "string", "format": "uuid" },
-        "name": { "type": "string", "minLength": 1 },
-        "label": { "type": "string" },
-        "authorizeUrl": { "type": "string" },
-        "tokenUrl": { "type": "string" },
-        "clientId": { "type": "string" },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable provider key (for example gmail). Used in /installation/oauth/{name}/start."
+        },
+        "label": {
+          "type": "string",
+          "description": "Installer-visible name (for example Google Calendar)."
+        },
+        "authorizeUrl": { "type": "string", "minLength": 1 },
+        "tokenUrl": { "type": "string", "minLength": 1 },
+        "clientId": {
+          "type": "string",
+          "description": "OAuth client id. May be ${GOOGLE_CLIENT_ID}; expanded on push."
+        },
+        "clientSecret": {
+          "type": "string",
+          "description": "Write-only. May be ${GOOGLE_CLIENT_SECRET}. Never committed as a raw secret."
+        },
         "logo": { "type": "string" },
+        "pkce": { "type": "boolean" },
         "connectionOwner": {
           "type": "string",
           "enum": ["COMPANY", "USER"],
-          "description": "COMPANY (default) = one shared connection per install; USER = one connection per Caraer user."
+          "description": "COMPANY (default): one shared connection per install. USER: one connection per Caraer user (Google Calendar)."
         },
         "scopes": {
           "type": "array",
