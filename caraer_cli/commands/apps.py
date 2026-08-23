@@ -70,10 +70,12 @@ def build_public_app_placeholder(
     runtime: str = "nodejs22",
     auth_method: str = "OAUTH2",
     oauth_redirect_uris: list[str] | None = None,
+    private: bool = False,
 ) -> dict[str, Any]:
-    """Build a placeholder public-app payload for local editing.
+    """Build a placeholder app payload for local editing.
 
     Always includes runtime, authMethod, hideApiKeyField, and oauthRedirectUris.
+    Public apps also get marketplace listing placeholders.
     """
     resolved_label = label.strip() or "My App"
     resolved_name = normalize_app_name(name or resolved_label) or "my_app"
@@ -87,15 +89,22 @@ def build_public_app_placeholder(
     ]
     if method == "OAUTH2" and not redirects:
         raise ValueError("OAUTH2 apps require at least one oauth redirect / callback URL.")
-    return {
+    payload: dict[str, Any] = {
         "label": resolved_label,
         "name": resolved_name,
         "runtime": runtime,
         "authMethod": method,
         "hideApiKeyField": True,
         "oauthRedirectUris": redirects,
-        "brandmark": "https://example.com/brandmark.svg",
-        "details": {
+        "requiredScopes": [],
+        "settingsSchema": [],
+        "settingsSections": [],
+        "appBars": [],
+        "webhookRateLimitPerMinute": 100,
+    }
+    if not private:
+        payload["brandmark"] = "https://example.com/brandmark.svg"
+        payload["details"] = {
             "title": resolved_label,
             "description": "TODO: short marketplace description",
             "category": "developer_tools",
@@ -104,13 +113,8 @@ def build_public_app_placeholder(
             "image": "https://example.com/logo.svg",
             "brandColor": DEFAULT_BRAND_COLOR,
             "textColor": DEFAULT_TEXT_COLOR,
-        },
-        "requiredScopes": [],
-        "settingsSchema": [],
-        "settingsSections": [],
-        "appBars": [],
-        "webhookRateLimitPerMinute": 100,
-    }
+        }
+    return payload
 
 
 def _save_selection(
@@ -425,6 +429,11 @@ def init_app(
         "--function",
         help="Sample function folder name (empty string to skip).",
     ),
+    private: bool = typer.Option(
+        False,
+        "--private/--public",
+        help="Create a company-private app (default is a public marketplace app).",
+    ),
     force: bool = typer.Option(False, "--force", help="Overwrite existing app files."),
     select: bool = typer.Option(True, "--select/--no-select", help="Select the new app file in the profile."),
 ) -> None:
@@ -449,6 +458,7 @@ def init_app(
             oauth_redirect_uris=list(oauth_redirect_uri)
             if oauth_redirect_uri
             else [DEFAULT_OAUTH_CALLBACK],
+            private=private,
         )
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
@@ -459,9 +469,12 @@ def init_app(
     project_dir = Path(dir) if dir else Path(project_name)
     linked_app = app_uuid or app_ctx.profile.app_uuid
     project_uuid = None
+    private_app = private
 
     if linked_app:
-        apps_api.get_app(app_ctx.api_client(), linked_app)
+        remote = apps_api.get_app(app_ctx.api_client(), linked_app).get("data") or {}
+        if isinstance(remote, dict) and remote.get("privateApp"):
+            private_app = True
         try:
             response = projects_api.create_or_get_project(
                 app_ctx.api_client(), linked_app, project_name
@@ -482,6 +495,7 @@ def init_app(
             sample_function=(function.strip() or None),
             runtime=runtime,
             platform_version=platform,
+            private_app=private_app,
             force=force,
         )
     except FileExistsError as exc:

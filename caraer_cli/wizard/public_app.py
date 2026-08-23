@@ -351,8 +351,8 @@ def build_public_app_payload_from_answers(
     *,
     label: str,
     name: str,
-    details: dict[str, Any],
-    brandmark: str,
+    details: dict[str, Any] | None,
+    brandmark: str | None,
     required_scopes: list[str],
     settings_schema: list[dict[str, Any]],
     app_bars: list[dict[str, Any]],
@@ -360,6 +360,7 @@ def build_public_app_payload_from_answers(
     runtime: str = "nodejs22",
     auth_method: str = "OAUTH2",
     oauth_redirect_uris: list[str] | None = None,
+    private: bool = False,
 ) -> dict[str, Any]:
     from caraer_cli.commands.apps import DEFAULT_OAUTH_CALLBACK
 
@@ -376,12 +377,13 @@ def build_public_app_payload_from_answers(
         "authMethod": method,
         "hideApiKeyField": True,
         "oauthRedirectUris": redirects,
-        "brandmark": brandmark,
-        "details": details,
         "requiredScopes": required_scopes,
         "settingsSchema": settings_schema,
         "appBars": app_bars,
     }
+    if not private:
+        payload["brandmark"] = brandmark
+        payload["details"] = details or {}
     payload.update(webhook_controls)
     return payload
 
@@ -399,12 +401,24 @@ def run_public_app_wizard(
     """
     from caraer_cli.project.scaffold import scaffold_app_project
 
-    console.print(Panel.fit("Create Public App Wizard", border_style="magenta"))
+    console.print(Panel.fit("Create App Wizard", border_style="magenta"))
 
     from caraer_cli.commands.apps import DEFAULT_OAUTH_CALLBACK
 
+    private = ask_select(
+        "App visibility",
+        [
+            Choice(title="Public marketplace app", value="public"),
+            Choice(title="Private company app", value="private"),
+        ],
+        default="public",
+    ) == "private"
+
     label, name = _prompt_core()
-    details, brandmark = _prompt_details()
+    details: dict[str, Any] | None = None
+    brandmark: str | None = None
+    if not private:
+        details, brandmark = _prompt_details()
     required_scopes = _prompt_scopes()
     settings_schema = _prompt_settings_schema()
     app_bars = _prompt_app_bars()
@@ -466,6 +480,7 @@ def run_public_app_wizard(
         runtime=resolved_runtime,
         auth_method=auth_method,
         oauth_redirect_uris=oauth_redirect_uris,
+        private=private,
     )
 
     if project_dir.exists() and any(project_dir.iterdir()) and not force:
@@ -481,6 +496,7 @@ def run_public_app_wizard(
         project_name=name,
         sample_function=function_name,
         runtime=resolved_runtime,
+        private_app=private,
         force=True,
     )
     app_file: Path = result["app_file"]

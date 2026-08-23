@@ -234,11 +234,11 @@ def test_pull_aligns_platform_version(tmp_path: Path) -> None:
     client = MagicMock()
     with (
         patch(
-            "caraer_cli.apps_local.apps_api.get_public_app",
+            "caraer_cli.apps_local.apps_api.fetch_app",
             return_value={"data": remote},
         ),
         patch(
-            "caraer_cli.app_sync.apps_api.get_public_app",
+            "caraer_cli.app_sync.apps_api.fetch_app",
             return_value={"data": remote},
         ),
         patch("caraer_cli.app_sync.ensure_linked", side_effect=lambda c, r, cfg, **k: cfg),

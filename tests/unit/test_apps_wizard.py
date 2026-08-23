@@ -100,3 +100,30 @@ def test_build_public_app_payload_from_answers() -> None:
     assert payload["appBars"][0]["location"] == "RECORD_PREVIEW"
     assert payload["webhookRateLimitPerMinute"] == 100
     assert "billFailedWebhookRequests" not in payload
+
+
+def test_build_private_app_placeholder() -> None:
+    payload = build_public_app_placeholder(label="Internal", name="internal", private=True)
+    assert payload["label"] == "Internal"
+    assert payload["name"] == "internal"
+    assert "brandmark" not in payload
+    assert "details" not in payload
+    assert payload["authMethod"] == "OAUTH2"
+    assert "privateApp" not in payload
+
+
+def test_build_private_app_payload_from_answers() -> None:
+    payload = build_public_app_payload_from_answers(
+        label="Internal",
+        name="internal",
+        details=None,
+        brandmark=None,
+        required_scopes=["tools.forms.all"],
+        settings_schema=[],
+        app_bars=[],
+        webhook_controls={},
+        private=True,
+    )
+    assert "brandmark" not in payload
+    assert "details" not in payload
+    assert payload["requiredScopes"] == ["tools.forms.all"]

@@ -4,8 +4,9 @@ description: >-
   Scaffolds, edits, validates, and deploys Caraer Apps V2 projects with the
   caraer CLI (app.caraer.yaml, serverless functions, inbound routes, schedules,
   lifecycle hooks, settings). Use when creating or changing a Caraer
-  public app, marketplace app, serverless function, webhook, inbound route, or
-  when the user mentions caraer apps, app.caraer.yaml, or caraer-cli.
+  public app, private app, marketplace app, serverless function, webhook,
+  inbound route, or when the user mentions caraer apps, app.caraer.yaml, or
+  caraer-cli.
 ---
 
 # Caraer Apps (CLI)
@@ -30,11 +31,16 @@ repo into `~/.cursor/skills/caraer-apps/`.
 1. CLI available: `caraer --version` (Python 3.10+).
 2. Auth + company: `caraer auth login` then `caraer company select <uuid>`.
 3. Work inside an app folder (has `caraer.json`) or pass `--file`.
+4. Company-private apps: `caraer apps init --private` writes `privateApp: true`
+   to `caraer.json`. Push/pull then use `/api/v2/apps/private*`. Skip
+   marketplace listing fields (`brandmark`, `details`). Do not run
+   `caraer publish` for private apps.
 
 ## Golden path
 
 ```bash
 caraer apps init --name my_app --label "My App"
+caraer apps init --private --name internal_tool --label "Internal Tool"
 cd my_app
 # edit src/app/app.caraer.yaml + functions
 caraer apps validate

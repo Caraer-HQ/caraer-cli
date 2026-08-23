@@ -307,7 +307,9 @@ def status_summary(client: CaraerApiClient, root: Path, config: ProjectConfig) -
         try:
             from caraer_cli.api import apps as apps_api
 
-            app_response = apps_api.get_public_app(client, config.appUuid)
+            app_response = apps_api.fetch_app(
+                client, config.appUuid, private=config.privateApp or None
+            )
             if isinstance(app_response.get("data"), dict):
                 remote_app = app_response["data"]
         except Exception:  # noqa: BLE001

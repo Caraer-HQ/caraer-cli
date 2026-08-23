@@ -113,7 +113,7 @@ def ensure_linked(
     elif require_project:
         raise ValueError(
             "Could not create or load a developer project for this app. "
-            "Check that the app has marketplace details, then retry."
+            "Check that you can manage this app as the creator company, then retry."
         )
     return config
 
@@ -131,9 +131,50 @@ def require_project_uuid(
     if not project_uuid:
         raise ValueError(
             "Could not create or load a developer project for this app. "
-            "Check that the app has marketplace details, then retry."
+            "Check that you can manage this app as the creator company, then retry."
         )
     return project_uuid
+
+
+def _persist_visibility(root: Path, config: ProjectConfig, remote: dict[str, Any]) -> ProjectConfig:
+    private = apps_api.is_private_remote(remote)
+    if config.privateApp == private:
+        return config
+    config.privateApp = private
+    save_project_config(workspace_file(root), config)
+    return config
+
+
+def _remote_app_data(
+    client: CaraerApiClient,
+    config: ProjectConfig,
+    *,
+    app_uuid: str | None = None,
+) -> dict[str, Any]:
+    uuid = (app_uuid or config.appUuid or "").strip()
+    if not uuid:
+        return {}
+    response = apps_api.fetch_app(client, uuid, private=config.privateApp or None)
+    data = response.get("data")
+    if not isinstance(data, dict):
+        return {}
+    return data
+
+
+def _private_create_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    details = payload.get("details") if isinstance(payload.get("details"), dict) else {}
+    description = payload.get("description")
+    if not description and isinstance(details, dict):
+        description = details.get("description")
+    body: dict[str, Any] = {
+        "label": payload.get("label"),
+        "description": description,
+        "authMethod": payload.get("authMethod"),
+        "oauthRedirectUris": payload.get("oauthRedirectUris"),
+        "runtime": payload.get("runtime"),
+        "platformVersion": payload.get("platformVersion"),
+    }
+    return {key: value for key, value in body.items() if value is not None}
 
 
 def push_manifest(
@@ -157,9 +198,8 @@ def push_manifest(
         resolve_functions=True,
         strict_function_refs=strict_function_refs,
     )
-    current = apps_api.get_public_app(client, config.appUuid).get("data", {})
-    if not isinstance(current, dict):
-        current = {}
+    current = _remote_app_data(client, config)
+    config = _persist_visibility(root, config, current)
     local_bars = local.get("appBars") if isinstance(local.get("appBars"), list) else []
     current_bars = current.get("appBars") if isinstance(current.get("appBars"), list) else []
     if local_bars:
@@ -167,7 +207,10 @@ def push_manifest(
     merged = deep_merge(dict(current), local)
     if patch:
         merged = deep_merge(merged, patch)
-    response = apps_api.update_public_app(client, config.appUuid, merged)
+    if config.privateApp:
+        response = apps_api.update_private_app(client, config.appUuid, merged)
+    else:
+        response = apps_api.update_public_app(client, config.appUuid, merged)
     data = response.get("data") or {}
     # Keep local app and app-bar UUIDs in sync with the remote nodes.
     remote_bars = data.get("appBars") if isinstance(data.get("appBars"), list) else []
@@ -194,8 +237,20 @@ def create_app_from_manifest(
         if config.runtime != runtime:
             config.runtime = runtime
             save_project_config(workspace_file(root), config)
-    response = apps_api.create_public_app(client, payload)
-    data = response.get("data") or {}
+    if config.privateApp:
+        created = apps_api.create_private_app(
+            client, _private_create_payload(payload)
+        )
+        data = created.get("data") or {}
+        created_uuid = data.get("uuid")
+        if created_uuid:
+            config.appUuid = str(created_uuid)
+            save_project_config(workspace_file(root), config)
+            response = apps_api.update_private_app(client, str(created_uuid), payload)
+            data = response.get("data") or data
+    else:
+        response = apps_api.create_public_app(client, payload)
+        data = response.get("data") or {}
     created_uuid = data.get("uuid")
     if created_uuid:
         config.appUuid = str(created_uuid)
@@ -650,10 +705,8 @@ def pull_app_full(
         config.appUuid = linked_uuid
         dirty = True
 
-    # Align local platformVersion / runtime with the remote AppDTO.
-    remote_full = apps_api.get_public_app(client, linked_uuid).get("data") or {}
-    if not isinstance(remote_full, dict):
-        remote_full = {}
+    # Align local platformVersion / runtime / visibility with the remote AppDTO.
+    remote_full = _remote_app_data(client, config, app_uuid=linked_uuid)
     remote_platform = remote_full.get("platformVersion")
     if remote_platform == 2 or remote_platform == "2":
         if config.platformVersion != PLATFORM_VERSION:
@@ -669,6 +722,10 @@ def pull_app_full(
         if normalized in {"nodejs22", "python312"} and config.runtime != normalized:
             config.runtime = normalized
             dirty = True
+    remote_private = apps_api.is_private_remote(remote_full)
+    if config.privateApp != remote_private:
+        config.privateApp = remote_private
+        dirty = True
     if dirty:
         save_project_config(workspace_file(root), config)
     ensure_linked(client, root, config, app_uuid=linked_uuid)

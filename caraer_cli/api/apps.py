@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from caraer_cli.api.client import CaraerApiClient
+from caraer_cli.errors import ApiError
 
 
 def list_apps(
@@ -55,6 +56,41 @@ def create_public_app(client: CaraerApiClient, payload: dict[str, Any]) -> dict[
 
 def update_public_app(client: CaraerApiClient, app_uuid: str, payload: dict[str, Any]) -> dict[str, Any]:
     return client.request("PUT", f"/api/v2/apps/public/{app_uuid}", json_body=payload)
+
+
+def create_private_app(client: CaraerApiClient, payload: dict[str, Any]) -> dict[str, Any]:
+    return client.request("POST", "/api/v2/apps/private", json_body=payload)
+
+
+def update_private_app(client: CaraerApiClient, app_uuid: str, payload: dict[str, Any]) -> dict[str, Any]:
+    return client.request("PUT", f"/api/v2/apps/private/{app_uuid}", json_body=payload)
+
+
+def fetch_app(
+    client: CaraerApiClient,
+    app_uuid: str,
+    *,
+    private: bool | None = None,
+) -> dict[str, Any]:
+    """Load a remote app DTO.
+
+    Public creator view is ``GET /apps/public/{uuid}``. That 404s for private
+    apps, so those (or an unknown visibility) fall back to ``GET /apps/{uuid}``.
+    """
+    if private is True:
+        return get_app(client, app_uuid)
+    if private is False:
+        return get_public_app(client, app_uuid)
+    try:
+        return get_public_app(client, app_uuid)
+    except ApiError as exc:
+        if exc.status == 404:
+            return get_app(client, app_uuid)
+        raise
+
+
+def is_private_remote(data: dict[str, Any] | None) -> bool:
+    return bool(isinstance(data, dict) and data.get("privateApp"))
 
 
 def submit_for_review(client: CaraerApiClient, app_uuid: str) -> dict[str, Any]:

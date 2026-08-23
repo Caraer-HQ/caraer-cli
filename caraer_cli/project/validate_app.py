@@ -399,13 +399,22 @@ def _validate_manifest(
     if not label:
         _issue(issues, "error", f"{rel_manifest}:label", "label is required.")
 
-    _require_svg_url(
-        issues,
-        rel_manifest,
-        "brandmark",
-        manifest.get("brandmark"),
-        required_message="brandmark is required.",
-    )
+    if not config.privateApp:
+        _require_svg_url(
+            issues,
+            rel_manifest,
+            "brandmark",
+            manifest.get("brandmark"),
+            required_message="brandmark is required.",
+        )
+    elif manifest.get("brandmark"):
+        _require_svg_url(
+            issues,
+            rel_manifest,
+            "brandmark",
+            manifest.get("brandmark"),
+            required_message="brandmark is required.",
+        )
 
     uuid = str(manifest.get("uuid") or "").strip()
     if uuid and not UUID_RE.match(uuid):
@@ -468,6 +477,8 @@ def _validate_manifest(
 
     details = manifest.get("details")
     if details is None:
+        if config.privateApp:
+            return
         _issue(
             issues,
             "error",
@@ -484,11 +495,12 @@ def _validate_manifest(
         )
         return
 
+    require_listing = not config.privateApp
     category_raw = details.get("category")
     category = _resolve_main_category(str(category_raw) if category_raw is not None else None)
-    if not category_raw or not str(category_raw).strip():
+    if (not category_raw or not str(category_raw).strip()) and require_listing:
         _issue(issues, "error", f"{rel_manifest}:details.category", "category is required.")
-    elif category is None:
+    elif category_raw and category is None:
         _issue(
             issues,
             "error",
@@ -497,9 +509,9 @@ def _validate_manifest(
         )
 
     brand = str(details.get("brandColor") or "").strip()
-    if not brand:
+    if not brand and require_listing:
         _issue(issues, "error", f"{rel_manifest}:details.brandColor", "brandColor is required.")
-    elif not HEX_COLOR_RE.match(brand):
+    elif brand and not HEX_COLOR_RE.match(brand):
         _issue(
             issues,
             "error",
@@ -542,7 +554,7 @@ def _validate_manifest(
                 f"{rel_manifest}:details.subcategories",
                 f"Invalid for '{category}': {', '.join(invalid)}.",
             )
-        if not subs_list and category not in LEGACY_ONLY_MAIN:
+        if require_listing and not subs_list and category not in LEGACY_ONLY_MAIN:
             _issue(
                 issues,
                 "warning",
@@ -551,7 +563,7 @@ def _validate_manifest(
             )
 
     description = str(details.get("description") or "").strip()
-    if not description:
+    if require_listing and not description:
         _issue(
             issues,
             "warning",
@@ -575,13 +587,14 @@ def _validate_manifest(
             "url must be an http(s) URL when set.",
         )
 
-    _require_svg_url(
-        issues,
-        rel_manifest,
-        "details.image",
-        details.get("image"),
-        required_message="image is required.",
-    )
+    if require_listing or details.get("image"):
+        _require_svg_url(
+            issues,
+            rel_manifest,
+            "details.image",
+            details.get("image"),
+            required_message="image is required.",
+        )
 
 
 def _validate_functions(
@@ -1327,8 +1340,9 @@ def _validate_against_json_schemas(
             _issue(issues, "warning", rel, f"JSON Schema check failed: {exc}")
 
     try:
-        manifest = load_local_app(app_manifest_path(root, config.srcDir))
-        check("app", str(app_manifest_path(root, config.srcDir).relative_to(root)), manifest)
+        if not config.privateApp:
+            manifest = load_local_app(app_manifest_path(root, config.srcDir))
+            check("app", str(app_manifest_path(root, config.srcDir).relative_to(root)), manifest)
     except Exception:  # noqa: BLE001
         pass
 

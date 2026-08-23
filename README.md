@@ -8,7 +8,7 @@ the Caraer API as a thin client — no GCP credentials are required on your mach
 ## Requirements
 
 - **Python 3.10+**
-- A Caraer account with access to a company that can create public apps
+- A Caraer account with access to a company that can create apps
 
 ## Install
 
@@ -70,6 +70,7 @@ Create a new local app and push everything in one step:
 
 ```bash
 caraer apps init --label "My App"
+caraer apps init --private --label "Internal Tool" --auth-method API_KEY
 cd my_app
 # edit src/app/app.caraer.yaml, src/app/functions/, src/app/webhooks/
 caraer apps push --deploy       # prompts for version (> previous) + release notes
@@ -88,9 +89,13 @@ New apps default to workspace `platformVersion: 2026.2` (App platform V2: one as
 container runtime per app). Use `caraer apps init --platform 2026.1` only for the
 legacy per-function Cloud Functions model. See [docs/platform_versioning.md](docs/platform_versioning.md).
 
-`apps push` syncs the full app: marketplace manifest (including settings),
-functions, webhooks, schedules, inbound routes, and external OAuth providers.
-There is no separate upload command.
+`apps push` syncs the full app: marketplace or private-app manifest (including
+settings), functions, webhooks, schedules, inbound routes, and external OAuth
+providers. There is no separate upload command. Use `--private` on `apps init`
+(or `caraer.json` `privateApp: true`) so create/update go to
+`/api/v2/apps/private*`. Public apps still use `/api/v2/apps/public*`.
+Private apps are auto-installed for the creating company and cannot be
+submitted with `caraer publish`.
 
 Add local scaffolds inside an app folder:
 

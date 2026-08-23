@@ -411,3 +411,36 @@ def test_validate_settings_sections_unassigned_warning(tmp_path: Path) -> None:
         i.severity == "warning" and "Other settings" in i.message
         for i in report.issues
     )
+
+
+def test_validate_private_app_skips_marketplace_listing_fields(tmp_path: Path) -> None:
+    save_project_config(
+        tmp_path / "caraer.json",
+        ProjectConfig(
+            platformVersion="2026.2",
+            name="internal",
+            runtime="nodejs22",
+            privateApp=True,
+        ),
+    )
+    path = tmp_path / "src" / "app" / "app.caraer.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "label": "Internal",
+                "name": "internal",
+                "runtime": "nodejs22",
+                "authMethod": "API_KEY",
+                "requiredScopes": [],
+                "settingsSchema": [],
+                "appBars": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    _write_function(tmp_path)
+    report = validate_local_app(tmp_path)
+    assert report.ok
+    assert not any(i.path.endswith(":brandmark") for i in report.issues)
+    assert not any(i.path.endswith(":details") for i in report.issues)

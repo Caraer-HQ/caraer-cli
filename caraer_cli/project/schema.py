@@ -51,6 +51,8 @@ class ProjectConfig(BaseModel):
     autoDeploy: bool = False
     # App-level runtime for platform 2026.2 / App.platformVersion 2.
     runtime: str | None = None
+    # Company-private apps use POST/PUT /api/v2/apps/private*.
+    privateApp: bool = False
 
     @field_validator("platformVersion")
     @classmethod
@@ -107,6 +109,8 @@ def save_project_config(path: Path, config: ProjectConfig) -> None:
     # Omit null runtime for cleaner V1 files.
     if payload.get("runtime") is None:
         payload.pop("runtime", None)
+    if not payload.get("privateApp"):
+        payload.pop("privateApp", None)
     target.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     legacy = target.parent / LEGACY_PROJECT_FILE
     if legacy.is_file() and legacy.resolve() != target.resolve():

@@ -96,7 +96,7 @@ def test_build_push_plan_detects_update_and_remote_only(tmp_path: Path) -> None:
     client = MagicMock()
     with (
         patch(
-            "caraer_cli.project.push_plan.apps_api.get_public_app",
+            "caraer_cli.project.push_plan.apps_api.fetch_app",
             return_value={
                 "data": {
                     "uuid": "app-1",
@@ -156,7 +156,7 @@ def test_build_push_plan_detects_update_and_remote_only(tmp_path: Path) -> None:
     plan_delete = None
     with (
         patch(
-            "caraer_cli.project.push_plan.apps_api.get_public_app",
+            "caraer_cli.project.push_plan.apps_api.fetch_app",
             return_value={
                 "data": {
                     "uuid": "app-1",

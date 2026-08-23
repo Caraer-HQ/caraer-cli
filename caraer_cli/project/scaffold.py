@@ -393,6 +393,7 @@ def scaffold_app_project(
     sample_function: str | None = "hello-world",
     runtime: str = "nodejs22",
     platform_version: str = PLATFORM_VERSION,
+    private_app: bool = False,
     force: bool = False,
 ) -> dict[str, Any]:
     """
@@ -422,6 +423,7 @@ def scaffold_app_project(
         appUuid=app_uuid,
         srcDir=src_dir,
         runtime=runtime if platform_version == PLATFORM_VERSION else None,
+        privateApp=private_app,
     )
     save_project_config(config_path, config)
     if project_uuid:

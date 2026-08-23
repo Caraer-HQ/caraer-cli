@@ -122,7 +122,7 @@ def _fetch_remote_app(client: CaraerApiClient, app_uuid: str | None) -> dict[str
     if not app_uuid:
         return {}
     try:
-        response = apps_api.get_public_app(client, app_uuid)
+        response = apps_api.fetch_app(client, app_uuid)
         data = response.get("data")
         return data if isinstance(data, dict) else {}
     except Exception:  # noqa: BLE001

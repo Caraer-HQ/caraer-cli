@@ -27,6 +27,8 @@ Headers:
 - `POST /api/v2/apps/public`
 - `GET /api/v2/apps/public/{uuid}`
 - `PUT /api/v2/apps/public/{uuid}`
+- `POST /api/v2/apps/private`
+- `PUT /api/v2/apps/private/{uuid}`
 
 ## Publish and review
 

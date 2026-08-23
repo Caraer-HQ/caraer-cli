@@ -166,6 +166,7 @@ def write_pulled_app(
     force: bool = True,
     platform_version: str | None = None,
     runtime: str | None = None,
+    private_app: bool = False,
 ) -> Path:
     """Write payload to target, scaffolding an app folder around it when needed."""
     from caraer_cli.project.schema import PLATFORM_VERSION, PLATFORM_VERSION_V1
@@ -192,6 +193,7 @@ def write_pulled_app(
                 sample_function=None,
                 runtime=resolved_runtime,
                 platform_version=resolved_platform,
+                private_app=private_app,
                 force=force,
             )
             return app_manifest_path(project_root).resolve()
@@ -224,13 +226,14 @@ def pull_remote_app(
     existing_app_file: str | None = None,
     force: bool = True,
 ) -> tuple[dict[str, Any], Path]:
-    """Fetch a remote public app and write it to a local app.caraer.yaml."""
+    """Fetch a remote app and write it to a local app.caraer.yaml."""
     from caraer_cli.project.schema import PLATFORM_VERSION, PLATFORM_VERSION_V1
 
-    response = apps_api.get_public_app(client, app_uuid)
+    response = apps_api.fetch_app(client, app_uuid)
     data = response.get("data")
     if not isinstance(data, dict):
         raise ValueError("Remote app payload was not an object.")
+    private_app = bool(data.get("privateApp"))
     payload = sanitize_remote_app_payload(data)
     if not payload.get("uuid"):
         payload["uuid"] = app_uuid
@@ -271,5 +274,6 @@ def pull_remote_app(
         force=force,
         platform_version=platform_version,
         runtime=str(runtime) if runtime else None,
+        private_app=private_app,
     )
     return payload, written
