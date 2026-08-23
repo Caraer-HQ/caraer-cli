@@ -306,13 +306,13 @@ Example every 12 hours:
 Define `appBars` in `app.caraer.yaml` when needed (no `add app-bar` scaffold).
 Action locations can use SERVERLESS without `iframeUrl`:
 
-- `RECORD_PREVIEW`, `RECORD_OVERVIEW`, `RECORD_DETAIL`, `TOOL_BAR`, `TRAIT_BAR`
+- `RECORD_PREVIEW`, `RECORD_OVERVIEW`, `RECORD_TRAIT`, `RECORD_DETAIL`, `TOOL_BAR`, `TRAIT_BAR`
 
 Wire `webhook.serverlessFunction.name` to a local function folder name.
 
 ### Action dialogs
 
-`RECORD_PREVIEW` and `RECORD_OVERVIEW` are actions. Give the bar its own
+`RECORD_PREVIEW`, `RECORD_OVERVIEW`, and `RECORD_TRAIT` are actions. Give the bar its own
 `settingsSchema` and Caraer shows it as a dialog before triggering the webhook —
 that is how an action collects input (including a `FILE` upload):
 

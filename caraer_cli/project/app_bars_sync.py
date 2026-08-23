@@ -24,7 +24,9 @@ LOCAL_APP_BAR_KEYS = (
     "webhook",
 )
 
-ACTION_BASED_LOCATIONS = frozenset({"RECORD_PREVIEW", "RECORD_OVERVIEW"})
+ACTION_BASED_LOCATIONS = frozenset(
+    {"RECORD_PREVIEW", "RECORD_OVERVIEW", "RECORD_TRAIT"}
+)
 
 
 def _slug(value: str) -> str:

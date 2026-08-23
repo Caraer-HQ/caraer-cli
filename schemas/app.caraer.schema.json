@@ -379,9 +379,10 @@
             "RECORD_OVERVIEW",
             "RECORD_DETAIL",
             "TOOL_BAR",
-            "TRAIT_BAR"
+            "TRAIT_BAR",
+            "RECORD_TRAIT"
           ],
-          "description": "RECORD_PREVIEW and RECORD_OVERVIEW are action dialogs (webhook + optional settingsSchema). RECORD_DETAIL, TOOL_BAR, and TRAIT_BAR are iframe surfaces (iframeUrl)."
+          "description": "RECORD_PREVIEW, RECORD_OVERVIEW, and RECORD_TRAIT are action dialogs (webhook + optional settingsSchema). RECORD_DETAIL, TOOL_BAR, and TRAIT_BAR are iframe surfaces (iframeUrl)."
         },
         "uuid": {
           "type": "string",

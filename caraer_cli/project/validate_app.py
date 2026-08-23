@@ -68,9 +68,18 @@ VALUELESS_CONDITION_OPERATORS = frozenset({"IS_SET", "IS_NOT_SET"})
 LIST_CONDITION_OPERATORS = frozenset({"IN", "NOT_IN"})
 SETTING_FIELD_NAME_RE = re.compile(r"^[a-z]+(?:_[a-z]+)*$")
 APP_BAR_LOCATIONS = frozenset(
-    {"RECORD_PREVIEW", "RECORD_OVERVIEW", "RECORD_DETAIL", "TOOL_BAR", "TRAIT_BAR"}
+    {
+        "RECORD_PREVIEW",
+        "RECORD_OVERVIEW",
+        "RECORD_DETAIL",
+        "TOOL_BAR",
+        "TRAIT_BAR",
+        "RECORD_TRAIT",
+    }
 )
-ACTION_BASED_LOCATIONS = frozenset({"RECORD_PREVIEW", "RECORD_OVERVIEW"})
+ACTION_BASED_LOCATIONS = frozenset(
+    {"RECORD_PREVIEW", "RECORD_OVERVIEW", "RECORD_TRAIT"}
+)
 
 # Mirrors AppCategoryCatalog main keys + legacy aliases accepted by the backend.
 MAIN_CATEGORIES: dict[str, frozenset[str]] = {

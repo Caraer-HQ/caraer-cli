@@ -150,9 +150,10 @@ APP_BAR_LOCATIONS: tuple[tuple[str, str], ...] = (
     ("RECORD_DETAIL", "Record detail (iframe)"),
     ("TOOL_BAR", "Tool bar (iframe)"),
     ("TRAIT_BAR", "Trait bar (iframe)"),
+    ("RECORD_TRAIT", "Record trait (action)"),
 )
 
-ACTION_BASED_LOCATIONS = {"RECORD_PREVIEW", "RECORD_OVERVIEW"}
+ACTION_BASED_LOCATIONS = {"RECORD_PREVIEW", "RECORD_OVERVIEW", "RECORD_TRAIT"}
 
 SETTING_FIELD_TYPES: tuple[tuple[str, str], ...] = (
     ("SINGLE_LINE", "Single line text"),
