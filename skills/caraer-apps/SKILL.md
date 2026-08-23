@@ -83,10 +83,15 @@ e.g. `LifecyclePayload`, `WebhookPayload`, `SchedulePayload`. Do **not** run
 description); a folder with `index.js` / `main.py` is a function named after
 the folder.
 
-Do **not** add a `# yaml-language-server: $schema=…` line pointing at
-`raw.githubusercontent.com`: caraer-cli is private, so an editor can only report
-that the schema failed to load. `caraer apps validate` checks the manifest
-against the schemas bundled with the CLI (`schemas/*.caraer.schema.json`).
+Add this line at the top of `app.caraer.yaml` so the editor loads the public
+schema (also emitted by `caraer apps init`):
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Caraer-HQ/caraer-app-schemas/main/schemas/app.caraer.schema.json
+```
+
+Browse the schemas at [Caraer-HQ/caraer-app-schemas](https://github.com/Caraer-HQ/caraer-app-schemas).
+`caraer apps validate` still uses the copies bundled with the CLI.
 
 Reference example: `examples/webhook-inbox` in the caraer-cli repo.
 

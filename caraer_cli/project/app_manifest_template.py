@@ -6,6 +6,8 @@ from typing import Any
 
 import yaml
 
+from caraer_cli.project.json_schemas import APP_MANIFEST_SCHEMA_URL
+
 APP_MANIFEST_YAML = "app.caraer.yaml"
 APP_MANIFEST_JSON = "app.caraer.json"  # legacy; still loaded if present
 APP_MANIFEST_NAMES = (APP_MANIFEST_YAML, APP_MANIFEST_JSON, "app.yaml", "app.yml", "app.json")
@@ -32,20 +34,24 @@ _EXAMPLE_APP_BARS = """\
 def render_app_manifest(payload: dict[str, Any], *, include_examples: bool = True) -> str:
     """Serialize an app manifest as YAML, optionally with commented-out examples.
 
-    No ``# yaml-language-server`` schema directive is emitted: the schemas live in
-    a private repo, so editors could only ever report a load failure on it.
-    ``caraer apps validate`` checks the manifest against the bundled schemas.
+    Prefixes a public ``# yaml-language-server: $schema=…`` line so editors can
+    load the schema from Caraer-HQ/caraer-app-schemas. ``caraer apps validate``
+    still checks against the schemas bundled with the CLI.
     """
     data = dict(payload)
     for key in ("requiredScopes", "settingsSchema", "appBars"):
         data.setdefault(key, [])
 
-    body = yaml.safe_dump(
-        data,
-        sort_keys=False,
-        allow_unicode=True,
-        default_flow_style=False,
-    ).rstrip() + "\n"
+    body = (
+        f"# yaml-language-server: $schema={APP_MANIFEST_SCHEMA_URL}\n"
+        + yaml.safe_dump(
+            data,
+            sort_keys=False,
+            allow_unicode=True,
+            default_flow_style=False,
+        ).rstrip()
+        + "\n"
+    )
     if not include_examples:
         return body
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/caraer/caraer-cli/main/schemas/schedule.caraer.schema.json",
+  "$id": "https://raw.githubusercontent.com/Caraer-HQ/caraer-app-schemas/main/schemas/schedule.caraer.schema.json",
   "title": "Caraer schedule config",
   "type": "object",
   "required": ["name", "schedule", "serverlessFunction"],

@@ -22,6 +22,11 @@ def test_render_app_manifest_yaml_with_examples(tmp_path: Path) -> None:
     path = tmp_path / "app.caraer.yaml"
     path.write_text(text, encoding="utf-8")
     assert "pricingPlans" not in text
+    assert (
+        "# yaml-language-server: $schema="
+        "https://raw.githubusercontent.com/Caraer-HQ/caraer-app-schemas"
+        "/main/schemas/app.caraer.schema.json"
+    ) in text
     assert "# Edit appBars above when needed" in text
     loaded = load_local_app(path)
     assert loaded["name"] == "demo"

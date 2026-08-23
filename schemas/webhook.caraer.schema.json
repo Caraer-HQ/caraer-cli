@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/caraer/caraer-cli/main/schemas/webhook.caraer.schema.json",
+  "$id": "https://raw.githubusercontent.com/Caraer-HQ/caraer-app-schemas/main/schemas/webhook.caraer.schema.json",
   "title": "Caraer webhook config",
   "type": "object",
   "required": ["topic", "deliveryMode"],

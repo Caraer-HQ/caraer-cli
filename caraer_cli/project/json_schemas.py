@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_REPO_BASE = (
-    "https://raw.githubusercontent.com/caraer/caraer-cli/main/schemas"
+    "https://raw.githubusercontent.com/Caraer-HQ/caraer-app-schemas/main/schemas"
 )
 
 APP_MANIFEST_SCHEMA_URL = f"{SCHEMA_REPO_BASE}/app.caraer.schema.json"

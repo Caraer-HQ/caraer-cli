@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- App scaffolds write a public `# yaml-language-server: $schema=…` line that
+  loads [Caraer-HQ/caraer-app-schemas](https://github.com/Caraer-HQ/caraer-app-schemas)
 - Removed `caraer apps migrate-v2`. Existing V1 apps are migrated via the backend
   Neo4j migration `apps-platform-v2` (`run-migration apps-platform-v2 up`).
 - **Deprecated:** `caraer apps typegen` no longer writes `src/types/`. Import
