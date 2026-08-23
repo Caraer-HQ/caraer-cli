@@ -7,8 +7,12 @@ marketplace modules.
 
 | `authMethod` | Use when | Notes |
 |--------------|----------|-------|
-| `API_KEY` | App needs `installationToken` for state/secrets/jobs | Typical for integrations |
+| `API_KEY` | Installers get a long-lived API key (optional UI field) | Typical for integrations |
 | `OAUTH2` | Install uses Caraer OAuth app flow | Set `oauthRedirectUris` |
+
+Both methods inject a short-lived `inst_…` `installationToken` into webhook,
+lifecycle, and app-bar payloads (about 1 hour). That token is the runtime
+Bearer. It is not the API key.
 
 Set `hideApiKeyField: true` (CLI scaffold default) to hide the installation API
 key from the Caraer UI. Use `false` only when installers must copy the key.

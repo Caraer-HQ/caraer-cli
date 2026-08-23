@@ -116,7 +116,8 @@ Ask only what blocks design:
 
 - Trigger: inbound HTTP, schedule, record event, or install lifecycle?
 - Runtime: `nodejs22` (default) or `python312`?
-- Need installation state/secrets? → `authMethod: API_KEY` (gets `installationToken`).
+- Need installation state/secrets/jobs? Either `API_KEY` or `OAUTH2`. Webhooks
+  inject a short-lived `inst_…` `installationToken` (about 1h), not the API key.
   Prefer `hideApiKeyField: true` so installers do not see the API key in the UI.
 - Need Caraer user OAuth app install? → `OAUTH2` + redirect URIs.
 - External provider (Google, etc.)? → `externalOAuthProviders` + `${ENV}` secrets.
@@ -163,8 +164,8 @@ Installation settings are for **admins installing the app**, not developers.
   `require("../../shared")` / `require("../../shared/<file>")` from
   `functions/<name>/index.js` (platform 2026.2 build pushes only).
 - Read settings via flattened `body.settingsSchema` (`name` → `value`).
-- Use `body.installationToken` + `body.appUuid` for
-  `/v2/apps/{appUuid}/installation/state|secrets|jobs`.
+- Use `body.installationToken` (short-lived `inst_…` Bearer) + `body.appUuid`
+  for `/v2/apps/{appUuid}/installation/state|secrets|jobs`.
 - Prefer `body.caraerApiBase` when calling Caraer APIs.
 - The pushed build archive is the source of truth for V2 runtimes: the
   platform keeps function metadata only, not code. Editing function code in
