@@ -7,6 +7,7 @@ from caraer_cli.commands import (
     apps,
     auth,
     company,
+    pricing,
     profile,
     publish,
     sandbox,
@@ -29,6 +30,7 @@ app.add_typer(auth.app, name="auth")
 app.add_typer(company.app, name="company")
 app.add_typer(apps.app, name="apps")
 app.add_typer(webhooks.app, name="webhooks")
+app.add_typer(pricing.app, name="pricing")
 app.add_typer(publish.app, name="publish")
 app.add_typer(sandbox.app, name="sandbox")
 app.add_typer(profile.app, name="profile")

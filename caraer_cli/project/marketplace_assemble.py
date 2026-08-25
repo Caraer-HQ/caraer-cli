@@ -90,7 +90,6 @@ def assemble_local_manifest(
     When ``strict_function_refs`` is False, hooks/bars that cannot resolve are omitted.
     """
     out = dict(local)
-    out.pop("pricingPlans", None)
     out.pop("billFailedWebhookRequests", None)
     fn_by_name = _fn_by_name(root) if resolve_functions else {}
     fn_meta_by_name = _fn_meta_by_name(root) if resolve_functions else {}
@@ -174,7 +173,6 @@ def split_marketplace_to_disk(
 ) -> dict[str, Any]:
     """Write modular files from a remote/local payload and clear arrays/hooks in YAML copy."""
     out = dict(payload)
-    out.pop("pricingPlans", None)
     out.pop("billFailedWebhookRequests", None)
 
     settings = out.get("settingsSchema") if isinstance(out.get("settingsSchema"), list) else []
