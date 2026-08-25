@@ -95,3 +95,38 @@ def is_private_remote(data: dict[str, Any] | None) -> bool:
 
 def submit_for_review(client: CaraerApiClient, app_uuid: str) -> dict[str, Any]:
     return client.request("POST", f"/api/v2/apps/public/{app_uuid}/submit")
+
+
+def review_public_app(
+    client: CaraerApiClient,
+    app_uuid: str,
+    *,
+    publish_state: str | None = None,
+    feedback: str | None = None,
+    reviewer_notes: str | None = None,
+) -> dict[str, Any]:
+    body: dict[str, Any] = {}
+    if publish_state is not None:
+        body["publishState"] = publish_state
+    if feedback is not None:
+        body["feedback"] = feedback
+    if reviewer_notes is not None:
+        body["reviewerNotes"] = reviewer_notes
+    return client.request(
+        "POST",
+        f"/api/v2/apps/public/{app_uuid}/review",
+        json_body=body,
+    )
+
+
+def review_queue(
+    client: CaraerApiClient,
+    *,
+    states: str | None = None,
+    page: int = 1,
+    limit: int = 50,
+) -> dict[str, Any]:
+    params: dict[str, Any] = {"page": page, "limit": limit}
+    if states:
+        params["states"] = states
+    return client.request("GET", "/api/v2/apps/public/review-queue", params=params)

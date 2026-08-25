@@ -56,3 +56,53 @@ def status(
         # reviewerNotes are SUPER_ADMIN-only; drop defensively if ever present.
         publish_data = {k: v for k, v in publish_data.items() if k != "reviewerNotes"}
     print_data(publish_data, app_ctx.output)
+
+
+@app.command("review")
+def review(
+    ctx: typer.Context,
+    app_uuid: str | None = typer.Option(None, "--app", "--app-uuid", help="App UUID."),
+    publish_state: str = typer.Option(
+        ...,
+        "--state",
+        help="IN_REVIEW|APPROVED|PUBLISHED|REJECTED|CHANGES_REQUESTED|UNPUBLISHED",
+    ),
+    feedback: str | None = typer.Option(None, "--feedback", help="Creator-visible feedback."),
+    reviewer_notes: str | None = typer.Option(
+        None, "--notes", help="Internal reviewer notes (SUPER_ADMIN)."
+    ),
+) -> None:
+    """Review a public app (SUPER_ADMIN / Caraer BV ops)."""
+    app_ctx: AppContext = ctx.obj
+    resolved = resolve_app_uuid(app_ctx, app_uuid)
+    response = apps_api.review_public_app(
+        app_ctx.api_client(),
+        resolved,
+        publish_state=publish_state,
+        feedback=feedback,
+        reviewer_notes=reviewer_notes,
+    )
+    print_success(f"Reviewed app → {publish_state}.")
+    print_data(response.get("data"), app_ctx.output)
+
+
+@app.command("queue")
+def queue(
+    ctx: typer.Context,
+    states: str = typer.Option(
+        "SUBMITTED,IN_REVIEW",
+        "--states",
+        help="Comma-separated publish states.",
+    ),
+    page: int = typer.Option(1, "--page"),
+    limit: int = typer.Option(50, "--limit"),
+) -> None:
+    """List apps in the Caraer BV review queue (SUPER_ADMIN)."""
+    app_ctx: AppContext = ctx.obj
+    response = apps_api.review_queue(
+        app_ctx.api_client(),
+        states=states,
+        page=page,
+        limit=limit,
+    )
+    print_data(response.get("data"), app_ctx.output)
