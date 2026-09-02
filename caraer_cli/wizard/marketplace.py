@@ -401,9 +401,13 @@ def prompt_setting_field(
         )
 
     resolved_required = (
-        required
-        if required is not None
-        else (ask_confirm("Required?", default=False) if interactive else False)
+        False
+        if resolved_type == "ACTION"
+        else (
+            required
+            if required is not None
+            else (ask_confirm("Required?", default=False) if interactive else False)
+        )
     )
     resolved_help = (
         help_text
@@ -431,8 +435,8 @@ def prompt_setting_field(
     if conditions:
         field["visibleWhen"] = conditions
 
-    # SECRET: no defaultValue in schema (write-only at install time).
-    if resolved_type != "SECRET":
+    # SECRET / ACTION: no stored default value.
+    if resolved_type not in {"SECRET", "ACTION"}:
         resolved_default = (
             default_value
             if default_value is not None
@@ -458,6 +462,28 @@ def prompt_setting_field(
             "[dim]Installer picks the object/property at install time — "
             "no static options needed.[/dim]"
         )
+        return field
+
+    if resolved_type == "ACTION":
+        source, scaffold_name = _prompt_options_source(
+            field_name=resolved_name,
+            function_choices=function_choices,
+            sibling_names=sibling_setting_names,
+            offer_scaffold=offer_options_scaffold,
+            options_function=options_function,
+            depends_on=None,
+        )
+        field["actionSource"] = {
+            "type": "SERVERLESS",
+            "serverlessFunctionName": source.get("serverlessFunctionName"),
+            "enqueue": True,
+        }
+        if source.get("serverlessFunctionUuid"):
+            field["actionSource"]["serverlessFunctionUuid"] = source[
+                "serverlessFunctionUuid"
+            ]
+        if scaffold_name:
+            field["_scaffoldOptionsFunction"] = scaffold_name
         return field
 
     if resolved_type == "MAPPING":

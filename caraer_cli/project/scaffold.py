@@ -25,7 +25,7 @@ def scaffold_webhook(
     root: Path,
     config: ProjectConfig,
     *,
-    topic: str = "record.created",
+    topic: str = "record.candidate.created",
     function_name: str | None = None,
     delivery_mode: str = "SERVERLESS",
     url: str | None = None,

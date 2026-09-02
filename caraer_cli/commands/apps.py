@@ -771,33 +771,6 @@ def app_status(ctx: typer.Context) -> None:
     print_data(status_summary(app_ctx.api_client(), root, config), app_ctx.output)
 
 
-@app.command("typegen")
-def typegen(
-    ctx: typer.Context,
-    file: str | None = typer.Option(
-        None,
-        "--file",
-        "-f",
-        help="Deprecated. Ignored — payload types ship in the Caraer clients.",
-    ),
-    force: bool = typer.Option(
-        False,
-        "--force",
-        help="Deprecated. Ignored — this command no longer writes files.",
-    ),
-) -> None:
-    """Deprecated: import payload types from @caraer/client / caraer-client instead."""
-    from caraer_cli.formatters.output import print_warning
-
-    _ = (ctx, file, force)
-    print_warning(
-        "'caraer apps typegen' is deprecated and no longer writes src/types/. "
-        "Import payload helpers from the Caraer clients instead:\n"
-        "  Node:   import type { LifecyclePayload } from '@caraer/client'\n"
-        "  Python: from caraer_client import LifecyclePayload"
-    )
-
-
 @app.command("validate")
 def validate_app(
     ctx: typer.Context,

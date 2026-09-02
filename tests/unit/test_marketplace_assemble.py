@@ -99,6 +99,49 @@ def test_resolve_setting_options_source_by_name(tmp_path: Path) -> None:
     assert source["serverlessFunctionName"] == "list-calendars"
 
 
+def test_resolve_setting_action_source_by_name(tmp_path: Path) -> None:
+    root = tmp_path / "demo"
+    scaffold_app_project(
+        root,
+        app_payload=build_public_app_placeholder(label="Demo", name="demo"),
+        sample_function=None,
+        force=True,
+    )
+    config = load_workspace(root)
+    save_state(
+        root,
+        {
+            "functions": {
+                "google-sync": {"uuid": "fn-sync-uuid"},
+                "on-install": {"uuid": "fn-install-uuid"},
+                "on-uninstall": {"uuid": "fn-uninstall-uuid"},
+                "on-rotate": {"uuid": "fn-rotate-uuid"},
+                "on-update": {"uuid": "fn-update-uuid"},
+            }
+        },
+    )
+    local = {
+        "name": "demo",
+        "settingsSchema": [
+            {
+                "name": "resync",
+                "label": "Resync",
+                "type": "ACTION",
+                "actionSource": {
+                    "type": "SERVERLESS",
+                    "serverlessFunctionName": "google-sync",
+                    "enqueue": True,
+                },
+            }
+        ],
+        "appBars": [],
+    }
+    assembled = assemble_local_manifest(root, config, local, resolve_functions=True)
+    source = assembled["settingsSchema"][0]["actionSource"]
+    assert source["serverlessFunctionUuid"] == "fn-sync-uuid"
+    assert source["serverlessFunctionName"] == "google-sync"
+
+
 def test_split_and_lifecycle_resolve(tmp_path: Path) -> None:
     root = tmp_path / "demo"
     result = scaffold_app_project(

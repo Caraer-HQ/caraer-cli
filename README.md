@@ -102,7 +102,7 @@ Add local scaffolds inside an app folder:
 ```bash
 caraer apps add function my-action
 caraer apps add options-function list-items   # LOAD_SETTING_OPTIONS loader
-caraer apps add webhook --topic record.created --function my-action
+caraer apps add webhook --topic record.candidate.created --function my-action
 caraer apps add schedule renew-watch --function my-action --cron "0 0 */6 * * *"
 caraer apps add schedule         # wizard → cron presets / custom + function picker
 caraer apps add inbound gmail-push --function my-action --auth SHARED_SECRET
@@ -173,8 +173,7 @@ are dropped, and their options loader is not called.
 
 ### Payload types (Node / Python)
 
-Do **not** run `caraer apps typegen` (deprecated no-op). Import serverless
-payload helpers from the published clients:
+Import serverless payload helpers from the published clients:
 
 ```ts
 import type { LifecyclePayload, WebhookPayload } from "@caraer/client";

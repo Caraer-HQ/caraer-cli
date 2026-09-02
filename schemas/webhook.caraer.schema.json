@@ -10,7 +10,7 @@
     "topic": {
       "type": "string",
       "minLength": 1,
-      "description": "Event topic (e.g. record.created)."
+      "description": "Event topic. Record webhooks are object-scoped: record.{object}.{created|updated|deleted|all}."
     },
     "deliveryMode": {
       "type": "string",

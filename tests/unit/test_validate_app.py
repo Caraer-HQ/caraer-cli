@@ -334,6 +334,62 @@ def test_validate_visible_when_is_set_needs_no_value(tmp_path: Path) -> None:
     assert report.ok
 
 
+def test_validate_action_setting_ok(tmp_path: Path) -> None:
+    report = _settings_report(
+        tmp_path,
+        [
+            {
+                "name": "resync",
+                "type": "ACTION",
+                "label": "Resync calendars",
+                "actionSource": {
+                    "type": "SERVERLESS",
+                    "serverlessFunctionName": "hello-world",
+                    "enqueue": True,
+                },
+            }
+        ],
+    )
+    assert report.ok
+
+
+def test_validate_action_required_is_invalid(tmp_path: Path) -> None:
+    report = _settings_report(
+        tmp_path,
+        [
+            {
+                "name": "resync",
+                "type": "ACTION",
+                "required": True,
+                "actionSource": {
+                    "type": "SERVERLESS",
+                    "serverlessFunctionName": "hello-world",
+                },
+            }
+        ],
+    )
+    assert not report.ok
+    assert any("cannot be required" in i.message for i in report.issues)
+
+
+def test_validate_action_unknown_function(tmp_path: Path) -> None:
+    report = _settings_report(
+        tmp_path,
+        [
+            {
+                "name": "resync",
+                "type": "ACTION",
+                "actionSource": {
+                    "type": "SERVERLESS",
+                    "serverlessFunctionName": "missing-fn",
+                },
+            }
+        ],
+    )
+    assert not report.ok
+    assert any("Unknown local function" in i.message for i in report.issues)
+
+
 def test_validate_file_setting_type(tmp_path: Path) -> None:
     report = _settings_report(tmp_path, [{"name": "cv_file", "type": "FILE", "required": True}])
     assert report.ok

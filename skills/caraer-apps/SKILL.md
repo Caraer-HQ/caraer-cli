@@ -76,8 +76,7 @@ src/app/
 ```
 
 Payload types: import from `@caraer/client` (Node) or `caraer-client` (Python),
-e.g. `LifecyclePayload`, `WebhookPayload`, `SchedulePayload`. Do **not** run
-`caraer apps typegen` (deprecated no-op).
+e.g. `LifecyclePayload`, `WebhookPayload`, `SchedulePayload`.
 
 `function.caraer.json` is only needed to override conventions (custom entry,
 description); a folder with `index.js` / `main.py` is a function named after

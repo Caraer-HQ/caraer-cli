@@ -28,7 +28,6 @@ def test_visible_apps_groups_and_golden_path_leaves() -> None:
         "pull",
         "push",
         "validate",
-        "typegen",
         "status",
         "add",
         "local",

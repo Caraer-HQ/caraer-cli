@@ -18,6 +18,7 @@ LOCAL_SETTING_KEYS = (
     "helpText",
     "options",
     "optionsSource",
+    "actionSource",
     "visibleWhen",
     "defaultValue",
     "hidden",
@@ -49,8 +50,38 @@ def resolve_setting_options_source(
     strict: bool = True,
 ) -> dict[str, Any]:
     """Resolve optionsSource.serverlessFunctionName to serverlessFunctionUuid."""
+    return _resolve_setting_function_source(
+        field,
+        source_key="optionsSource",
+        fn_by_name=fn_by_name,
+        strict=strict,
+    )
+
+
+def resolve_setting_action_source(
+    field: dict[str, Any],
+    *,
+    fn_by_name: dict[str, str],
+    strict: bool = True,
+) -> dict[str, Any]:
+    """Resolve actionSource.serverlessFunctionName to serverlessFunctionUuid."""
+    return _resolve_setting_function_source(
+        field,
+        source_key="actionSource",
+        fn_by_name=fn_by_name,
+        strict=strict,
+    )
+
+
+def _resolve_setting_function_source(
+    field: dict[str, Any],
+    *,
+    source_key: str,
+    fn_by_name: dict[str, str],
+    strict: bool = True,
+) -> dict[str, Any]:
     out = dict(field)
-    source = out.get("optionsSource")
+    source = out.get(source_key)
     if not isinstance(source, dict):
         return out
     resolved = dict(source)
@@ -65,16 +96,16 @@ def resolve_setting_options_source(
         resolved["serverlessFunctionUuid"] = str(uuid)
         if name:
             resolved["serverlessFunctionName"] = name
-        out["optionsSource"] = resolved
+        out[source_key] = resolved
         return out
     if name and name in fn_by_name:
         resolved["serverlessFunctionUuid"] = fn_by_name[name]
         resolved["serverlessFunctionName"] = name
-        out["optionsSource"] = resolved
+        out[source_key] = resolved
         return out
     if name and strict:
         raise ValueError(
-            f"Setting '{out.get('name')}' optionsSource references function "
+            f"Setting '{out.get('name')}' {source_key} references function "
             f"'{name}' but no UUID is known. Push functions first."
         )
     return out

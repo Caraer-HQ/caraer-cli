@@ -200,7 +200,7 @@ def add_webhook(
         None,
         "--topic",
         "-t",
-        help="Webhook topic (e.g. record.created, app.bar.triggered). Prompted if omitted.",
+        help="Webhook topic (e.g. record.candidate.created, app.bar.triggered). Prompted if omitted.",
     ),
     function: str | None = typer.Option(
         None,

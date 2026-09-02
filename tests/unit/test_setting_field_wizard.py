@@ -28,6 +28,7 @@ def test_setting_field_types_include_object_and_property_selects() -> None:
         "FILE",
         "MULTI_FILE",
         "SECRET",
+        "ACTION",
         "SINGLE_SELECT",
         "MULTI_SELECT",
     } <= keys

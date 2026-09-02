@@ -23,7 +23,12 @@ from caraer_cli.project.settings_sections_sync import (
     settings_section_identity,
     write_settings_sections_files,
 )
-from caraer_cli.project.settings_sync import discover_local_settings, resolve_setting_options_source, write_settings_files
+from caraer_cli.project.settings_sync import (
+    discover_local_settings,
+    resolve_setting_action_source,
+    resolve_setting_options_source,
+    write_settings_files,
+)
 from caraer_cli.project.state import load_state
 
 
@@ -110,9 +115,12 @@ def assemble_local_manifest(
         for field in out["settingsSchema"]:
             if not isinstance(field, dict):
                 continue
+            resolved = resolve_setting_options_source(
+                field, fn_by_name=fn_by_name, strict=strict_function_refs
+            )
             resolved_settings.append(
-                resolve_setting_options_source(
-                    field, fn_by_name=fn_by_name, strict=strict_function_refs
+                resolve_setting_action_source(
+                    resolved, fn_by_name=fn_by_name, strict=strict_function_refs
                 )
             )
         out["settingsSchema"] = resolved_settings

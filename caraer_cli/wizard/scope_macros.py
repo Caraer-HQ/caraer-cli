@@ -140,6 +140,7 @@ SCOPE_MACRO_PRESETS: tuple[ScopeMacroPreset, ...] = (
 KNOWN_TOOL_NAMES: tuple[str, ...] = (
     "apps",
     "automations",
+    "inbox",
     "company_settings",
     "environments",
     "forms",
@@ -175,6 +176,8 @@ EXACT_SCOPE_EXAMPLES: tuple[str, ...] = (
     "tools.files.write",
     "tools.automations.read",
     "tools.automations.write",
+    "tools.inbox.read",
+    "tools.inbox.write",
 )
 
 

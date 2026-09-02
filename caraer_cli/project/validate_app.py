@@ -53,6 +53,7 @@ SETTING_FIELD_TYPES = frozenset(
         "FILE",
         "MULTI_FILE",
         "SECRET",
+        "ACTION",
     }
 )
 SELECT_FIELD_TYPES = frozenset(
@@ -367,7 +368,9 @@ def validate_local_app(
     inbound_count = _validate_inbound(root, config, issues)
     oauth_count = _validate_oauth_providers(manifest, rel_manifest, issues)
     function_names = set(list_local_function_names(root, config))
-    settings_count = _validate_settings(root, config, manifest, rel_manifest, issues)
+    settings_count = _validate_settings(
+        root, config, manifest, rel_manifest, function_names, issues
+    )
     _validate_settings_sections(root, config, manifest, issues)
     app_bars_count = _validate_app_bars(
         root, config, manifest, rel_manifest, function_names, issues
@@ -989,6 +992,7 @@ def _validate_settings(
     config: ProjectConfig,
     manifest: dict[str, Any],
     rel_manifest: str,
+    function_names: set[str],
     issues: list[ValidationIssue],
 ) -> int:
     rows = _merged_settings(root, config, manifest)
@@ -996,6 +1000,12 @@ def _validate_settings(
         str(item.get("name") or "").strip()
         for _rel, item in rows
         if str(item.get("name") or "").strip()
+    }
+    action_names = {
+        str(item.get("name") or "").strip()
+        for _rel, item in rows
+        if str(item.get("type") or "").strip().upper() == "ACTION"
+        and str(item.get("name") or "").strip()
     }
     seen: set[str] = set()
     for rel, item in rows:
@@ -1007,7 +1017,7 @@ def _validate_settings(
         if key in seen:
             _issue(issues, "error", f"{rel}:name", f"Duplicate setting name '{name}'.")
         seen.add(key)
-        _validate_visible_when(item, name, known_names, rel, issues)
+        _validate_visible_when(item, name, known_names, action_names, rel, issues)
         value_scope = str(item.get("valueScope") or "").strip().upper()
         if value_scope and value_scope not in ("COMPANY", "USER"):
             _issue(
@@ -1036,6 +1046,15 @@ def _validate_settings(
                     f"{rel}:options",
                     "SELECT fields require options or optionsSource.",
                 )
+        elif field_type == "ACTION":
+            if item.get("required") is True:
+                _issue(
+                    issues,
+                    "error",
+                    f"{rel}:required",
+                    "ACTION fields cannot be required.",
+                )
+            _validate_action_source(item, rel, function_names, issues)
     return len(rows)
 
 
@@ -1128,10 +1147,52 @@ def _validate_settings_sections(
     return len(rows)
 
 
+def _validate_action_source(
+    item: dict[str, Any],
+    rel: str,
+    function_names: set[str],
+    issues: list[ValidationIssue],
+) -> None:
+    source = item.get("actionSource")
+    if not isinstance(source, dict):
+        _issue(
+            issues,
+            "error",
+            f"{rel}:actionSource",
+            "ACTION fields require actionSource with a serverless function name.",
+        )
+        return
+    source_type = str(source.get("type") or "").strip().upper()
+    if source_type and source_type != "SERVERLESS":
+        _issue(
+            issues,
+            "error",
+            f"{rel}:actionSource.type",
+            "actionSource.type must be SERVERLESS.",
+        )
+    fn_name = str(source.get("serverlessFunctionName") or "").strip()
+    fn_uuid = str(source.get("serverlessFunctionUuid") or "").strip()
+    if not fn_name and not fn_uuid:
+        _issue(
+            issues,
+            "error",
+            f"{rel}:actionSource.serverlessFunctionName",
+            "actionSource must set serverlessFunctionName or serverlessFunctionUuid.",
+        )
+    elif fn_name and fn_name not in function_names:
+        _issue(
+            issues,
+            "error",
+            f"{rel}:actionSource.serverlessFunctionName",
+            f"Unknown local function '{fn_name}'.",
+        )
+
+
 def _validate_visible_when(
     item: dict[str, Any],
     name: str,
     known_names: set[str],
+    action_names: set[str],
     rel: str,
     issues: list[ValidationIssue],
 ) -> None:
@@ -1165,6 +1226,13 @@ def _validate_visible_when(
                 "error",
                 f"{where}.field",
                 f"Unknown field '{field}'; must match another setting name.",
+            )
+        elif field in action_names:
+            _issue(
+                issues,
+                "error",
+                f"{where}.field",
+                f"field '{field}' is an ACTION button and cannot control visibility.",
             )
 
         operator = str(condition.get("operator") or "EQUALS").strip().upper()

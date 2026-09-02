@@ -2,16 +2,15 @@
 
 ## Unreleased
 
+- Settings schema `ACTION` fields with `actionSource` trigger a serverless
+  function without saving settings (cannot be `required` or a `visibleWhen` target)
 - App scaffolds write a public `# yaml-language-server: $schema=…` line that
   loads [Caraer-HQ/caraer-app-schemas](https://github.com/Caraer-HQ/caraer-app-schemas)
 - Removed `caraer apps migrate-v2`. Existing V1 apps are migrated via the backend
   Neo4j migration `apps-platform-v2` (`run-migration apps-platform-v2 up`).
-- **Deprecated:** `caraer apps typegen` no longer writes `src/types/`. Import
-  serverless payload helpers from the Caraer clients instead:
-  `@caraer/client` (Node: `LifecyclePayload`, …) /
-  `caraer-client` (Python: `from caraer_client import LifecyclePayload`).
-  Node scaffolds add `@caraer/client` as a `devDependency` and omit the
-  `typegen` npm script.
+- Removed `caraer apps typegen`. Import serverless payload helpers from the
+  Caraer clients instead: `@caraer/client` (Node) / `caraer-client` (Python).
+  Node scaffolds add `@caraer/client` as a `devDependency`.
 - App scaffolds (`apps init` / wizard) default `hideApiKeyField: true` so the
   installation API key is hidden in the Caraer UI unless explicitly shown
 - `caraer apps add schedule` interactive wizard: cron presets (hourly,

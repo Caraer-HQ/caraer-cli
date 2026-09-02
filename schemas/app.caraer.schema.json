@@ -283,9 +283,10 @@
             "MAPPING",
             "FILE",
             "MULTI_FILE",
-            "SECRET"
+            "SECRET",
+            "ACTION"
           ],
-          "description": "SINGLE_SELECT / MULTI_SELECT may use static options or a SERVERLESS optionsSource (see google_calendars). OBJECT_* and PROPERTY_* pick from the company schema. MAPPING maps properties between objects."
+          "description": "SINGLE_SELECT / MULTI_SELECT may use static options or a SERVERLESS optionsSource (see google_calendars). OBJECT_* and PROPERTY_* pick from the company schema. MAPPING maps properties between objects. ACTION is a button that runs a serverless function without saving."
         },
         "required": { "type": "boolean" },
         "helpText": { "type": "string" },
@@ -305,6 +306,7 @@
           }
         },
         "optionsSource": { "$ref": "#/$defs/optionsSource" },
+        "actionSource": { "$ref": "#/$defs/actionSource" },
         "hidden": {
           "type": "boolean",
           "description": "Never show this field. The value is still stored (provisioned ids, workspace handles)."
@@ -365,6 +367,29 @@
         },
         "searchable": { "type": "boolean" },
         "minQueryLength": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "actionSource": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "SERVERLESS",
+          "description": "Only SERVERLESS is supported. The named function runs when the installer clicks the button."
+        },
+        "serverlessFunctionName": {
+          "type": "string",
+          "description": "Local/deployed function name (preferred). Example: google-sync."
+        },
+        "serverlessFunctionUuid": {
+          "type": "string",
+          "description": "Remote function UUID. Optional when serverlessFunctionName is set; push fills it."
+        },
+        "enqueue": {
+          "type": "boolean",
+          "description": "When true (default), queue an app job. When false, invoke on the request thread."
+        }
       }
     },
     "appBar": {
