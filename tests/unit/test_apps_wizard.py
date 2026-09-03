@@ -41,6 +41,25 @@ def test_materialize_tool_macro() -> None:
     assert materialize_macro(preset, tool="forms") == ["tools.forms.all"]
 
 
+def test_materialize_setting_pack() -> None:
+    preset = find_preset("records.setting.pack")
+    assert preset is not None
+    assert materialize_macro(preset, setting_field="attendee_object") == [
+        "records.<setting:attendee_object>.all",
+        "records.<setting:attendee_object>.properties_all",
+        "records.<setting:attendee_object>.relations_all",
+    ]
+
+
+def test_materialize_trait_pack() -> None:
+    preset = find_preset("records.trait.pack")
+    assert preset is not None
+    assert materialize_macro(preset, trait_name="user") == [
+        "records.<trait:user>.all",
+        "records.<trait:user>.properties_all",
+    ]
+
+
 def test_materialize_object_pack() -> None:
     preset = find_preset("records.object.pack")
     assert preset is not None

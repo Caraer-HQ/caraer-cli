@@ -29,6 +29,7 @@ from caraer_cli.wizard.prompts import (
 )
 from caraer_cli.wizard.scope_macros import (
     COMMON_OBJECT_NAMES,
+    COMMON_TRAIT_NAMES,
     EXACT_SCOPE_EXAMPLES,
     KNOWN_TOOL_NAMES,
     SCOPE_MACRO_PRESETS,
@@ -198,6 +199,27 @@ def _ask_object_name() -> str:
     return choice
 
 
+def _ask_setting_field() -> str:
+    return ask_text(
+        "Settings field name (e.g. attendee_object)",
+        required=True,
+    )
+
+
+def _ask_trait_name() -> str:
+    choice = ask_select(
+        "Trait name",
+        [
+            *[Choice(title=name, value=name) for name in COMMON_TRAIT_NAMES],
+            Choice(title="Other (type custom trait name)…", value="__custom__"),
+        ],
+        default="user",
+    )
+    if choice == "__custom__":
+        return ask_text("Custom trait name (e.g. user)", required=True)
+    return choice
+
+
 def _add_unique(scopes: list[str], items: list[str]) -> list[str]:
     existing = set(scopes)
     for item in items:
@@ -225,12 +247,24 @@ def _prompt_add_macro(scopes: list[str]) -> list[str]:
 
     tool: str | None = None
     object_name: str | None = None
+    setting_field: str | None = None
+    trait_name: str | None = None
     if preset.needs_tool:
         tool = _ask_tool_name()
     if preset.needs_object:
         object_name = _ask_object_name()
+    if preset.needs_setting_field:
+        setting_field = _ask_setting_field()
+    if preset.needs_trait:
+        trait_name = _ask_trait_name()
 
-    added = materialize_macro(preset, tool=tool, object_name=object_name)
+    added = materialize_macro(
+        preset,
+        tool=tool,
+        object_name=object_name,
+        setting_field=setting_field,
+        trait_name=trait_name,
+    )
     console.print(f"[dim]Adding:[/dim] {', '.join(added)}")
     return _add_unique(scopes, added)
 

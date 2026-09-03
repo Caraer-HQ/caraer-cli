@@ -376,20 +376,27 @@ def handler(request):
 ## Required scopes
 
 `requiredScopes` may mix concrete scopes, macros (`records.candidate.all`,
-`tools.forms.all`), and **setting placeholders**:
+`tools.forms.all`), and **typed placeholders**:
 
 ```yaml
 requiredScopes:
   - tools.objects_schemas.write
-  - records.<candidate_mapping>.all
-  - records.<candidate_mapping>.properties_all
-  - records.<candidate_mapping>.relations_all
+  - records.<setting:candidate_mapping>.all
+  - records.<setting:candidate_mapping>.properties_all
+  - records.<setting:candidate_mapping>.relations_all
+  - records.<trait:user>.all
+  - records.<trait:user>.properties_all
 ```
 
-`<fieldName>` is replaced from the installation setting. Object-select fields
-use the selected object name. Mapping fields use `mappingValue.objectName`.
-Empty mappings grant no extra record scopes. Scopes update when the installer
-saves settings.
+| Form | Meaning |
+|---|---|
+| `<fieldName>` | Setting value (still supported) |
+| `<setting:fieldName>` | Same setting value, preferred for new apps |
+| `<trait:traitName>` | Every object with that trait (e.g. `user` → employee) |
+
+Object-select fields use the selected object name. Mapping fields use
+`mappingValue.objectName`. Empty settings or unmatched traits grant no extra
+record scopes. Setting and trait scopes update when the installer saves.
 
 ## Useful CLI
 

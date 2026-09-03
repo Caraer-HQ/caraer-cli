@@ -27,7 +27,8 @@
       "requiredScopes": [
         "tools.objects_schemas.write",
         "records.google_calendar_event.all",
-        "records.<attendee_object>.all"
+        "records.<setting:attendee_object>.all",
+        "records.<trait:user>.all"
       ],
       "settingsSchema": [
         {
@@ -126,7 +127,7 @@
     "requiredScopes": {
       "type": "array",
       "items": { "type": "string", "minLength": 1 },
-      "description": "Permissions requested at install. Use records.<setting_name>.all (and properties_all / relations_all) so the object is taken from a MAPPING or OBJECT_* setting instead of a hard-coded object name."
+      "description": "Permissions requested at install. Prefer records.<setting:field>.all (and properties_all / relations_all) so the object comes from a MAPPING or OBJECT_* setting. Bare <field> still works. Use records.<trait:name>.* for every object that has that trait (e.g. records.<trait:user>.all)."
     },
     "settingsSchema": {
       "type": "array",
@@ -260,7 +261,7 @@
         "name": {
           "type": "string",
           "minLength": 1,
-          "description": "Stable field key. Referenced by settingsSections, visibleWhen, optionsSource.dependsOn, and records.<name>.* scopes."
+          "description": "Stable field key. Referenced by settingsSections, visibleWhen, optionsSource.dependsOn, and records.<setting:name>.* (or bare records.<name>.*) scopes."
         },
         "label": {
           "type": "string",

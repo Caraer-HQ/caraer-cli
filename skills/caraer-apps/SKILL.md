@@ -132,8 +132,11 @@ Installation settings are for **admins installing the app**, not developers.
 - Do **not** ask for object/property names as raw strings when a select type exists.
 - Keep required settings to the minimum that makes the app work.
 - When the app writes mapped records, declare
-  `records.<mapping_field>.all` (and `.properties_all` / `.relations_all`)
-  instead of hard-coding object names. Empty mappings grant no extra scopes.
+  `records.<setting:mapping_field>.all` (and `.properties_all` /
+  `.relations_all`) instead of hard-coding object names. Bare `<field>`
+  still works. Empty mappings grant no extra scopes. Use
+  `records.<trait:user>.all` when every object with that trait must be
+  reachable.
 - Group related fields into installer cards with `settingsSections` (or
   `src/app/settings-sections/*.json`). Do not invent a grid; Caraer lays
   cards out left-to-right, top-to-bottom, max 3 across.
