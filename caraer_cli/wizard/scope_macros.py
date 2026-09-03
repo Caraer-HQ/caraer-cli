@@ -199,8 +199,7 @@ SCOPE_MACRO_PRESETS: tuple[ScopeMacroPreset, ...] = (
         example="records.<trait:user>.all",
         description=(
             "Expands to record-level scopes for each object that has that "
-            "trait (e.g. `user` → employee, partner_user). Catalog markers "
-            "`records.{object}.trait.{trait}` are not grantable."
+            "trait (e.g. `user` → employee, partner_user)."
         ),
         when_to_use=(
             "Use when the app must reach every object that implements a "
