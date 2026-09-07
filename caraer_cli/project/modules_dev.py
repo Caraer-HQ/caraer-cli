@@ -667,6 +667,7 @@ const subdomain = Astro.locals.harness?.subdomain ?? '';
           button.classList.add('is-on');
           const width = Number(button.dataset.width);
           frame.style.maxWidth = width ? width + 'px' : '';
+          frame.toggleAttribute('data-constrained', Boolean(width));
         }});
       }});
     </script>
@@ -788,13 +789,23 @@ const subdomain = Astro.locals.harness?.subdomain ?? '';
           linear-gradient(-45deg, #14171d 25%, transparent 25%) -8px 0/16px 16px,
           var(--hx-bg);
       }}
+      /*
+       * Full width is deliberately unstyled: no radius and no clipping, because
+       * both are chrome a real page does not have. `overflow: hidden` in
+       * particular would silently break `position: sticky` in a header module.
+       *
+       * A constrained width is different - there the rounding reads as a device
+       * frame, which is the whole point of the mobile and tablet views.
+       */
       .hx-frame {{
         margin: 0 auto;
-        background: #fff;
-        border-radius: 10px;
-        overflow: hidden;
+        background: var(--caraer-color-background, #fff);
         box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
         transition: max-width 180ms ease;
+      }}
+      .hx-frame[data-constrained] {{
+        border-radius: 14px;
+        overflow: hidden;
       }}
       /*
        * Reset the chrome's dark text inside the frame and apply the same body
@@ -802,7 +813,12 @@ const subdomain = Astro.locals.harness?.subdomain ?? '';
        * instead of inheriting the harness's own theme.
        */
       .harness__preview {{
-        overflow-x: hidden;
+        /*
+         * No overflow clipping. `overflow-x: hidden` forces overflow-y to auto,
+         * which makes this an extra scroll container and breaks `position:
+         * sticky` in a header module. It also hid horizontal overflow, which is
+         * a module bug worth seeing rather than concealing; the canvas scrolls.
+         */
         background: var(--caraer-color-background);
         color: var(--caraer-color-font);
         font-family: var(--caraer-font-body);
