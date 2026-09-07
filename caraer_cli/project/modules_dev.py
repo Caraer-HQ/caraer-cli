@@ -570,20 +570,40 @@ def write_harness(
     return harness, modules
 
 
-def run_harness(harness: Path, *, port: int, host: str, install: bool) -> int:
-    """Install dependencies if needed, then run `astro dev`."""
-    package_manager = "pnpm" if shutil.which("pnpm") else "npm"
+def _package_manager() -> str:
+    return "pnpm" if shutil.which("pnpm") else "npm"
 
-    if install or not (harness / "node_modules").is_dir():
-        result = subprocess.run(
-            [package_manager, "install"], cwd=harness, env={**os.environ}, check=False
-        )
-        if result.returncode != 0:
-            return result.returncode
+
+def install_harness(harness: Path, *, force: bool = False) -> int:
+    """Install the harness dependencies. Returns the exit code."""
+    if not force and (harness / "node_modules").is_dir():
+        return 0
 
     return subprocess.run(
-        [package_manager, "exec", "astro", "dev", "--port", str(port), "--host", host],
+        [_package_manager(), "install"], cwd=harness, env={**os.environ}, check=False
+    ).returncode
+
+
+def start_harness(harness: Path, *, port: int, host: str) -> subprocess.Popen[bytes]:
+    """Start `astro dev` in the background.
+
+    Non-blocking so the caller can run the function server in the foreground at
+    the same time; the two together are what "run my app locally" means.
+    """
+    return subprocess.Popen(
+        [
+            _package_manager(),
+            "exec",
+            "astro",
+            "dev",
+            "--port",
+            str(port),
+            "--host",
+            host,
+            # A crashed previous run leaves a lock behind and Astro then refuses
+            # to start, which would look like the harness is simply broken.
+            "--ignore-lock",
+        ],
         cwd=harness,
         env={**os.environ},
-        check=False,
-    ).returncode
+    )

@@ -65,6 +65,32 @@ def resolve_app_root(
     return find_project_root(start)
 
 
+def resolve_local_app_root(
+    *,
+    app_file: str | Path | None = None,
+    profile_app_file: str | Path | None = None,
+) -> Path:
+    """Resolve the app root for local commands.
+
+    Remote commands honour the app pinned in the profile, because that is which
+    app they act on. Local commands are different: if you are standing inside an
+    app workspace, that is the app you are working on, and silently running a
+    different one because your profile points elsewhere is surprising.
+
+    Precedence: an explicit ``--file``, then the workspace containing the
+    current directory, then the profile's pinned app.
+    """
+    if app_file:
+        return resolve_app_root(app_file=app_file)
+
+    try:
+        return find_project_root()
+    except FileNotFoundError:
+        if profile_app_file:
+            return resolve_app_root(app_file=profile_app_file)
+        raise
+
+
 def _canonicalize_app_uuid(client: CaraerApiClient, app_ref: str) -> str:
     """Resolve an app name/slug/uuid to the canonical remote UUID."""
     ref = app_ref.strip()

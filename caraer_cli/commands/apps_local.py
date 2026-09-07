@@ -226,7 +226,8 @@ def app_dev(
         help="Optional: serve only this local function (default: all local functions).",
         autocompletion=complete_local_function,
     ),
-    port: int = typer.Option(8787, "--port"),
+    port: int = typer.Option(8787, "--port", help="Port for the serverless function server."),
+    cms_port: int = typer.Option(4321, "--cms-port", help="Port for the CMS module preview."),
     host: str = typer.Option("127.0.0.1", "--host"),
     invoke_schedule: str | None = typer.Option(
         None,
@@ -237,95 +238,125 @@ def app_dev(
         None,
         "--file",
         "-F",
-        help="Explicit path to app.caraer.yaml. Overrides the app pinned in your profile.",
+        help="Explicit path to app.caraer.yaml. Defaults to the app you are standing in.",
+    ),
+    functions: bool = typer.Option(
+        True,
+        "--functions/--no-functions",
+        help="Serve this app's serverless functions.",
     ),
     cms: bool = typer.Option(
-        False,
-        "--cms",
-        help="Run the Astro harness for this app's CMS modules instead of the function server.",
+        True,
+        "--cms/--no-cms",
+        help="Serve this app's CMS module preview.",
     ),
     install: bool = typer.Option(
         False,
         "--install",
-        help="Reinstall the CMS harness dependencies before starting.",
+        help="Reinstall the CMS preview dependencies before starting.",
     ),
 ) -> None:
-    """Run a local HTTP server matching the V2 container contract.
+    """Run this app locally: serverless functions and the CMS module preview.
 
-    Invoke via POST /functions/<name> (canonical), POST /<name>, header
-    X-Caraer-Function, or body.functionName. Also emulates installation
-    state/secrets/jobs and POST /inbound/<routeName>.
+    Both start when the app has both. Functions are served on a local HTTP
+    server matching the V2 container contract, invoked via POST
+    /functions/<name> (canonical), POST /<name>, header X-Caraer-Function, or
+    body.functionName, with the installation state/secrets/jobs shim and POST
+    /inbound/<routeName>.
 
-    With --cms, runs an Astro dev server rendering this app's CMS modules with
-    an editable field sidebar, so you see the same inputs a content editor gets
-    without needing a company or a deployed build.
+    The CMS preview renders this app's modules with an editable field sidebar,
+    so you see what a content editor gets without a company or a deployed build.
     """
-    from caraer_cli.app_sync import resolve_app_root
-
-    if cms:
-        _run_cms_harness(
-            ctx,
-            port=port if port != 8787 else 4321,
-            host=host,
-            install=install,
-            file=file,
-        )
-        return
-
+    from caraer_cli.app_sync import resolve_local_app_root
     from caraer_cli.project.local_dev import serve_functions
+    from caraer_cli.project.modules_dev import start_harness
     from caraer_cli.project.schema import load_workspace
     from caraer_cli.project.sync import list_local_function_names, resolve_local_function_name
 
-    root = resolve_app_root(app_file=file or ctx.obj.profile.app_file)
+    root = resolve_local_app_root(
+        app_file=file,
+        profile_app_file=ctx.obj.profile.app_file,
+    )
     config = load_workspace(root)
+    print_success(f"App: {config.name or root.name} ({root})")
+
     if function:
         names = [resolve_local_function_name(root, config, function, interactive=False)]
     else:
-        names = list_local_function_names(root, config)
-        if not names:
-            raise ValueError(
-                "No local functions found under src/app/functions/. "
-                "Add a function folder first."
-            )
-    base = f"http://{host}:{port}"
+        names = list_local_function_names(root, config) if functions else []
+
+    # A one-shot schedule run is a function invocation, so there is nothing for
+    # the CMS preview to do alongside it.
     if invoke_schedule:
-        print_success(f"Invoking schedule '{invoke_schedule}'…")
-    else:
-        print_success(f"Starting local dev server on {base}")
-        for name in names:
-            print_success(f"  POST {base}/functions/{name}")
-        print_success(f"  installation shim: {base}/api/v2/apps/<uuid>/installation/…")
-        print_success(f"  inbound: POST {base}/inbound/<routeName>")
-    serve_functions(
-        root,
-        config,
-        host=host,
-        port=port,
-        function_names=names,
-        invoke_schedule=invoke_schedule,
-    )
+        cms = False
+
+    harness = _prepare_cms_harness(root, config, install=install) if cms else None
+
+    if not names and harness is None:
+        raise ValueError(
+            f"Nothing to run for '{config.name or root.name}'.\n"
+            f"No functions under {root / config.srcDir / 'app' / 'functions'} "
+            f"and no modules under {root / config.srcDir / 'app' / 'modules'}.\n"
+            "Add one with 'caraer apps add function <name>' or "
+            "'caraer apps add module <name>'."
+        )
+
+    harness_process = None
+    if harness is not None:
+        harness_process = start_harness(harness, port=cms_port, host=host)
+        print_success(f"CMS preview:  http://{host}:{cms_port}")
+
+    try:
+        if not names:
+            # Only the preview is running, so hold the foreground on it rather
+            # than returning and killing it.
+            harness_process.wait()
+            return
+
+        base = f"http://{host}:{port}"
+        if invoke_schedule:
+            print_success(f"Invoking schedule '{invoke_schedule}'…")
+        else:
+            print_success(f"Functions:    {base}")
+            for name in names:
+                print_success(f"  POST {base}/functions/{name}")
+            print_success(f"  installation shim: {base}/api/v2/apps/<uuid>/installation/…")
+            print_success(f"  inbound: POST {base}/inbound/<routeName>")
+
+        serve_functions(
+            root,
+            config,
+            host=host,
+            port=port,
+            function_names=names,
+            invoke_schedule=invoke_schedule,
+        )
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if harness_process is not None and harness_process.poll() is None:
+            harness_process.terminate()
+            try:
+                harness_process.wait(timeout=5)
+            except Exception:  # noqa: BLE001
+                harness_process.kill()
 
 
-def _run_cms_harness(
-    ctx: typer.Context,
-    *,
-    port: int,
-    host: str,
-    install: bool,
-    file: str | None = None,
-) -> None:
-    """Generate and run the Astro harness for this app's CMS modules."""
-    from caraer_cli.app_sync import resolve_app_root
+def _prepare_cms_harness(root, config, *, install: bool):
+    """Generate and install the CMS preview, or return None when there are none.
+
+    A missing modules directory is not an error: most apps ship only functions,
+    and 'caraer apps local dev' should still run them.
+    """
     from caraer_cli.project.modules_dev import (
+        install_harness,
         resolve_runtime_specs,
-        run_harness,
         write_harness,
     )
-    from caraer_cli.project.schema import load_workspace
+    from caraer_cli.project.modules_sync import discover_local_modules
 
-    root = resolve_app_root(app_file=file or ctx.obj.profile.app_file)
-    config = load_workspace(root)
-    print_success(f"App: {config.name or root.name} ({root})")
+    if not [m for m in discover_local_modules(root, config) if m.config and m.entry.is_file()]:
+        return None
 
     # Prefers a local caraer-web checkout so the runtime and the modules can be
     # developed together, and so this works before the packages are published.
@@ -340,12 +371,12 @@ def _run_cms_harness(
         runtime_spec=runtime_spec,
         tokens_spec=tokens_spec,
     )
-
-    print_success(f"Prepared CMS harness in {harness}")
     for module in modules:
-        print_success(f"  {module.name} ({module.kind})")
-    print_success(f"Starting Astro on http://{host}:{port}")
+        print_success(f"  module: {module.name} ({module.kind})")
 
-    code = run_harness(harness, port=port, host=host, install=install)
+    code = install_harness(harness, force=install)
     if code != 0:
-        raise typer.Exit(code)
+        raise ValueError(f"Could not install the CMS preview dependencies in {harness}.")
+
+    return harness
+
