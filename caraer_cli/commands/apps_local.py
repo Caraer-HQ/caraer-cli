@@ -258,12 +258,12 @@ def app_dev(
     company: str | None = typer.Option(
         None,
         "--company",
-        help="Subdomain of a company to preview against: real branding, menus, forms and records.",
+        help="Company subdomain to select on start. You can also switch companies in the preview.",
     ),
     record_object: str | None = typer.Option(
         None,
         "--record",
-        help="Object name whose first record binds PROPERTY_* fields. Needs --company.",
+        help="Object name whose first record binds PROPERTY_* fields. Needs a selected company.",
     ),
     install: bool = typer.Option(
         False,
@@ -305,7 +305,7 @@ def app_dev(
     if invoke_schedule:
         cms = False
 
-    harness = _prepare_cms_harness(root, config, install=install) if cms else None
+    harness = _prepare_cms_harness(root, config, ctx.obj, install=install) if cms else None
 
     if not names and harness is None:
         raise ValueError(
@@ -318,10 +318,9 @@ def app_dev(
 
     harness_process = None
     if harness is not None:
-        harness_env: dict[str, str] = {}
+        harness_env: dict[str, str] = {"CARAER_API_BASE_URL": ctx.obj.profile.base_url}
         if company:
             harness_env["CARAER_SUBDOMAIN"] = company
-            harness_env["CARAER_API_BASE_URL"] = ctx.obj.profile.base_url
             if record_object:
                 harness_env["CARAER_RECORD_OBJECT"] = record_object
             print_success(
@@ -372,13 +371,14 @@ def app_dev(
                 harness_process.kill()
 
 
-def _prepare_cms_harness(root, config, *, install: bool):
+def _prepare_cms_harness(root, config, app_ctx, *, install: bool):
     """Generate and install the CMS preview, or return None when there are none.
 
     A missing modules directory is not an error: most apps ship only functions,
     and 'caraer apps local dev' should still run them.
     """
     from caraer_cli.project.modules_dev import (
+        fetch_companies,
         install_harness,
         resolve_runtime_specs,
         write_harness,
@@ -394,12 +394,24 @@ def _prepare_cms_harness(root, config, *, install: bool):
     if runtime_spec.startswith("file:"):
         print_success(f"Using local runtime from {runtime_spec[5:]}")
 
+    # Read with the CLI's credentials and baked in as plain data, so the preview
+    # can offer every company you can reach without ever holding a token.
+    companies = fetch_companies(app_ctx.api_client()) if app_ctx.token else []
+    if companies:
+        print_success(f"Preview companies: {len(companies)} available in the picker")
+    else:
+        print_warning(
+            "No companies available to preview against. "
+            "Run 'caraer auth login' to style modules with real branding."
+        )
+
     harness, modules = write_harness(
         root,
         config,
         app_name=config.name or "app",
         runtime_spec=runtime_spec,
         tokens_spec=tokens_spec,
+        companies=companies,
     )
     for module in modules:
         print_success(f"  module: {module.name} ({module.kind})")

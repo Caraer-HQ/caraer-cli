@@ -10,6 +10,7 @@ needing a company, a backend or a deployed build.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -19,6 +20,8 @@ from typing import Any
 from caraer_cli.project.modules_sync import LocalModule, discover_local_modules
 from caraer_cli.project.paths import modules_dir
 from caraer_cli.project.schema import ProjectConfig
+
+log = logging.getLogger(__name__)
 
 HARNESS_DIR = Path(".caraer") / "cms-dev"
 
@@ -40,6 +43,45 @@ _SAMPLE_VALUES: dict[str, Any] = {
     "FILE": None,
     "MULTI_FILE": [],
 }
+
+
+def fetch_companies(client: Any) -> list[dict[str, Any]]:
+    """Companies the signed-in user can preview against.
+
+    Read once here with the CLI's credentials and written to the harness as
+    plain data, so the preview never holds a token. The payload already carries
+    each company's branding, which means the dropdown can restyle the preview
+    instantly and without a network call.
+    """
+    from caraer_cli.api import auth as auth_api
+
+    try:
+        payload = auth_api.companies(client).get("data") or []
+    except Exception as e:  # noqa: BLE001
+        log.debug("Could not list companies for the module preview: %s", e)
+        return []
+
+    companies: list[dict[str, Any]] = []
+    for company in payload:
+        if not isinstance(company, dict):
+            continue
+        settings = company.get("websiteSettings") or {}
+        subdomain = settings.get("subdomain")
+        # A company with no subdomain has no site to preview against.
+        if not subdomain:
+            continue
+        companies.append(
+            {
+                "uuid": company.get("uuid"),
+                "name": company.get("name") or subdomain,
+                "subdomain": subdomain,
+                "digitalIdentity": company.get("digitalIdentity") or {},
+                "websiteSettings": settings,
+            }
+        )
+
+    companies.sort(key=lambda c: (c["name"] or "").lower())
+    return companies
 
 
 def resolve_runtime_specs(root: Path) -> tuple[str, str]:
@@ -220,10 +262,11 @@ def _harness_middleware() -> str:
 import { defineMiddleware } from 'astro:middleware';
 import { DEFAULT_TOKENS, resolveTokens } from '@caraer/cms-tokens';
 
+import COMPANIES from '../companies.json';
+
 const SUBDOMAIN = process.env.CARAER_SUBDOMAIN;
 const API_BASE = (process.env.CARAER_API_BASE_URL || '').replace(/\\/$/, '');
 const RECORD_OBJECT = process.env.CARAER_RECORD_OBJECT;
-const LIVE = Boolean(SUBDOMAIN && API_BASE);
 
 const SAMPLE_RECORD = {
   uuid: 'sample-record',
@@ -270,20 +313,20 @@ const sampleRecords = (object, limit) => ({
 });
 
 /**
- * Calls the public CMS API for the company named by --company.
+ * Calls the public CMS API for the currently selected company.
  *
  * Returns null on any failure rather than throwing: a preview that falls back
  * to sample data is far more useful than one that shows a stack trace because
  * a VPN dropped.
  */
-async function live(path, init = {}) {
-  if (!LIVE) return null;
+async function live(path, init = {}, subdomain = SUBDOMAIN) {
+  if (!subdomain || !API_BASE) return null;
   try {
     const response = await fetch(`${API_BASE}/api/v2/webpages/v2/public${path}`, {
       ...init,
       headers: {
         Accept: 'application/json',
-        'X-Caraer-Subdomain': SUBDOMAIN,
+        'X-Caraer-Subdomain': subdomain,
         ...(init.body ? { 'Content-Type': 'application/json' } : {}),
         ...(init.headers || {}),
       },
@@ -292,7 +335,7 @@ async function live(path, init = {}) {
       // Must be loud. Silently serving sample data when you asked for a real
       // company would have you debugging a module against the wrong content.
       console.warn(
-        `[harness] ${path} returned ${response.status} for '${SUBDOMAIN}' - using sample data.`,
+        `[harness] ${path} returned ${response.status} for '${subdomain}' - using sample data.`,
       );
       return null;
     }
@@ -304,43 +347,83 @@ async function live(path, init = {}) {
   }
 }
 
-// Fetched once per process rather than per request: settings change rarely and
-// a preview reloads constantly while you edit.
-let settingsPromise;
-const loadSettings = () =>
-  (settingsPromise ??= (async () => {
-    const settings = await live('/settings');
-    if (LIVE && !settings) {
-      console.warn(
-        `[harness] Could not reach company '${SUBDOMAIN}'. Everything below is ` +
-          'sample data, not that company\\'s content.',
-      );
-    }
-    return settings;
-  })());
+// Cached per company rather than per request: this data changes rarely while a
+// preview reloads on every keystroke, but switching companies must refetch.
+const settingsCache = new Map();
+const loadSettings = (subdomain) => {
+  if (!subdomain) return Promise.resolve(null);
+  if (!settingsCache.has(subdomain)) {
+    settingsCache.set(
+      subdomain,
+      (async () => {
+        const settings = await live('/settings', {}, subdomain);
+        if (!settings) {
+          console.warn(
+            `[harness] Could not reach company '${subdomain}'. Everything below is ` +
+              'sample data, not that company\\'s content.',
+          );
+        }
+        return settings;
+      })(),
+    );
+  }
+  return settingsCache.get(subdomain);
+};
 
-let recordPromise;
-const loadRecord = () =>
-  (recordPromise ??= (async () => {
-    if (!LIVE || !RECORD_OBJECT) return SAMPLE_RECORD;
-    const result = await live('/records', {
-      method: 'POST',
-      body: JSON.stringify({ object: RECORD_OBJECT, limit: 1 }),
-    });
-    const first = result?.records?.[0];
-    if (!first) return SAMPLE_RECORD;
-    return {
-      uuid: first.uuid,
-      object: RECORD_OBJECT,
-      properties: first.properties ?? {},
-      parsedProperties: first.parsedProperties ?? {},
-    };
-  })());
+const recordCache = new Map();
+const loadRecord = (subdomain) => {
+  if (!subdomain || !RECORD_OBJECT) return Promise.resolve(SAMPLE_RECORD);
+  const key = `${subdomain}:${RECORD_OBJECT}`;
+  if (!recordCache.has(key)) {
+    recordCache.set(
+      key,
+      (async () => {
+        const result = await live(
+          '/records',
+          { method: 'POST', body: JSON.stringify({ object: RECORD_OBJECT, limit: 1 }) },
+          subdomain,
+        );
+        const first = result?.records?.[0];
+        if (!first) return SAMPLE_RECORD;
+        return {
+          uuid: first.uuid,
+          object: RECORD_OBJECT,
+          properties: first.properties ?? {},
+          parsedProperties: first.parsedProperties ?? {},
+        };
+      })(),
+    );
+  }
+  return recordCache.get(key);
+};
 
 export const onRequest = defineMiddleware(async (context, next) => {
-  const settings = await loadSettings();
+  /*
+   * The dropdown picks a company per request. Its branding already arrived with
+   * the company list, so switching restyles the preview with no network call
+   * and keeps working where the public API is unreachable.
+   */
+  // Absent means "not chosen yet", so --company decides. Empty means the
+  // picker chose sample data, which must survive --company.
+  const requested = context.url.searchParams.has('company')
+    ? context.url.searchParams.get('company')
+    : SUBDOMAIN;
+  const selectedCompany = requested ? COMPANIES.find((c) => c.subdomain === requested) : null;
+  const activeSubdomain = selectedCompany?.subdomain ?? requested ?? null;
 
-  context.locals.company = settings?.company ?? {
+  // Only companies missing from the list need fetching; the rest came baked.
+  const settings = selectedCompany ? null : await loadSettings(activeSubdomain);
+
+  context.locals.company = selectedCompany
+    ? {
+        uuid: selectedCompany.uuid,
+        name: selectedCompany.name,
+        subdomain: selectedCompany.subdomain,
+        logo: selectedCompany.websiteSettings?.logo ?? null,
+        logoDark: selectedCompany.websiteSettings?.logoDark ?? null,
+        favicon: selectedCompany.websiteSettings?.favicon ?? null,
+      }
+    : settings?.company ?? {
     uuid: 'sample-company',
     name: 'Sample Company',
     subdomain: SUBDOMAIN || 'sample',
@@ -361,25 +444,31 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   // Real branding when attached to a company, so you see the module in the
   // customer's actual colours and typography rather than platform defaults.
-  context.locals.tokens = settings
+  const branding = selectedCompany ?? settings;
+  context.locals.tokens = branding
     ? resolveTokens({
-        digitalIdentity: settings.digitalIdentity,
-        websiteSettings: settings.websiteSettings,
+        digitalIdentity: branding.digitalIdentity,
+        websiteSettings: branding.websiteSettings,
       })
     : DEFAULT_TOKENS;
 
   context.locals.editor = null;
-  context.locals.record = await loadRecord();
+  context.locals.record = await loadRecord(activeSubdomain);
 
   // Lets the chrome say whether you are looking at real content or samples.
-  context.locals.harness = { live: Boolean(settings), subdomain: SUBDOMAIN ?? null };
+  context.locals.harness = {
+    live: Boolean(selectedCompany || settings),
+    subdomain: activeSubdomain,
+    companyName: selectedCompany?.name ?? settings?.company?.name ?? null,
+    companies: COMPANIES.map((c) => ({ name: c.name, subdomain: c.subdomain })),
+  };
 
   context.locals.assetUrl = (key) => key ?? null;
   context.locals.localePath = (path) => (path?.startsWith('/') ? path : `/${path ?? ''}`);
   context.locals.tag = () => {};
 
   context.locals.getMenu = async (location) => {
-    const menus = await live(`/menus?locale=nl`);
+    const menus = await live(`/menus?locale=nl`, {}, activeSubdomain);
     const match = Array.isArray(menus) ? menus.find((m) => m.location === location) : null;
     // Every location falls back to the same sample menu, so a footer module
     // with four columns still renders something recognisable.
@@ -387,13 +476,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
   };
 
   context.locals.getForm = async (form) =>
-    (await live(`/forms/${encodeURIComponent(String(form))}`)) ?? SAMPLE_FORM(form);
+    (await live(`/forms/${encodeURIComponent(String(form))}`, {}, activeSubdomain)) ??
+    SAMPLE_FORM(form);
 
   context.locals.listRecords = async ({ object, limit = 6, offset, orderBy, filter }) =>
-    (await live('/records', {
-      method: 'POST',
-      body: JSON.stringify({ object, limit, offset, orderBy, filter }),
-    })) ?? sampleRecords(object, limit);
+    (await live(
+      '/records',
+      { method: 'POST', body: JSON.stringify({ object, limit, offset, orderBy, filter }) },
+      activeSubdomain,
+    )) ?? sampleRecords(object, limit);
 
   return next();
 });
@@ -482,6 +573,7 @@ const Selected = selected?.component;
 const style = toStyleAttribute(toCustomProperties(Astro.locals.tokens ?? DEFAULT_TOKENS));
 const live = Astro.locals.harness?.live ?? false;
 const subdomain = Astro.locals.harness?.subdomain ?? '';
+const companies = Astro.locals.harness?.companies ?? [];
 ---
 
 <html lang="nl" style={{style}}>
@@ -501,10 +593,16 @@ const subdomain = Astro.locals.harness?.subdomain ?? '';
           </div>
         </div>
 
-        <div class="hx-source" data-live={{live ? '' : undefined}}>
+        <label class="hx-source" data-live={{live ? '' : undefined}}>
           <span class="hx-dot"></span>
-          {{live ? `Live: ${{subdomain}}` : 'Sample data'}}
-        </div>
+          <span class="hx-sr">Preview data</span>
+          <select id="hx-company" name="company">
+            <option value="">Sample data</option>
+            {{companies.map((c) => (
+              <option value={{c.subdomain}} selected={{c.subdomain === subdomain}}>{{c.name}}</option>
+            ))}}
+          </select>
+        </label>
 
         <div class="hx-seg" role="group" aria-label="Viewport width">
           <button type="button" data-width="390">Mobile</button>
@@ -544,6 +642,7 @@ const subdomain = Astro.locals.harness?.subdomain ?? '';
 
         <form method="get" class="harness__fields">
           <input type="hidden" name="module" value={{selected?.name}} />
+          <input type="hidden" name="company" value={{subdomain}} />
 
           {{manifestFields.length === 0 && (
             <p class="hx-empty">This module has no editable fields.</p>
@@ -658,6 +757,18 @@ const subdomain = Astro.locals.harness?.subdomain ?? '';
     </script>
 
     <script is:inline>
+      // Company switch. A reload rather than a partial swap: the whole document
+      // restyles, since design tokens live on <html>.
+      document.getElementById('hx-company')?.addEventListener('change', (event) => {{
+        const url = new URL(window.location.href);
+        // Always set, never delete: an absent value would hand the choice back
+        // to --company and you could not return to sample data.
+        url.searchParams.set('company', event.target.value);
+        window.location.href = url.toString();
+      }});
+    </script>
+
+    <script is:inline>
       // Viewport width toggle. Chrome-only, so it lives here rather than in the
       // live-update script that talks to the server.
       const frame = document.getElementById('harness-frame');
@@ -731,9 +842,27 @@ const subdomain = Astro.locals.harness?.subdomain ?? '';
         border: 1px solid var(--hx-line); border-radius: 999px;
         font-size: 0.6875rem; color: var(--hx-muted);
       }}
-      .hx-dot {{ width: 6px; height: 6px; border-radius: 50%; background: #6b7280; }}
+      .hx-source:hover {{ border-color: #2c3240; }}
+      .hx-source select {{
+        appearance: none;
+        border: 0; background: transparent; color: inherit;
+        font: inherit; font-size: 0.6875rem;
+        padding-right: 0.75rem; cursor: pointer; outline: none;
+        background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+          linear-gradient(135deg, currentColor 50%, transparent 50%);
+        background-position: right 3px center, right 0 center;
+        background-size: 4px 4px, 4px 4px;
+        background-repeat: no-repeat;
+      }}
+      .hx-source select option {{ background: var(--hx-panel); color: var(--hx-text); }}
+      .hx-dot {{ width: 6px; height: 6px; border-radius: 50%; background: #6b7280; flex: none; }}
       .hx-source[data-live] {{ color: #86efac; border-color: #14532d; }}
       .hx-source[data-live] .hx-dot {{ background: #22c55e; }}
+      .hx-sr {{
+        position: absolute; width: 1px; height: 1px;
+        padding: 0; margin: -1px; overflow: hidden;
+        clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+      }}
 
       .hx-seg {{
         display: flex; gap: 2px; padding: 2px;
@@ -932,6 +1061,7 @@ def write_harness(
     app_name: str,
     runtime_spec: str,
     tokens_spec: str,
+    companies: list[dict[str, Any]] | None = None,
 ) -> tuple[Path, list[LocalModule]]:
     """Generate the harness workspace. Returns its directory and the modules."""
     modules = [m for m in discover_local_modules(root, config) if m.config and m.entry.is_file()]
@@ -966,6 +1096,9 @@ def write_harness(
     (harness / "src" / "middleware.ts").write_text(_harness_middleware(), encoding="utf-8")
     (harness / "samples.json").write_text(
         json.dumps({m.name: sample_fields(m) for m in modules}, indent=2) + "\n", encoding="utf-8"
+    )
+    (harness / "companies.json").write_text(
+        json.dumps(companies or [], indent=2) + "\n", encoding="utf-8"
     )
     (harness / ".gitignore").write_text("*\n", encoding="utf-8")
 
