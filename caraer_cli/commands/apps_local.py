@@ -296,19 +296,22 @@ def app_dev(
 
 def _run_cms_harness(ctx: typer.Context, *, port: int, host: str, install: bool) -> None:
     """Generate and run the Astro harness for this app's CMS modules."""
-    import os
-
     from caraer_cli.app_sync import resolve_app_root
-    from caraer_cli.project.modules_dev import run_harness, write_harness
+    from caraer_cli.project.modules_dev import (
+        resolve_runtime_specs,
+        run_harness,
+        write_harness,
+    )
     from caraer_cli.project.schema import load_workspace
 
     root = resolve_app_root(app_file=ctx.obj.profile.app_file)
     config = load_workspace(root)
 
-    # Allow a checkout of caraer-web to be linked in, so the runtime and the
-    # modules can be developed together without publishing first.
-    runtime_spec = os.environ.get("CARAER_CMS_RUNTIME_SPEC", "latest")
-    tokens_spec = os.environ.get("CARAER_CMS_TOKENS_SPEC", "latest")
+    # Prefers a local caraer-web checkout so the runtime and the modules can be
+    # developed together, and so this works before the packages are published.
+    runtime_spec, tokens_spec = resolve_runtime_specs(root)
+    if runtime_spec.startswith("file:"):
+        print_success(f"Using local runtime from {runtime_spec[5:]}")
 
     harness, modules = write_harness(
         root,
