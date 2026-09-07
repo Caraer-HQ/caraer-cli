@@ -233,6 +233,12 @@ def app_dev(
         "--invoke-schedule",
         help="Fire a local schedule's payloadTemplate at its function, then exit.",
     ),
+    file: str | None = typer.Option(
+        None,
+        "--file",
+        "-F",
+        help="Explicit path to app.caraer.yaml. Overrides the app pinned in your profile.",
+    ),
     cms: bool = typer.Option(
         False,
         "--cms",
@@ -257,14 +263,20 @@ def app_dev(
     from caraer_cli.app_sync import resolve_app_root
 
     if cms:
-        _run_cms_harness(ctx, port=port if port != 8787 else 4321, host=host, install=install)
+        _run_cms_harness(
+            ctx,
+            port=port if port != 8787 else 4321,
+            host=host,
+            install=install,
+            file=file,
+        )
         return
 
     from caraer_cli.project.local_dev import serve_functions
     from caraer_cli.project.schema import load_workspace
     from caraer_cli.project.sync import list_local_function_names, resolve_local_function_name
 
-    root = resolve_app_root(app_file=ctx.obj.profile.app_file)
+    root = resolve_app_root(app_file=file or ctx.obj.profile.app_file)
     config = load_workspace(root)
     if function:
         names = [resolve_local_function_name(root, config, function, interactive=False)]
@@ -294,7 +306,14 @@ def app_dev(
     )
 
 
-def _run_cms_harness(ctx: typer.Context, *, port: int, host: str, install: bool) -> None:
+def _run_cms_harness(
+    ctx: typer.Context,
+    *,
+    port: int,
+    host: str,
+    install: bool,
+    file: str | None = None,
+) -> None:
     """Generate and run the Astro harness for this app's CMS modules."""
     from caraer_cli.app_sync import resolve_app_root
     from caraer_cli.project.modules_dev import (
@@ -304,8 +323,9 @@ def _run_cms_harness(ctx: typer.Context, *, port: int, host: str, install: bool)
     )
     from caraer_cli.project.schema import load_workspace
 
-    root = resolve_app_root(app_file=ctx.obj.profile.app_file)
+    root = resolve_app_root(app_file=file or ctx.obj.profile.app_file)
     config = load_workspace(root)
+    print_success(f"App: {config.name or root.name} ({root})")
 
     # Prefers a local caraer-web checkout so the runtime and the modules can be
     # developed together, and so this works before the packages are published.

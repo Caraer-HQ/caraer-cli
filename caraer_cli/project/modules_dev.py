@@ -447,9 +447,15 @@ def write_harness(
     """Generate the harness workspace. Returns its directory and the modules."""
     modules = [m for m in discover_local_modules(root, config) if m.config and m.entry.is_file()]
     if not modules:
+        # Name the directory searched. The app can come from the profile's
+        # pinned app_file rather than the current directory, and a message that
+        # only says "src/app/modules/" sends you looking in the wrong place.
         raise ValueError(
-            "No modules found under src/app/modules/. "
-            "Run 'caraer apps add module <name>' first."
+            f"No modules found under {modules_dir(root, config.srcDir)}.\n"
+            f"That app is '{config.name or root.name}' at {root}.\n"
+            "If you meant a different app, pass --file <path/to/app.caraer.yaml> "
+            "or run 'caraer apps clear' to unpin the one in your profile.\n"
+            "To add a module here, run 'caraer apps add module <name>'."
         )
 
     frameworks: set[str] = set()
