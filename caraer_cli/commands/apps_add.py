@@ -114,7 +114,7 @@ def add_function(
 
     app_ctx: AppContext = ctx.obj
     name = require_text(name, "Function name", flag="name")
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
     normalized = normalize_function_name(name)
     if not normalized:
@@ -168,7 +168,7 @@ def add_options_function(
 
     app_ctx: AppContext = ctx.obj
     name = require_text(name, "Options function name", flag="name")
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
     normalized = normalize_function_name(name)
     if not normalized:
@@ -237,7 +237,7 @@ def add_webhook(
 
     app_ctx: AppContext = ctx.obj
     topic = require_text(topic, "Webhook topic", flag="--topic")
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
     resolved_mode = mode.strip().upper()
     function_name = normalize_function_name(function) if function else None
@@ -309,7 +309,7 @@ def add_schedule(
     from caraer_cli.wizard.prompts import WizardCancelled
 
     app_ctx: AppContext = ctx.obj
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
     try:
         answers = prompt_schedule(
@@ -374,7 +374,7 @@ def add_inbound(
     function_name = normalize_function_name(
         require_text(function, "Function name", flag="--function")
     )
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
     base = inbound_dir(root, config.srcDir)
     base.mkdir(parents=True, exist_ok=True)
@@ -445,7 +445,7 @@ def add_module(
             f"framework must be one of {sorted(PINNED_FRAMEWORK_MAJORS)}, got '{framework}'."
         )
 
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
 
     directory = scaffold_module(
@@ -533,7 +533,7 @@ def add_setting(
     from caraer_cli.wizard.marketplace import prompt_setting_field
 
     app_ctx: AppContext = ctx.obj
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
 
     sibling_names: list[str] = []
@@ -651,7 +651,7 @@ def add_lifecycle_hook(
     from caraer_cli.wizard.marketplace import prompt_lifecycle_hook
 
     app_ctx: AppContext = ctx.obj
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
     options = prompt_lifecycle_hook(
         event=event,

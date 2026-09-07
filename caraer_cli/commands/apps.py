@@ -689,7 +689,7 @@ def push_public(
             raise typer.BadParameter("--version must be MAJOR.MINOR.PATCH (e.g. 1.2.3).")
     if yes and not dry_run and (not version or not (release_notes or "").strip()):
         raise typer.BadParameter("--yes requires both --version and --notes.")
-    selected_file = file or app_ctx.profile.app_file
+    selected_file = file or app_ctx.pinned_app_file
     try:
         root = resolve_app_root(app_file=selected_file)
     except FileNotFoundError:

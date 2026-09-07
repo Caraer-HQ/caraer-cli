@@ -134,13 +134,14 @@ def complete_auth_method(ctx: typer.Context, incomplete: str) -> list[tuple[str,
 def complete_local_function(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
     try:
         from caraer_cli.app_sync import resolve_app_root
+        from caraer_cli.project.paths import app_file_unless_in_workspace
         from caraer_cli.project.schema import load_workspace
         from caraer_cli.project.sync import list_local_function_names
         from caraer_cli.state.config import active_profile, load_config
 
         cfg = load_config()
         _, profile = active_profile(cfg)
-        root = resolve_app_root(app_file=profile.app_file)
+        root = resolve_app_root(app_file=app_file_unless_in_workspace(profile.app_file))
         config = load_workspace(root)
         pairs = [(name, "local function") for name in list_local_function_names(root, config)]
         return complete_from_pairs(pairs, incomplete)

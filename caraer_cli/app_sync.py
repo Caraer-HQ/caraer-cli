@@ -16,6 +16,7 @@ from caraer_cli.apps_local import (
 from caraer_cli.errors import ApiError
 from caraer_cli.local_app import load_local_app, resolve_app_file_path
 from caraer_cli.project.paths import (
+    app_file_unless_in_workspace,
     app_manifest_path,
     find_project_root,
     workspace_file,
@@ -72,23 +73,14 @@ def resolve_local_app_root(
 ) -> Path:
     """Resolve the app root for local commands.
 
-    Remote commands honour the app pinned in the profile, because that is which
-    app they act on. Local commands are different: if you are standing inside an
-    app workspace, that is the app you are working on, and silently running a
-    different one because your profile points elsewhere is surprising.
-
     Precedence: an explicit ``--file``, then the workspace containing the
-    current directory, then the profile's pinned app.
+    current directory, then the profile's pinned app. See
+    :func:`app_file_unless_in_workspace` for why the directory outranks the pin.
     """
     if app_file:
         return resolve_app_root(app_file=app_file)
 
-    try:
-        return find_project_root()
-    except FileNotFoundError:
-        if profile_app_file:
-            return resolve_app_root(app_file=profile_app_file)
-        raise
+    return resolve_app_root(app_file=app_file_unless_in_workspace(profile_app_file))
 
 
 def _canonicalize_app_uuid(client: CaraerApiClient, app_ref: str) -> str:

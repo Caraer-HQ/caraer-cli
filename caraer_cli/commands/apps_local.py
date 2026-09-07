@@ -70,7 +70,7 @@ def test_function_cmd(
     from caraer_cli.project.sync import resolve_local_function_name
 
     app_ctx: AppContext = ctx.obj
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
     if not config.appUuid:
         raise ValueError("App has no remote UUID. Run 'caraer apps select' or 'caraer apps push'.")
@@ -148,7 +148,7 @@ def app_logs(
     from caraer_cli.project.sync import resolve_local_function_name
 
     app_ctx: AppContext = ctx.obj
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
     if not config.appUuid:
         raise ValueError("App has no remote UUID. Run 'caraer apps select' or 'caraer apps push'.")

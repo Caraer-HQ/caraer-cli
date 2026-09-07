@@ -16,6 +16,13 @@ class AppContext:
     output: str
     debug: bool
 
+    @property
+    def pinned_app_file(self) -> str | None:
+        """The profile's pinned app, unless you are standing in an app."""
+        from caraer_cli.project.paths import app_file_unless_in_workspace
+
+        return app_file_unless_in_workspace(self.profile.app_file)
+
     def api_client(self) -> CaraerApiClient:
         profile_name = self.profile_name
 
