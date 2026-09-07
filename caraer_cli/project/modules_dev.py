@@ -96,6 +96,10 @@ def sample_fields(module: LocalModule) -> dict[str, Any]:
         if field_type == "SINGLE_SELECT":
             options = item.get("options") or []
             values[name] = options[0].get("name") if options else None
+        elif field_type == "SINGLE_LINE":
+            # The field's own label, so you can see at a glance which input
+            # produced which piece of the rendered output.
+            values[name] = str(item.get("label") or name)
         else:
             values[name] = _SAMPLE_VALUES.get(field_type)
     return values
@@ -308,16 +312,40 @@ const modules = [
 
 const active = Astro.url.searchParams.get('module') ?? modules[0]?.name;
 const selected = modules.find((m) => m.name === active) ?? modules[0];
+const manifestFields = selected?.manifest.fields ?? [];
+
+/*
+ * Query strings carry everything as text, but a field's declared type is what
+ * the runtime works with. Without coercion a SWITCH arrives as the string
+ * "true", and a `visibleWhen: EQUALS true` on a sibling field compares string
+ * to boolean and silently hides it.
+ */
+function coerce(name: string, raw: string): unknown {{
+  if (raw === '') return null;
+
+  const type = manifestFields.find((f) => f.name === name)?.type;
+  switch (type) {{
+    case 'SWITCH':
+      return raw === 'true';
+    case 'MULTI_SELECT':
+    case 'MULTI_FILE':
+    case 'PROPERTY_MULTI_SELECT':
+    case 'RECORD_MULTI_SELECT':
+    case 'OBJECT_MULTI_SELECT':
+      return raw.split(',').map((part) => part.trim()).filter(Boolean);
+    default:
+      return raw;
+  }}
+}}
 
 // Field values come from the query string when the sidebar has been used, so
-// edits survive the reload without any server state.
+// edits survive a reload without any server state.
 const overrides: Record<string, unknown> = {{}};
 for (const [key, value] of Astro.url.searchParams) {{
-  if (key.startsWith('f.')) overrides[key.slice(2)] = value === '' ? null : value;
+  if (key.startsWith('f.')) overrides[key.slice(2)] = coerce(key.slice(2), value);
 }}
 
 const stored = {{ ...(samples[selected?.name] ?? {{}}), ...overrides }};
-const manifestFields = selected?.manifest.fields ?? [];
 
 // The harness has no company record, so PROPERTY_* fields resolve against a
 // stand-in. That is on purpose: it shows the developer what a page with a
@@ -403,10 +431,69 @@ const style = toStyleAttribute(toCustomProperties(DEFAULT_TOKENS));
         </form>
       </aside>
 
-      <main class="harness__preview">
+      <main class="harness__preview" id="harness-preview">
         {{Selected && <Selected {{...props}} />}}
       </main>
     </div>
+
+    <script>
+      // Live preview: re-render as you type instead of on Apply. Only the
+      // preview pane is swapped, so focus and caret position survive editing.
+      // The Apply button still works with JavaScript disabled.
+      const form = document.querySelector('.harness__fields');
+      const preview = document.getElementById('harness-preview');
+
+      if (form instanceof HTMLFormElement && preview) {{
+        let timer;
+        let inFlight;
+
+        const render = async () => {{
+          const params = new URLSearchParams(new FormData(form));
+
+          // An unchecked checkbox submits nothing, so the value would fall back
+          // to the sample and a switch could never be turned off.
+          form.querySelectorAll('input[type="checkbox"]').forEach((box) => {{
+            if (!box.checked) params.set(box.name, 'false');
+          }});
+
+          const query = params.toString();
+          history.replaceState(null, '', '?' + query);
+
+          inFlight?.abort();
+          inFlight = new AbortController();
+
+          try {{
+            const response = await fetch('/?' + query, {{ signal: inFlight.signal }});
+            if (!response.ok) return;
+
+            // Parsed into a detached document rather than assigned as a string:
+            // it never runs inline scripts, and adopting real nodes lets the
+            // browser upgrade Astro's island elements so they rehydrate.
+            const parsed = new DOMParser().parseFromString(await response.text(), 'text/html');
+            const next = parsed.getElementById('harness-preview');
+            if (!next) return;
+
+            preview.replaceChildren(
+              ...Array.from(next.childNodes).map((node) => document.adoptNode(node)),
+            );
+          }} catch (error) {{
+            if (error.name !== 'AbortError') console.error(error);
+          }}
+        }};
+
+        const schedule = () => {{
+          clearTimeout(timer);
+          timer = setTimeout(render, 250);
+        }};
+
+        form.addEventListener('input', schedule);
+        form.addEventListener('change', schedule);
+        form.addEventListener('submit', (event) => {{
+          event.preventDefault();
+          render();
+        }});
+      }}
+    </script>
 
     <style is:global>
       @import '@caraer/cms-tokens/tokens.css';
