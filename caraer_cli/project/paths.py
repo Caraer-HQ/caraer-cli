@@ -86,6 +86,17 @@ def lifecycle_dir(root: Path, src_dir: str = "src") -> Path:
     return app_dir(root, src_dir) / "lifecycle"
 
 
+def modules_dir(root: Path, src_dir: str = "src") -> Path:
+    """CMS v2 modules shipped by this app.
+
+    Each subdirectory is one module: ``index.astro`` plus
+    ``module.caraer.json``. Unlike functions, modules are not executed by the
+    app runtime; they are published to the Caraer npm registry and compiled
+    into each installing company's website build.
+    """
+    return app_dir(root, src_dir) / "modules"
+
+
 def shared_dir(root: Path, src_dir: str = "src") -> Path:
     """Source files shared by all functions (platform 2026.2 only).
 

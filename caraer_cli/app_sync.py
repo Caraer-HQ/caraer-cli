@@ -663,6 +663,15 @@ def push_app(
             config,
             delete_missing=delete_missing,
         )
+
+    modules_result = push_cms_modules(
+        client,
+        root,
+        config,
+        functions_result=functions_result,
+        version=version,
+    )
+
     return {
         "appUuid": config.appUuid,
         "manifest": {
@@ -675,8 +684,92 @@ def push_app(
         "schedules": schedules_result,
         "inbound": inbound_result,
         "externalOAuthProviders": oauth_result,
+        "cmsModules": modules_result,
         "serverReconcile": server_reconciled,
     }
+
+
+def push_cms_modules(
+    client: CaraerApiClient,
+    root: Path,
+    config: ProjectConfig,
+    *,
+    functions_result: dict[str, Any] | None = None,
+    version: str | None = None,
+) -> dict[str, Any]:
+    """Publish CMS modules to the registry and register the catalog.
+
+    Modules travel outside the build archive: the archive feeds the app
+    runtime, whereas modules are compiled into each installing company's
+    website build, which resolves them with `pnpm install`.
+    """
+    from caraer_cli.api import modules as modules_api
+    from caraer_cli.formatters.output import print_success, print_warning
+    from caraer_cli.project.modules_publish import publish_modules
+    from caraer_cli.project.modules_sync import discover_local_modules
+
+    modules = [m for m in discover_local_modules(root, config) if m.config and m.entry.is_file()]
+    if not modules:
+        return {"modules": 0}
+
+    app_name = (config.name or "").strip()
+    if not app_name:
+        return {"modules": len(modules), "published": False, "reason": "App has no name."}
+
+    # Modules version in lockstep with the app build, so a company that pins an
+    # app version gets exactly the modules that shipped with it.
+    resolved_version = version or _resolved_build_version(functions_result, root)
+    if not resolved_version:
+        return {
+            "modules": len(modules),
+            "published": False,
+            "reason": "No build version available to publish modules against.",
+        }
+
+    print_success(f"Publishing {len(modules)} CMS module(s) at v{resolved_version}…")
+    summary = publish_modules(
+        root,
+        config,
+        app_name=app_name,
+        version=resolved_version,
+    )
+
+    if not summary.get("published"):
+        print_warning(f"Modules not published: {summary.get('reason') or summary.get('error')}")
+
+    if config.appUuid:
+        try:
+            modules_api.publish_module_catalog(
+                client,
+                config.appUuid,
+                {
+                    "package": summary["package"],
+                    "version": resolved_version,
+                    "modules": summary["modules"],
+                },
+            )
+            print_success("Registered CMS module catalog.")
+            summary["catalog"] = True
+        except Exception as exc:  # noqa: BLE001
+            # A catalog failure must not fail the whole push: the package is
+            # already published and re-registering is idempotent.
+            print_warning(f"Could not register module catalog: {exc}")
+            summary["catalog"] = False
+
+    return summary
+
+
+def _resolved_build_version(
+    functions_result: dict[str, Any] | None,
+    root: Path,
+) -> str | None:
+    if isinstance(functions_result, dict):
+        build = functions_result.get("build")
+        if isinstance(build, dict) and build.get("version"):
+            return str(build["version"])
+    state = load_state(root)
+    value = state.get("lastBuildVersion")
+    return str(value) if value else None
 
 
 def pull_app_full(

@@ -233,14 +233,33 @@ def app_dev(
         "--invoke-schedule",
         help="Fire a local schedule's payloadTemplate at its function, then exit.",
     ),
+    cms: bool = typer.Option(
+        False,
+        "--cms",
+        help="Run the Astro harness for this app's CMS modules instead of the function server.",
+    ),
+    install: bool = typer.Option(
+        False,
+        "--install",
+        help="Reinstall the CMS harness dependencies before starting.",
+    ),
 ) -> None:
     """Run a local HTTP server matching the V2 container contract.
 
     Invoke via POST /functions/<name> (canonical), POST /<name>, header
     X-Caraer-Function, or body.functionName. Also emulates installation
     state/secrets/jobs and POST /inbound/<routeName>.
+
+    With --cms, runs an Astro dev server rendering this app's CMS modules with
+    an editable field sidebar, so you see the same inputs a content editor gets
+    without needing a company or a deployed build.
     """
     from caraer_cli.app_sync import resolve_app_root
+
+    if cms:
+        _run_cms_harness(ctx, port=port if port != 8787 else 4321, host=host, install=install)
+        return
+
     from caraer_cli.project.local_dev import serve_functions
     from caraer_cli.project.schema import load_workspace
     from caraer_cli.project.sync import list_local_function_names, resolve_local_function_name
@@ -273,3 +292,37 @@ def app_dev(
         function_names=names,
         invoke_schedule=invoke_schedule,
     )
+
+
+def _run_cms_harness(ctx: typer.Context, *, port: int, host: str, install: bool) -> None:
+    """Generate and run the Astro harness for this app's CMS modules."""
+    import os
+
+    from caraer_cli.app_sync import resolve_app_root
+    from caraer_cli.project.modules_dev import run_harness, write_harness
+    from caraer_cli.project.schema import load_workspace
+
+    root = resolve_app_root(app_file=ctx.obj.profile.app_file)
+    config = load_workspace(root)
+
+    # Allow a checkout of caraer-web to be linked in, so the runtime and the
+    # modules can be developed together without publishing first.
+    runtime_spec = os.environ.get("CARAER_CMS_RUNTIME_SPEC", "latest")
+    tokens_spec = os.environ.get("CARAER_CMS_TOKENS_SPEC", "latest")
+
+    harness, modules = write_harness(
+        root,
+        config,
+        app_name=config.name or "app",
+        runtime_spec=runtime_spec,
+        tokens_spec=tokens_spec,
+    )
+
+    print_success(f"Prepared CMS harness in {harness}")
+    for module in modules:
+        print_success(f"  {module.name} ({module.kind})")
+    print_success(f"Starting Astro on http://{host}:{port}")
+
+    code = run_harness(harness, port=port, host=host, install=install)
+    if code != 0:
+        raise typer.Exit(code)

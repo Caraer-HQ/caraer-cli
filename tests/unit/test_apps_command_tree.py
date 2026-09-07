@@ -58,6 +58,7 @@ def test_nested_group_children() -> None:
         "inbound",
         "setting",
         "lifecycle-hook",
+        "module",
     }
     assert "app-bar" not in apps.commands["add"].commands
     assert set(apps.commands["local"].commands) == {"dev", "test", "logs"}

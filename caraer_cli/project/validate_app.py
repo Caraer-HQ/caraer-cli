@@ -17,6 +17,16 @@ from caraer_cli.project.paths import (
     schedules_dir,
     webhooks_dir,
 )
+from caraer_cli.project.modules_codegen import generate_module_types
+from caraer_cli.project.modules_sync import (
+    DISALLOWED_MODULE_FIELD_TYPES,
+    JSX_FRAMEWORKS,
+    MODULE_FIELD_TYPES,
+    MODULE_KINDS,
+    PINNED_FRAMEWORK_MAJORS,
+    discover_local_modules,
+    parse_major,
+)
 from caraer_cli.project.schedules_sync import discover_local_schedules
 from caraer_cli.project.schema import ProjectConfig, load_workspace
 from caraer_cli.project.settings_sections_sync import discover_local_settings_sections
@@ -232,6 +242,7 @@ class ValidationReport:
     settings: int = 0
     app_bars: int = 0
     lifecycle_hooks: int = 0
+    modules: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -245,6 +256,7 @@ class ValidationReport:
             "settings": self.settings,
             "appBars": self.app_bars,
             "lifecycleHooks": self.lifecycle_hooks,
+            "modules": self.modules,
             "errors": sum(1 for i in self.issues if i.severity == "error"),
             "warnings": sum(1 for i in self.issues if i.severity == "warning"),
             "issues": [asdict(i) for i in self.issues],
@@ -378,6 +390,7 @@ def validate_local_app(
     lifecycle_count = _validate_lifecycle(
         root, config, function_names, issues
     )
+    modules_count = _validate_modules(root, config, issues)
     _validate_against_json_schemas(root, config, issues)
 
     error_count = sum(1 for i in issues if i.severity == "error")
@@ -395,6 +408,7 @@ def validate_local_app(
         settings=settings_count,
         app_bars=app_bars_count,
         lifecycle_hooks=lifecycle_count,
+        modules=modules_count,
     )
 
 
@@ -616,12 +630,15 @@ def _validate_functions(
 ) -> int:
     base = functions_dir(root, config.srcDir)
     if not base.is_dir():
-        _issue(
-            issues,
-            "warning",
-            str(base.relative_to(root)),
-            "No functions directory found.",
-        )
+        # An app that only ships CMS modules has no runtime code to deploy, so
+        # a missing functions directory is expected rather than suspicious.
+        if not discover_local_modules(root, config):
+            _issue(
+                issues,
+                "warning",
+                str(base.relative_to(root)),
+                "No functions directory found.",
+            )
         return 0
 
     try:
@@ -1359,6 +1376,262 @@ def _validate_sf_ref(
         )
 
 
+def _validate_modules(
+    root: Path,
+    config: ProjectConfig,
+    issues: list[ValidationIssue],
+) -> int:
+    """Validate CMS v2 modules and regenerate their TypeScript declarations."""
+    modules = discover_local_modules(root, config)
+    if not modules:
+        return 0
+
+    seen_names: set[str] = set()
+
+    for module in modules:
+        rel_dir = str(module.directory.relative_to(root))
+        rel_config = str(module.config_path.relative_to(root))
+
+        if not module.config_path.is_file():
+            _issue(
+                issues,
+                "error",
+                rel_dir,
+                f"Missing {module.config_path.name}. Every module directory needs one.",
+            )
+            continue
+
+        if not module.config:
+            _issue(issues, "error", rel_config, "Could not parse module config as JSON.")
+            continue
+
+        if not module.entry.is_file():
+            _issue(
+                issues,
+                "error",
+                rel_dir,
+                "Missing index.astro. A module's entry point must be an .astro file, "
+                "because Astro can only apply client:* directives to components it "
+                "resolves statically.",
+            )
+
+        declared = str(module.config.get("name") or "").strip()
+        if not declared:
+            _issue(issues, "error", rel_config, "Module config is missing 'name'.")
+        elif declared != module.name:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"name '{declared}' must match the directory name '{module.name}'.",
+            )
+        elif not SETTING_FIELD_NAME_RE.match(declared):
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"name '{declared}' must be snake_case (a-z, 0-9, underscore).",
+            )
+        elif declared in seen_names:
+            _issue(issues, "error", rel_config, f"Duplicate module name '{declared}'.")
+        else:
+            seen_names.add(declared)
+
+        if not str(module.config.get("label") or "").strip():
+            _issue(issues, "error", rel_config, "Module config is missing 'label'.")
+
+        kind = str(module.config.get("kind") or "").strip()
+        if not kind:
+            _issue(issues, "error", rel_config, "Module config is missing 'kind'.")
+        elif kind not in MODULE_KINDS:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"kind '{kind}' is not one of {sorted(MODULE_KINDS)}.",
+            )
+
+        _validate_module_fields(module, rel_config, issues)
+        _validate_module_frameworks(module, rel_dir, rel_config, issues)
+
+    # Types are only worth writing once the shape is known to be sound.
+    if not any(i.severity == "error" and "modules/" in i.path for i in issues):
+        generate_module_types(root, config)
+
+    return len(modules)
+
+
+def _validate_module_fields(
+    module: Any,
+    rel_config: str,
+    issues: list[ValidationIssue],
+) -> None:
+    field_names: set[str] = set()
+
+    for item in module.fields:
+        name = str(item.get("name") or "").strip()
+        if not name:
+            _issue(issues, "error", rel_config, "A field is missing 'name'.")
+            continue
+        if not SETTING_FIELD_NAME_RE.match(name):
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}' must be snake_case (a-z, 0-9, underscore).",
+            )
+        if name in field_names:
+            _issue(issues, "error", rel_config, f"Duplicate field '{name}'.")
+        field_names.add(name)
+
+        if not str(item.get("label") or "").strip():
+            _issue(issues, "error", rel_config, f"field '{name}' is missing 'label'.")
+
+        field_type = str(item.get("type") or "").strip()
+        if not field_type:
+            _issue(issues, "error", rel_config, f"field '{name}' is missing 'type'.")
+        elif field_type in DISALLOWED_MODULE_FIELD_TYPES:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}' uses {field_type}, which is not available on modules. "
+                "A page document is public, so it must not hold a secret, and an "
+                "ACTION button belongs on a settings screen.",
+            )
+        elif field_type not in MODULE_FIELD_TYPES:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}' has unknown type '{field_type}'.",
+            )
+        elif field_type in SELECT_FIELD_TYPES and not item.get("options"):
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}' is {field_type} and needs 'options'. "
+                "Modules cannot use a serverless optionsSource; the builder renders "
+                "field inputs without invoking the app runtime.",
+            )
+
+        if item.get("optionsSource"):
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}' declares optionsSource, which modules do not support. "
+                "Use static 'options' instead.",
+            )
+
+    for item in module.fields:
+        for condition in item.get("visibleWhen") or []:
+            if not isinstance(condition, dict):
+                continue
+            target = str(condition.get("field") or "").strip()
+            operator = str(condition.get("operator") or "").strip().upper()
+            name = str(item.get("name") or "?")
+
+            if target and target not in field_names:
+                _issue(
+                    issues,
+                    "error",
+                    rel_config,
+                    f"field '{name}' has a visibleWhen on unknown field '{target}'.",
+                )
+            if operator and operator not in CONDITION_OPERATORS:
+                _issue(
+                    issues,
+                    "error",
+                    rel_config,
+                    f"field '{name}' has unknown visibleWhen operator '{operator}'.",
+                )
+            if operator in LIST_CONDITION_OPERATORS and not isinstance(
+                condition.get("value"), list
+            ):
+                _issue(
+                    issues,
+                    "error",
+                    rel_config,
+                    f"field '{name}' uses {operator}, which needs a list 'value'.",
+                )
+
+
+def _validate_module_frameworks(
+    module: Any,
+    rel_dir: str,
+    rel_config: str,
+    issues: list[ValidationIssue],
+) -> None:
+    declared = module.frameworks
+
+    for framework, range_spec in declared.items():
+        if framework not in PINNED_FRAMEWORK_MAJORS:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"Unknown framework '{framework}'. "
+                f"Supported: {sorted(PINNED_FRAMEWORK_MAJORS)}.",
+            )
+            continue
+
+        major = parse_major(range_spec)
+        pinned = PINNED_FRAMEWORK_MAJORS[framework]
+        if major is None:
+            _issue(
+                issues,
+                "warning",
+                rel_config,
+                f"Could not read a major version from {framework} range '{range_spec}'.",
+            )
+        elif major != pinned:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"{framework} range '{range_spec}' targets major {major}, but the "
+                f"platform pins {pinned}. A build hoists one copy of each framework, "
+                "so a mismatch would break every site that installs this app "
+                "alongside another.",
+            )
+
+        if not module.island_files(framework):
+            _issue(
+                issues,
+                "warning",
+                rel_dir,
+                f"Declares {framework} but has no {framework}/ island files.",
+            )
+
+    # A JSX island outside its framework folder is invisible to Astro's
+    # include patterns, so it would be compiled by the wrong renderer or none.
+    for path in module.directory.rglob("*"):
+        if path.suffix not in {".jsx", ".tsx"}:
+            continue
+        relative = path.relative_to(module.directory)
+        top = relative.parts[0] if len(relative.parts) > 1 else ""
+        if top not in JSX_FRAMEWORKS:
+            _issue(
+                issues,
+                "error",
+                f"{rel_dir}/{relative}",
+                "JSX island must live in a framework folder "
+                f"({', '.join(f'{f}/' for f in JSX_FRAMEWORKS)}). React, Preact and "
+                "Solid share the .jsx/.tsx extensions, so Astro can only tell them "
+                "apart by path.",
+            )
+        elif top not in declared:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"Module ships {top}/ islands but does not declare '{top}' under "
+                "'frameworks'.",
+            )
+
+
 def _validate_against_json_schemas(
     root: Path,
     config: ProjectConfig,
@@ -1446,6 +1719,10 @@ def _validate_against_json_schemas(
         if hook is None:
             continue
         check("lifecycle", str((base / f"{stem}.json").relative_to(root)), hook)
+
+    for module in discover_local_modules(root, config):
+        if module.config:
+            check("module", str(module.config_path.relative_to(root)), module.config)
 
 
 def _validate_lifecycle(
