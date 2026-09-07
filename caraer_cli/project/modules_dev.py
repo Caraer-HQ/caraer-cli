@@ -574,6 +574,25 @@ const style = toStyleAttribute(toCustomProperties(Astro.locals.tokens ?? DEFAULT
 const live = Astro.locals.harness?.live ?? false;
 const subdomain = Astro.locals.harness?.subdomain ?? '';
 const companies = Astro.locals.harness?.companies ?? [];
+
+// Resolved values, not the defaults: these are what the selected company
+// actually renders with, which is the whole point of showing them here.
+const tokenValues = toCustomProperties(Astro.locals.tokens ?? DEFAULT_TOKENS);
+const TYPE_TOKEN = /^--caraer-(font|size|weight|leading)-/;
+const tokenGroups = [
+  {{ label: 'Colour', kind: 'color', match: (n) => n.startsWith('--caraer-color-') }},
+  {{ label: 'Spacing', kind: 'space', match: (n) => n.startsWith('--caraer-space-') }},
+  {{ label: 'Radius', kind: 'radius', match: (n) => n.startsWith('--caraer-radius-') }},
+  {{ label: 'Typography', kind: 'type', match: (n) => TYPE_TOKEN.test(n) }},
+  {{ label: 'Shadow', kind: 'shadow', match: (n) => n.startsWith('--caraer-shadow-') }},
+  {{ label: 'Breakpoint', kind: 'plain', match: (n) => n.startsWith('--caraer-breakpoint-') }},
+  {{ label: 'Layout', kind: 'plain', match: (n) => n.startsWith('--caraer-container') || n.startsWith('--caraer-header') }},
+]
+  .map((group) => ({{
+    ...group,
+    tokens: Object.entries(tokenValues).filter(([name]) => group.match(name)),
+  }}))
+  .filter((group) => group.tokens.length > 0);
 ---
 
 <html lang="nl" style={{style}}>
@@ -638,8 +657,14 @@ const companies = Astro.locals.harness?.companies ?? [];
           <h2>{{selected?.manifest.label}}</h2>
           {{selected?.manifest.description && <p>{{selected.manifest.description}}</p>}}
           <code>{{selected?.name}}</code>
+
+          <div class="hx-seg hx-seg--panel" role="group" aria-label="Sidebar panel">
+            <button type="button" data-panel="fields" class="is-on">Fields</button>
+            <button type="button" data-panel="tokens">Tokens</button>
+          </div>
         </header>
 
+        <div class="hx-panel" data-panel="fields">
         <form method="get" class="harness__fields">
           <input type="hidden" name="module" value={{selected?.name}} />
           <input type="hidden" name="company" value={{subdomain}} />
@@ -694,6 +719,39 @@ const companies = Astro.locals.harness?.companies ?? [];
 
           <button type="submit" class="hx-apply">Apply</button>
         </form>
+        </div>
+
+        <div class="hx-panel" data-panel="tokens" hidden>
+          <p class="hx-panel__note">
+            Every value below is what{{' '}}
+            {{Astro.locals.harness?.companyName ?? 'sample data'}} renders with.
+            Click a token to copy its <code>var()</code>.
+          </p>
+
+          <input
+            type="search"
+            class="hx-token-filter"
+            placeholder="Filter tokens"
+            aria-label="Filter tokens"
+          />
+
+          {{tokenGroups.map((group) => (
+            <section class="hx-token-group">
+              <h3>{{group.label}}</h3>
+              {{group.tokens.map(([name, value]) => (
+                <button type="button" class="hx-token" data-name={{name}} data-kind={{group.kind}}>
+                  {{group.kind !== 'plain' && group.kind !== 'type' && (
+                    <span class="hx-token__chip" style={{`--chip: var(${{name}})`}}></span>
+                  )}}
+                  <code class="hx-token__name">{{name.replace('--caraer-', '')}}</code>
+                  <span class="hx-token__value">{{value}}</span>
+                </button>
+              ))}}
+            </section>
+          ))}}
+
+          <p class="hx-empty" hidden>No token matches that filter.</p>
+        </div>
       </aside>
     </div>
 
@@ -765,6 +823,58 @@ const companies = Astro.locals.harness?.companies ?? [];
         // to --company and you could not return to sample data.
         url.searchParams.set('company', event.target.value);
         window.location.href = url.toString();
+      }});
+    </script>
+
+    <script is:inline>
+      // Tokens panel: switch, filter and copy. Inert chrome, so it stays out of
+      // the script that talks to the server.
+      const panels = document.querySelectorAll('.hx-panel');
+      document.querySelectorAll('.hx-seg--panel button').forEach((tab) => {{
+        tab.addEventListener('click', () => {{
+          document
+            .querySelectorAll('.hx-seg--panel button')
+            .forEach((b) => b.classList.toggle('is-on', b === tab));
+          panels.forEach((panel) => {{
+            panel.hidden = panel.dataset.panel !== tab.dataset.panel;
+          }});
+        }});
+      }});
+
+      const filter = document.querySelector('.hx-token-filter');
+      const noMatch = document.querySelector('.hx-panel[data-panel="tokens"] .hx-empty');
+      filter?.addEventListener('input', () => {{
+        const term = filter.value.trim().toLowerCase();
+        let shown = 0;
+        document.querySelectorAll('.hx-token').forEach((token) => {{
+          const hit = token.dataset.name.includes(term);
+          token.hidden = !hit;
+          if (hit) shown += 1;
+        }});
+        // Hide a group whose every token was filtered out, so the headings
+        // left on screen still describe something.
+        document.querySelectorAll('.hx-token-group').forEach((group) => {{
+          group.hidden = !group.querySelector('.hx-token:not([hidden])');
+        }});
+        if (noMatch) noMatch.hidden = shown > 0;
+      }});
+
+      document.querySelectorAll('.hx-token').forEach((token) => {{
+        token.addEventListener('click', async () => {{
+          const snippet = `var(${{token.dataset.name}})`;
+          try {{
+            await navigator.clipboard.writeText(snippet);
+            token.dataset.copied = '';
+            setTimeout(() => delete token.dataset.copied, 900);
+          }} catch {{
+            // Clipboard needs a secure context, which plain http on a LAN
+            // address is not. Select the text so it can still be copied.
+            const range = document.createRange();
+            range.selectNodeContents(token.querySelector('.hx-token__name'));
+            getSelection()?.removeAllRanges();
+            getSelection()?.addRange(range);
+          }}
+        }});
       }});
     </script>
 
@@ -875,6 +985,77 @@ const companies = Astro.locals.harness?.companies ?? [];
       }}
       .hx-seg button:hover {{ color: var(--hx-text); }}
       .hx-seg button.is-on {{ background: var(--hx-bg); color: var(--hx-text); }}
+
+      /* Tokens panel */
+      .hx-seg--panel {{ margin-top: 0.625rem; width: fit-content; }}
+      .hx-panel[hidden] {{ display: none; }}
+      .hx-panel__note {{
+        margin: 0 0 0.75rem; font-size: 0.6875rem; line-height: 1.5;
+        color: var(--hx-muted);
+      }}
+      .hx-panel__note code {{ font-size: 0.625rem; }}
+
+      .hx-token-filter {{
+        width: 100%; margin-bottom: 0.75rem;
+        padding: 0.4rem 0.6rem;
+        background: var(--hx-panel-2); color: var(--hx-text);
+        border: 1px solid var(--hx-line); border-radius: 7px;
+        font: inherit; font-size: 0.75rem;
+      }}
+      .hx-token-filter:focus {{ outline: none; border-color: var(--hx-accent); }}
+
+      .hx-token-group {{ margin-bottom: 1rem; }}
+      .hx-token-group[hidden] {{ display: none; }}
+      .hx-token-group h3 {{
+        margin: 0 0 0.375rem;
+        font-size: 0.625rem; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.08em;
+        color: var(--hx-muted);
+      }}
+
+      .hx-token {{
+        display: flex; align-items: center; gap: 0.5rem;
+        width: 100%; padding: 0.3rem 0.4rem;
+        border: 0; border-radius: 6px;
+        background: transparent; color: var(--hx-text);
+        font: inherit; text-align: left; cursor: pointer;
+      }}
+      .hx-token[hidden] {{ display: none; }}
+      .hx-token:hover {{ background: var(--hx-panel-2); }}
+      .hx-token__name {{
+        flex: 1; min-width: 0;
+        font-size: 0.6875rem;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }}
+      .hx-token__value {{
+        flex: none; max-width: 45%;
+        font-size: 0.625rem; color: var(--hx-muted);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }}
+      .hx-token[data-copied] .hx-token__value {{ color: #86efac; }}
+      .hx-token[data-copied] .hx-token__value::after {{ content: ' copied'; }}
+
+      /* One chip per kind, so a value is legible at a glance rather than read. */
+      .hx-token__chip {{
+        flex: none; width: 16px; height: 16px; border-radius: 4px;
+        background: var(--hx-panel-2);
+      }}
+      .hx-token[data-kind='color'] .hx-token__chip {{
+        background: var(--chip);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+      }}
+      .hx-token[data-kind='radius'] .hx-token__chip {{
+        border-radius: var(--chip);
+        background: #3b4252;
+      }}
+      .hx-token[data-kind='shadow'] .hx-token__chip {{
+        background: #fff; box-shadow: var(--chip);
+      }}
+      /* Width tracks the real value, capped so --caraer-space-section still fits. */
+      .hx-token[data-kind='space'] .hx-token__chip {{
+        width: min(var(--chip), 16px); min-width: 2px;
+        height: 8px; border-radius: 2px; background: var(--hx-accent);
+      }}
 
       /* Module list */
       .hx-modules {{
