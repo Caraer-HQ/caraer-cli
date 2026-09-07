@@ -107,7 +107,7 @@ def modules_dir(root: Path, src_dir: str = "src") -> Path:
     """CMS v2 modules shipped by this app.
 
     Each subdirectory is one module: ``index.astro`` plus
-    ``module.caraer.json``. Unlike functions, modules are not executed by the
+    its ``export const manifest``. Unlike functions, modules are not executed by the
     app runtime; they are published to the Caraer npm registry and compiled
     into each installing company's website build.
     """

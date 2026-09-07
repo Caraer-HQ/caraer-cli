@@ -5,23 +5,44 @@ serverless function it never runs on the app runtime: ``caraer apps push``
 publishes it to the Caraer npm registry, and each installing company's website
 build compiles it in. Astro resolves components at build time, so "which
 modules exist" is a build input rather than request data.
+
+A module is one file: ``index.astro`` holds the markup and the
+``export const manifest`` that describes its editable fields.
 """
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from caraer_cli.project.modules_manifest import ManifestError, parse_manifest_file
 from caraer_cli.project.paths import modules_dir
 from caraer_cli.project.schema import ProjectConfig
 
-MODULE_CONFIG_FILE = "module.caraer.json"
+#: Superseded by `export const manifest` in index.astro. Still named so
+#: validation can point at a leftover and say what to do with it.
+LEGACY_MODULE_CONFIG_FILE = "module.caraer.json"
 MODULE_ENTRY_FILE = "index.astro"
 GENERATED_TYPES_FILE = "fields.d.ts"
 
+#: What the module renders as, which decides where it may be placed.
 MODULE_KINDS = frozenset({"section", "page", "header", "footer"})
+
+#: How the library picker groups modules. A fixed set, so the same kind of
+#: block lands in the same place whichever app shipped it.
+MODULE_CATEGORIES = frozenset(
+    {
+        "hero",
+        "content",
+        "listing",
+        "layout",
+        "media",
+        "form",
+        "cta",
+        "social_proof",
+    }
+)
 
 #: Frameworks whose islands share the ``.jsx``/``.tsx`` extensions. Astro can
 #: only tell them apart by path, so these require the folder convention.
@@ -75,14 +96,16 @@ class LocalModule:
     name: str
     directory: Path
     config: dict[str, Any] = field(default_factory=dict)
+    #: Why the manifest could not be read, for validation to report.
+    error: str | None = None
 
     @property
     def entry(self) -> Path:
         return self.directory / MODULE_ENTRY_FILE
 
     @property
-    def config_path(self) -> Path:
-        return self.directory / MODULE_CONFIG_FILE
+    def legacy_config_path(self) -> Path:
+        return self.directory / LEGACY_MODULE_CONFIG_FILE
 
     @property
     def kind(self) -> str:
@@ -142,18 +165,19 @@ def discover_local_modules(root: Path, config: ProjectConfig) -> list[LocalModul
             continue
 
         payload: dict[str, Any] = {}
-        config_path = directory / MODULE_CONFIG_FILE
-        if config_path.is_file():
+        error: str | None = None
+        entry = directory / MODULE_ENTRY_FILE
+        if entry.is_file():
             try:
-                loaded = json.loads(config_path.read_text(encoding="utf-8"))
-                if isinstance(loaded, dict):
-                    payload = loaded
-            except json.JSONDecodeError:
-                # Left empty on purpose: validation reports the parse error with
-                # a path, which is more useful than an exception here.
-                payload = {}
+                payload = parse_manifest_file(entry)
+            except ManifestError as exc:
+                # Carried rather than raised: validation reports it against the
+                # file, which beats an exception that stops the whole run.
+                error = str(exc)
 
-        modules.append(LocalModule(name=directory.name, directory=directory, config=payload))
+        modules.append(
+            LocalModule(name=directory.name, directory=directory, config=payload, error=error)
+        )
 
     return modules
 

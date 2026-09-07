@@ -497,9 +497,11 @@ def _harness_page(modules: list[LocalModule], app_label: str) -> str:
     entries = []
     for index, module in enumerate(modules):
         alias = f"Module{index}"
-        imports.append(f"import {alias} from '@modules/{module.name}/index.astro';")
+        # Astro hoists `export const manifest`, so the component and its field
+        # schema come from the same import.
         imports.append(
-            f"import manifest{index} from '@modules/{module.name}/module.caraer.json';"
+            f"import {alias}, {{ manifest as manifest{index} }} "
+            f"from '@modules/{module.name}/index.astro';"
         )
         entries.append(f"  {{ name: '{module.name}', component: {alias}, manifest: manifest{index} }},")
 

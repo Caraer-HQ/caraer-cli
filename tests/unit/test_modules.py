@@ -35,11 +35,20 @@ def _workspace(tmp_path: Path) -> Path:
 
 
 def _write_module(root: Path, name: str, config: dict, *, entry: bool = True) -> Path:
+    """A module on disk: one .astro carrying both manifest and markup.
+
+    JSON is a subset of the object literal syntax the manifest uses, so the
+    config can be dumped straight into the export.
+    """
     directory = root / "src" / "app" / "modules" / name
     directory.mkdir(parents=True, exist_ok=True)
-    (directory / "module.caraer.json").write_text(json.dumps(config), encoding="utf-8")
     if entry:
-        (directory / "index.astro").write_text("---\n---\n<div />\n", encoding="utf-8")
+        payload = {"category": "content", **config}
+        (directory / "index.astro").write_text(
+            f"---\nexport const manifest = {json.dumps(payload, indent=2)} "
+            "satisfies ModuleManifest;\n---\n<div />\n",
+            encoding="utf-8",
+        )
     return directory
 
 
@@ -239,8 +248,8 @@ def test_scaffold_creates_a_valid_module(tmp_path: Path) -> None:
     config = load_workspace(root)
     scaffold_module(root, config, name="feature_grid", kind="section")
 
-    assert (root / "src/app/modules/feature_grid/index.astro").is_file()
-    assert (root / "src/app/modules/feature_grid/module.caraer.json").is_file()
+    directory = root / "src/app/modules/feature_grid"
+    assert [p.name for p in directory.iterdir()] == ["index.astro"]
     assert _errors(root) == []
 
 
@@ -252,3 +261,90 @@ def test_scaffold_with_a_framework_places_the_island_correctly(tmp_path: Path) -
     island = root / "src/app/modules/counter/react/CounterIsland.tsx"
     assert island.is_file()
     assert _errors(root) == []
+
+
+def test_manifest_survives_prettier_formatting(tmp_path: Path) -> None:
+    """Single quotes, trailing commas and a satisfies suffix are all normal TS."""
+    root = _workspace(tmp_path)
+    directory = root / "src" / "app" / "modules" / "hero"
+    directory.mkdir(parents=True)
+    (directory / "index.astro").write_text(
+        """---
+import type { ModuleManifest } from '@caraer/cms-runtime';
+
+export const manifest = {
+  name: 'hero',
+  label: 'Hero',
+  kind: 'section',
+  category: 'hero',
+  fields: [{ name: 'heading', label: 'Heading', type: 'SINGLE_LINE' }],
+} satisfies ModuleManifest;
+
+const { fields } = Astro.props;
+---
+<div>{fields.heading}</div>
+""",
+        encoding="utf-8",
+    )
+
+    module = discover_local_modules(root, load_workspace(root))[0]
+    assert module.kind == "section"
+    assert module.config["category"] == "hero"
+    assert [f["name"] for f in module.fields] == ["heading"]
+    assert _errors(root) == []
+
+
+def test_a_manifest_that_is_not_a_literal_is_rejected(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    directory = root / "src" / "app" / "modules" / "hero"
+    directory.mkdir(parents=True)
+    (directory / "index.astro").write_text(
+        "---\nexport const manifest = buildManifest();\n---\n<div />\n",
+        encoding="utf-8",
+    )
+
+    assert any("plain literal" in error for error in _errors(root))
+
+
+def test_a_module_without_a_manifest_says_what_is_missing(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    directory = root / "src" / "app" / "modules" / "hero"
+    directory.mkdir(parents=True)
+    (directory / "index.astro").write_text("---\n---\n<div />\n", encoding="utf-8")
+
+    assert any("export const manifest" in error for error in _errors(root))
+
+
+def test_category_must_be_one_of_the_standard_set(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _write_module(
+        root,
+        "hero",
+        {"name": "hero", "label": "Hero", "kind": "section", "category": "splash"},
+    )
+
+    assert any("category 'splash' is not one of" in error for error in _errors(root))
+
+
+def test_category_is_required(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    directory = root / "src" / "app" / "modules" / "hero"
+    directory.mkdir(parents=True)
+    (directory / "index.astro").write_text(
+        "---\nexport const manifest = "
+        '{ "name": "hero", "label": "Hero", "kind": "section", "fields": [] };\n'
+        "---\n<div />\n",
+        encoding="utf-8",
+    )
+
+    assert any("missing 'category'" in error for error in _errors(root))
+
+
+def test_a_leftover_json_config_is_flagged(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    directory = _write_module(
+        root, "hero", {"name": "hero", "label": "Hero", "kind": "section", "category": "hero"}
+    )
+    (directory / "module.caraer.json").write_text("{}", encoding="utf-8")
+
+    assert any("A module is one file now" in error for error in _errors(root))

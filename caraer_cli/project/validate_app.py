@@ -21,6 +21,7 @@ from caraer_cli.project.modules_codegen import generate_module_types
 from caraer_cli.project.modules_sync import (
     DISALLOWED_MODULE_FIELD_TYPES,
     JSX_FRAMEWORKS,
+    MODULE_CATEGORIES,
     MODULE_FIELD_TYPES,
     MODULE_KINDS,
     PINNED_FRAMEWORK_MAJORS,
@@ -1390,20 +1391,7 @@ def _validate_modules(
 
     for module in modules:
         rel_dir = str(module.directory.relative_to(root))
-        rel_config = str(module.config_path.relative_to(root))
-
-        if not module.config_path.is_file():
-            _issue(
-                issues,
-                "error",
-                rel_dir,
-                f"Missing {module.config_path.name}. Every module directory needs one.",
-            )
-            continue
-
-        if not module.config:
-            _issue(issues, "error", rel_config, "Could not parse module config as JSON.")
-            continue
+        rel_config = str(module.entry.relative_to(root))
 
         if not module.entry.is_file():
             _issue(
@@ -1414,10 +1402,24 @@ def _validate_modules(
                 "because Astro can only apply client:* directives to components it "
                 "resolves statically.",
             )
+            continue
+
+        if module.legacy_config_path.is_file():
+            _issue(
+                issues,
+                "error",
+                str(module.legacy_config_path.relative_to(root)),
+                "A module is one file now. Move this into "
+                "`export const manifest = {...}` in index.astro and delete it.",
+            )
+
+        if module.error:
+            _issue(issues, "error", rel_config, module.error)
+            continue
 
         declared = str(module.config.get("name") or "").strip()
         if not declared:
-            _issue(issues, "error", rel_config, "Module config is missing 'name'.")
+            _issue(issues, "error", rel_config, "Module manifest is missing 'name'.")
         elif declared != module.name:
             _issue(
                 issues,
@@ -1438,17 +1440,35 @@ def _validate_modules(
             seen_names.add(declared)
 
         if not str(module.config.get("label") or "").strip():
-            _issue(issues, "error", rel_config, "Module config is missing 'label'.")
+            _issue(issues, "error", rel_config, "Module manifest is missing 'label'.")
 
         kind = str(module.config.get("kind") or "").strip()
         if not kind:
-            _issue(issues, "error", rel_config, "Module config is missing 'kind'.")
+            _issue(issues, "error", rel_config, "Module manifest is missing 'kind'.")
         elif kind not in MODULE_KINDS:
             _issue(
                 issues,
                 "error",
                 rel_config,
                 f"kind '{kind}' is not one of {sorted(MODULE_KINDS)}.",
+            )
+
+        # A fixed set, so the same kind of block lands in the same group of the
+        # library picker whichever app shipped it.
+        category = str(module.config.get("category") or "").strip()
+        if not category:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"Module manifest is missing 'category'. One of {sorted(MODULE_CATEGORIES)}.",
+            )
+        elif category not in MODULE_CATEGORIES:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"category '{category}' is not one of {sorted(MODULE_CATEGORIES)}.",
             )
 
         _validate_module_fields(module, rel_config, issues)
@@ -1720,9 +1740,6 @@ def _validate_against_json_schemas(
             continue
         check("lifecycle", str((base / f"{stem}.json").relative_to(root)), hook)
 
-    for module in discover_local_modules(root, config):
-        if module.config:
-            check("module", str(module.config_path.relative_to(root)), module.config)
 
 
 def _validate_lifecycle(

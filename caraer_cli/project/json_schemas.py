@@ -16,7 +16,6 @@ WEBHOOK_SCHEMA_URL = f"{SCHEMA_REPO_BASE}/webhook.caraer.schema.json"
 SCHEDULE_SCHEMA_URL = f"{SCHEMA_REPO_BASE}/schedule.caraer.schema.json"
 INBOUND_SCHEMA_URL = f"{SCHEMA_REPO_BASE}/inbound.caraer.schema.json"
 LIFECYCLE_SCHEMA_URL = f"{SCHEMA_REPO_BASE}/lifecycle.caraer.schema.json"
-MODULE_SCHEMA_URL = f"{SCHEMA_REPO_BASE}/module.caraer.schema.json"
 
 SCHEMA_FILENAMES = {
     "app": "app.caraer.schema.json",
@@ -25,7 +24,6 @@ SCHEMA_FILENAMES = {
     "schedule": "schedule.caraer.schema.json",
     "inbound": "inbound.caraer.schema.json",
     "lifecycle": "lifecycle.caraer.schema.json",
-    "module": "module.caraer.schema.json",
 }
 
 

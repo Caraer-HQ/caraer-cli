@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-from caraer_cli.project.json_schemas import MODULE_SCHEMA_URL
 from caraer_cli.project.modules_sync import (
     MODULE_ENTRY_FILE,
-    MODULE_CONFIG_FILE,
     PINNED_FRAMEWORK_MAJORS,
 )
 from caraer_cli.project.paths import modules_dir
@@ -19,43 +16,44 @@ def _pascal_case(value: str) -> str:
     return "".join(part.capitalize() for part in value.replace("-", "_").split("_") if part)
 
 
-def _default_config(name: str, label: str, kind: str, framework: str | None) -> dict:
-    config: dict = {
-        "$schema": MODULE_SCHEMA_URL,
-        "name": name,
-        "label": label,
-        "kind": kind,
-        "category": "content",
-        "description": f"{label} module.",
-        "fields": [
-            {
-                "name": "heading",
-                "label": "Heading",
-                "type": "SINGLE_LINE",
-                "required": True,
-                "defaultValue": label,
-            },
-            {
-                "name": "body",
-                "label": "Text",
-                "type": "MULTI_LINE",
-                "helpText": "Markdown is supported.",
-            },
-        ],
-    }
+def _manifest_source(name: str, label: str, kind: str, framework: str | None) -> str:
+    """Render the `export const manifest` block for a new module."""
+    frameworks = ""
     if framework:
         major = PINNED_FRAMEWORK_MAJORS[framework]
-        config["frameworks"] = {framework: f"^{major}.0.0"}
-    return config
+        frameworks = f"\n  frameworks: {{ {framework}: '^{major}.0.0' }},"
+
+    return f"""export const manifest = {{
+  name: '{name}',
+  label: '{label}',
+  kind: '{kind}',
+  category: 'content',
+  description: '{label} module.',{frameworks}
+  fields: [
+    {{
+      name: 'heading',
+      label: 'Heading',
+      type: 'SINGLE_LINE',
+      required: true,
+      defaultValue: '{label}',
+    }},
+    {{
+      name: 'body',
+      label: 'Text',
+      type: 'MULTI_LINE',
+      helpText: 'Markdown is supported.',
+    }},
+  ],
+}} satisfies ModuleManifest;"""
 
 
-def _entry_source(name: str, framework: str | None) -> str:
+def _entry_source(name: str, label: str, kind: str, framework: str | None) -> str:
     interface = f"{_pascal_case(name)}Fields"
     island = f"{_pascal_case(name)}Island"
 
     imports = [
         "import CaraerRichText from '@caraer/cms-runtime/CaraerRichText.astro';",
-        "import type { ModuleProps } from '@caraer/cms-runtime';",
+        "import type { ModuleManifest, ModuleProps } from '@caraer/cms-runtime';",
         "",
         f"import type {{ {interface} }} from './fields.d.ts';",
     ]
@@ -70,6 +68,8 @@ def _entry_source(name: str, framework: str | None) -> str:
 
     return f"""---
 {chr(10).join(imports)}
+
+{_manifest_source(name, label, kind, framework)}
 
 const {{ fields }} = Astro.props as ModuleProps<{interface}>;
 ---
@@ -158,7 +158,7 @@ def scaffold_module(
     framework: str | None = None,
     force: bool = False,
 ) -> Path:
-    """Create ``src/app/modules/<name>/`` with an entry, config and optional island."""
+    """Create ``src/app/modules/<name>/`` with an entry and optional island."""
     directory = modules_dir(root, config.srcDir) / name
     entry = directory / MODULE_ENTRY_FILE
 
@@ -167,11 +167,10 @@ def scaffold_module(
 
     directory.mkdir(parents=True, exist_ok=True)
 
-    payload = _default_config(name, label or _pascal_case(name), kind, framework)
-    (directory / MODULE_CONFIG_FILE).write_text(
-        json.dumps(payload, indent=2) + "\n", encoding="utf-8"
+    entry.write_text(
+        _entry_source(name, label or _pascal_case(name), kind, framework),
+        encoding="utf-8",
     )
-    entry.write_text(_entry_source(name, framework), encoding="utf-8")
 
     if framework:
         island_dir = directory / framework

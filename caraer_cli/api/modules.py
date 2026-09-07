@@ -21,7 +21,7 @@ def publish_module_catalog(
     """Register this app's modules for a published package version.
 
     ``payload`` carries ``package``, ``version`` and the ``modules`` list built
-    from each module's ``module.caraer.json``.
+    from each module's ``export const manifest``.
     """
     return client.request(
         "PUT",

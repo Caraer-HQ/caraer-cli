@@ -766,7 +766,7 @@ def app_status(ctx: typer.Context) -> None:
     from caraer_cli.project.sync import status_summary
 
     app_ctx: AppContext = ctx.obj
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
     print_data(status_summary(app_ctx.api_client(), root, config), app_ctx.output)
 
@@ -792,7 +792,7 @@ def validate_app(
     from caraer_cli.project.validate_app import validate_local_app
 
     app_ctx: AppContext = ctx.obj
-    selected = file or app_ctx.profile.app_file
+    selected = file or app_ctx.pinned_app_file
     try:
         root = resolve_app_root(app_file=selected)
     except FileNotFoundError:

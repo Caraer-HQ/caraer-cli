@@ -413,7 +413,7 @@ def add_module(
     """Scaffold a CMS module under src/app/modules/.
 
     A module is an Astro component the website builder can place on a page. The
-    fields declared in module.caraer.json become the inputs a content editor
+    fields declared in the module's manifest become the inputs a content editor
     sees, and arrive in the component as Astro.props.fields.
     """
     import re

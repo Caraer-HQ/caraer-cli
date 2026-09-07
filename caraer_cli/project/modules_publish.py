@@ -74,10 +74,9 @@ def build_package_json(
 ) -> dict[str, Any]:
     exports: dict[str, str] = {}
     for module in modules:
+        # The manifest is a named export of the component, so one entry covers
+        # both the markup and the field schema.
         exports[f"./modules/{module.name}/index.astro"] = f"./modules/{module.name}/index.astro"
-        exports[f"./modules/{module.name}/module.caraer.json"] = (
-            f"./modules/{module.name}/module.caraer.json"
-        )
 
     return {
         "name": package_name(app_name),
