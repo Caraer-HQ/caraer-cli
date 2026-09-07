@@ -575,6 +575,16 @@ const live = Astro.locals.harness?.live ?? false;
 const subdomain = Astro.locals.harness?.subdomain ?? '';
 const companies = Astro.locals.harness?.companies ?? [];
 
+// Carry the exact choice across module links, including the empty value that
+// means "sample data even though --company is set". Dropping the parameter
+// would hand the decision back to the flag every time you changed module.
+const companyChoice = Astro.url.searchParams.get('company');
+const moduleHref = (name) => {{
+  const params = new URLSearchParams({{ module: name }});
+  if (companyChoice !== null) params.set('company', companyChoice);
+  return `?${{params}}`;
+}};
+
 // Resolved values, not the defaults: these are what the selected company
 // actually renders with, which is the whole point of showing them here.
 const tokenValues = toCustomProperties(Astro.locals.tokens ?? DEFAULT_TOKENS);
@@ -635,7 +645,7 @@ const tokenGroups = [
         <ul>
           {{modules.map((m) => (
             <li>
-              <a href={{`?module=${{m.name}}`}} aria-current={{m.name === selected?.name ? 'page' : undefined}}>
+              <a href={{moduleHref(m.name)}} aria-current={{m.name === selected?.name ? 'page' : undefined}}>
                 <span class="hx-modules__name">{{m.manifest.label}}</span>
                 <span class="hx-kind" data-kind={{m.manifest.kind}}>{{m.manifest.kind}}</span>
               </a>
