@@ -167,6 +167,9 @@ export default defineConfig({{
   // string, and a prerendered page would not see them.
   output: 'server',
   adapter: node({{ mode: 'standalone' }}),
+  // The toolbar floats over the bottom of the preview, which is exactly where
+  // a footer module renders.
+  devToolbar: {{ enabled: false }},
   integrations: [{', '.join(integrations)}],
   server: {{ host: true }},
   vite: {{
@@ -368,6 +371,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
   context.locals.editor = null;
   context.locals.record = await loadRecord();
 
+  // Lets the chrome say whether you are looking at real content or samples.
+  context.locals.harness = { live: Boolean(settings), subdomain: SUBDOMAIN ?? null };
+
   context.locals.assetUrl = (key) => key ?? null;
   context.locals.localePath = (path) => (path?.startsWith('/') ? path : `/${path ?? ''}`);
   context.locals.tag = () => {};
@@ -394,7 +400,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
 """
 
 
-def _harness_page(modules: list[LocalModule]) -> str:
+def _harness_page(modules: list[LocalModule], app_label: str) -> str:
     """The harness page: renders each module with an editable field sidebar."""
     imports = []
     entries = []
@@ -463,79 +469,133 @@ const props = {{
   fields: resolveFieldValues(manifestFields, stored, record),
   rawFields: stored,
   record,
-  page: {{
-    uuid: 'sample',
-    title: 'Harness',
-    slug: '/',
-    locale: 'nl',
-    state: 'draft',
-    path: '/',
-    origin: Astro.url.origin,
-  }},
-  company: {{
-    uuid: 'sample',
-    name: 'Sample Company',
-    subdomain: 'sample',
-    logo: null,
-    logoDark: null,
-    favicon: null,
-  }},
+  page: Astro.locals.page,
+  company: Astro.locals.company,
   module: {{ id: 'sample', ref: `local/${{selected?.name}}`, kind: selected?.manifest.kind }},
   editor: null,
 }};
 
 const Selected = selected?.component;
-const style = toStyleAttribute(toCustomProperties(DEFAULT_TOKENS));
+
+// The middleware resolves these from the attached company when --company is
+// set, so the preview shows real branding rather than platform defaults.
+const style = toStyleAttribute(toCustomProperties(Astro.locals.tokens ?? DEFAULT_TOKENS));
+const live = Astro.locals.harness?.live ?? false;
+const subdomain = Astro.locals.harness?.subdomain ?? '';
 ---
 
 <html lang="nl" style={{style}}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Caraer module harness</title>
+    <title>{{selected?.manifest.label ?? 'Modules'}} - Caraer module preview</title>
   </head>
   <body>
-    <div class="harness">
-      <aside class="harness__sidebar">
-        <h1>Modules</h1>
-        <ul class="harness__list">
+    <div class="hx">
+      <header class="hx-bar">
+        <div class="hx-brand">
+          <span class="hx-mark">C</span>
+          <div class="hx-brand__text">
+            <strong>{app_label}</strong>
+            <span>{{modules.length}} module{{modules.length === 1 ? '' : 's'}}</span>
+          </div>
+        </div>
+
+        <div class="hx-source" data-live={{live ? '' : undefined}}>
+          <span class="hx-dot"></span>
+          {{live ? `Live: ${{subdomain}}` : 'Sample data'}}
+        </div>
+
+        <div class="hx-seg" role="group" aria-label="Viewport width">
+          <button type="button" data-width="390">Mobile</button>
+          <button type="button" data-width="820">Tablet</button>
+          <button type="button" data-width="0" class="is-on">Full</button>
+        </div>
+      </header>
+
+      <aside class="hx-modules">
+        <h2>Modules</h2>
+        <ul>
           {{modules.map((m) => (
             <li>
               <a href={{`?module=${{m.name}}`}} aria-current={{m.name === selected?.name ? 'page' : undefined}}>
-                {{m.manifest.label}} <small>{{m.manifest.kind}}</small>
+                <span class="hx-modules__name">{{m.manifest.label}}</span>
+                <span class="hx-kind" data-kind={{m.manifest.kind}}>{{m.manifest.kind}}</span>
               </a>
             </li>
           ))}}
         </ul>
+      </aside>
 
-        <h2>Fields</h2>
+      <main class="hx-canvas">
+        <div class="hx-frame" id="harness-frame">
+          <div class="harness__preview" id="harness-preview">
+            {{Selected && <Selected {{...props}} />}}
+          </div>
+        </div>
+      </main>
+
+      <aside class="hx-fields">
+        <header class="hx-fields__head">
+          <h2>{{selected?.manifest.label}}</h2>
+          {{selected?.manifest.description && <p>{{selected.manifest.description}}</p>}}
+          <code>{{selected?.name}}</code>
+        </header>
+
         <form method="get" class="harness__fields">
           <input type="hidden" name="module" value={{selected?.name}} />
+
+          {{manifestFields.length === 0 && (
+            <p class="hx-empty">This module has no editable fields.</p>
+          )}}
+
+          {{/* Note: a textarea's tag content is its value, so it stays on one line. */}}
           {{manifestFields.map((field) => (
-            <label>
-              <span>{{field.label}}<small>{{field.type}}</small></span>
+            <div class="hx-field" data-type={{field.type}}>
+              <label class="hx-field__label" for={{`f-${{field.name}}`}}>
+                <span>
+                  {{field.label}}
+                  {{field.required && <em class="hx-req" title="Required">*</em>}}
+                </span>
+                <code>{{field.type.toLowerCase().replace(/_/g, ' ')}}</code>
+              </label>
+
               {{field.type === 'SWITCH' ? (
-                <input type="checkbox" name={{`f.${{field.name}}`}} checked={{Boolean(stored[field.name])}} value="true" />
+                <label class="hx-switch">
+                  <input
+                    id={{`f-${{field.name}}`}}
+                    type="checkbox"
+                    name={{`f.${{field.name}}`}}
+                    checked={{Boolean(stored[field.name])}}
+                    value="true"
+                  />
+                  <span class="hx-switch__track"><span class="hx-switch__thumb"></span></span>
+                  <span class="hx-switch__state">{{stored[field.name] ? 'On' : 'Off'}}</span>
+                </label>
               ) : field.type === 'MULTI_LINE' ? (
-                <textarea name={{`f.${{field.name}}`}} rows="3">{{String(stored[field.name] ?? '')}}</textarea>
+                <textarea id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}} rows="4">{{String(stored[field.name] ?? '')}}</textarea>
               ) : field.options ? (
-                <select name={{`f.${{field.name}}`}}>
+                <select id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}}>
                   {{field.options.map((o) => (
                     <option value={{o.name}} selected={{stored[field.name] === o.name}}>{{o.label}}</option>
                   ))}}
                 </select>
               ) : (
-                <input name={{`f.${{field.name}}`}} value={{String(stored[field.name] ?? '')}} />
+                <input
+                  id={{`f-${{field.name}}`}}
+                  name={{`f.${{field.name}}`}}
+                  value={{String(stored[field.name] ?? '')}}
+                  placeholder={{field.helpText ?? ''}}
+                />
               )}}
-            </label>
+
+              {{field.helpText && <small class="hx-help">{{field.helpText}}</small>}}
+            </div>
           ))}}
-          <button type="submit">Apply</button>
+
+          <button type="submit" class="hx-apply">Apply</button>
         </form>
       </aside>
-
-      <main class="harness__preview" id="harness-preview">
-        {{Selected && <Selected {{...props}} />}}
-      </main>
     </div>
 
     <script>
@@ -597,28 +657,252 @@ const style = toStyleAttribute(toCustomProperties(DEFAULT_TOKENS));
       }}
     </script>
 
-    <style is:global>
-      @import '@caraer/cms-tokens/tokens.css';
+    <script is:inline>
+      // Viewport width toggle. Chrome-only, so it lives here rather than in the
+      // live-update script that talks to the server.
+      const frame = document.getElementById('harness-frame');
+      document.querySelectorAll('.hx-seg button').forEach((button) => {{
+        button.addEventListener('click', () => {{
+          document.querySelectorAll('.hx-seg button').forEach((b) => b.classList.remove('is-on'));
+          button.classList.add('is-on');
+          const width = Number(button.dataset.width);
+          frame.style.maxWidth = width ? width + 'px' : '';
+        }});
+      }});
+    </script>
 
-      body {{ margin: 0; font-family: system-ui, sans-serif; }}
-      .harness {{ display: grid; grid-template-columns: 20rem 1fr; min-height: 100vh; }}
-      .harness__sidebar {{
-        padding: 1rem; background: #f7f7f9; border-right: 1px solid #e5e6e8;
-        overflow-y: auto; max-height: 100vh;
+    <style is:global>
+      /*
+       * Chrome styles only. Namespaced under .hx- and scoped selectors so they
+       * never reach the previewed module, which brings its own CSS and the
+       * company's design tokens.
+       */
+      :root {{
+        --hx-bg: #0f1115;
+        --hx-panel: #161920;
+        --hx-panel-2: #1c2029;
+        --hx-line: #272c37;
+        --hx-text: #e7e9ee;
+        --hx-muted: #98a0ae;
+        --hx-accent: #5b8cff;
       }}
-      .harness__sidebar h1, .harness__sidebar h2 {{ font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: #737882; }}
-      .harness__list {{ list-style: none; margin: 0 0 1.5rem; padding: 0; display: grid; gap: 0.25rem; }}
-      .harness__list a {{ display: flex; justify-content: space-between; padding: 0.5rem; border-radius: 0.375rem; color: #17181A; text-decoration: none; }}
-      .harness__list a[aria-current] {{ background: #E3ECF9; font-weight: 600; }}
-      .harness__list small, .harness__fields small {{ color: #92969E; font-weight: 400; }}
-      .harness__fields {{ display: grid; gap: 0.75rem; }}
-      .harness__fields label {{ display: grid; gap: 0.25rem; font-size: 0.8125rem; }}
-      .harness__fields span {{ display: flex; justify-content: space-between; gap: 0.5rem; font-weight: 600; }}
-      .harness__fields input, .harness__fields select, .harness__fields textarea {{
-        font: inherit; padding: 0.375rem 0.5rem; border: 1px solid #C6C8CC; border-radius: 0.375rem;
+
+      html, body {{ height: 100%; }}
+      body {{
+        margin: 0;
+        background: var(--hx-bg);
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        color: var(--hx-text);
       }}
-      .harness__fields button {{ padding: 0.5rem; border: 0; border-radius: 0.375rem; background: #0D47A1; color: #fff; font-weight: 600; cursor: pointer; }}
-      .harness__preview {{ overflow-x: hidden; }}
+
+      .hx {{
+        display: grid;
+        grid-template-columns: 200px minmax(0, 1fr) 300px;
+        grid-template-rows: 52px minmax(0, 1fr);
+        height: 100vh;
+      }}
+
+      /* Top bar */
+      .hx-bar {{
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0 0.875rem;
+        background: var(--hx-panel);
+        border-bottom: 1px solid var(--hx-line);
+      }}
+      .hx-brand {{ display: flex; align-items: center; gap: 0.625rem; min-width: 0; }}
+      .hx-mark {{
+        display: grid; place-items: center;
+        width: 26px; height: 26px; border-radius: 7px;
+        background: var(--hx-accent); color: #fff;
+        font-weight: 700; font-size: 0.8125rem;
+      }}
+      .hx-brand__text {{ display: grid; line-height: 1.2; min-width: 0; }}
+      .hx-brand__text strong {{ font-size: 0.8125rem; }}
+      .hx-brand__text span {{ font-size: 0.6875rem; color: var(--hx-muted); }}
+
+      .hx-source {{
+        display: flex; align-items: center; gap: 0.4rem;
+        margin-left: auto;
+        padding: 0.25rem 0.6rem;
+        border: 1px solid var(--hx-line); border-radius: 999px;
+        font-size: 0.6875rem; color: var(--hx-muted);
+      }}
+      .hx-dot {{ width: 6px; height: 6px; border-radius: 50%; background: #6b7280; }}
+      .hx-source[data-live] {{ color: #86efac; border-color: #14532d; }}
+      .hx-source[data-live] .hx-dot {{ background: #22c55e; }}
+
+      .hx-seg {{
+        display: flex; gap: 2px; padding: 2px;
+        background: var(--hx-panel-2); border-radius: 8px;
+      }}
+      .hx-seg button {{
+        border: 0; background: transparent; color: var(--hx-muted);
+        font: inherit; font-size: 0.6875rem;
+        padding: 0.3rem 0.6rem; border-radius: 6px; cursor: pointer;
+      }}
+      .hx-seg button:hover {{ color: var(--hx-text); }}
+      .hx-seg button.is-on {{ background: var(--hx-bg); color: var(--hx-text); }}
+
+      /* Module list */
+      .hx-modules {{
+        background: var(--hx-panel);
+        border-right: 1px solid var(--hx-line);
+        padding: 0.875rem 0.625rem;
+        overflow-y: auto;
+      }}
+      .hx-modules h2, .hx-fields h2 {{
+        margin: 0 0 0.5rem;
+        font-size: 0.625rem; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.08em;
+        color: var(--hx-muted);
+      }}
+      .hx-modules ul {{ list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }}
+      .hx-modules a {{
+        display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+        padding: 0.5rem 0.6rem; border-radius: 7px;
+        color: var(--hx-muted); text-decoration: none; font-size: 0.8125rem;
+      }}
+      .hx-modules a:hover {{ background: var(--hx-panel-2); color: var(--hx-text); }}
+      .hx-modules a[aria-current] {{ background: var(--hx-panel-2); color: var(--hx-text); font-weight: 600; }}
+      .hx-modules a[aria-current] .hx-modules__name {{ box-shadow: inset 2px 0 0 var(--hx-accent); padding-left: 0.5rem; margin-left: -0.5rem; }}
+      .hx-modules__name {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+
+      .hx-kind {{
+        flex: none;
+        font-size: 0.5625rem; text-transform: uppercase; letter-spacing: 0.05em;
+        padding: 0.1rem 0.35rem; border-radius: 4px;
+        background: #23304a; color: #9cc0ff;
+      }}
+      .hx-kind[data-kind="page"] {{ background: #3a2a4d; color: #d3b0ff; }}
+      .hx-kind[data-kind="header"], .hx-kind[data-kind="footer"] {{ background: #2c3340; color: #b6c0d0; }}
+
+      /* Preview canvas */
+      .hx-canvas {{
+        padding: 1.25rem;
+        overflow: auto;
+        background:
+          linear-gradient(45deg, #14171d 25%, transparent 25%) -8px 0/16px 16px,
+          linear-gradient(-45deg, #14171d 25%, transparent 25%) -8px 0/16px 16px,
+          var(--hx-bg);
+      }}
+      .hx-frame {{
+        margin: 0 auto;
+        background: #fff;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+        transition: max-width 180ms ease;
+      }}
+      /*
+       * Reset the chrome's dark text inside the frame and apply the same body
+       * styles caraer-web's page shell uses, so the preview matches production
+       * instead of inheriting the harness's own theme.
+       */
+      .harness__preview {{
+        overflow-x: hidden;
+        background: var(--caraer-color-background);
+        color: var(--caraer-color-font);
+        font-family: var(--caraer-font-body);
+        font-size: var(--caraer-size-body);
+        line-height: var(--caraer-leading-body);
+      }}
+
+      /* Field panel */
+      .hx-fields {{
+        background: var(--hx-panel);
+        border-left: 1px solid var(--hx-line);
+        padding: 0.875rem;
+        overflow-y: auto;
+      }}
+      .hx-fields__head {{ margin-bottom: 1rem; }}
+      .hx-fields__head h2 {{
+        font-size: 0.9375rem; font-weight: 600; text-transform: none;
+        letter-spacing: 0; color: var(--hx-text); margin-bottom: 0.25rem;
+      }}
+      .hx-fields__head p {{ margin: 0 0 0.4rem; font-size: 0.75rem; color: var(--hx-muted); line-height: 1.45; }}
+      .hx-fields__head code, .hx-field__label code {{
+        font-size: 0.625rem; color: var(--hx-muted);
+        background: var(--hx-panel-2); padding: 0.1rem 0.35rem; border-radius: 4px;
+      }}
+
+      .harness__fields {{ display: grid; gap: 0.875rem; }}
+      .hx-field {{ display: grid; gap: 0.3rem; }}
+      .hx-field__label {{
+        display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+        font-size: 0.75rem; font-weight: 600;
+      }}
+      .hx-req {{ color: #f87171; font-style: normal; }}
+      .hx-help {{ font-size: 0.6875rem; color: var(--hx-muted); line-height: 1.4; }}
+      .hx-empty {{ font-size: 0.75rem; color: var(--hx-muted); }}
+
+      .harness__fields input[type="text"],
+      .harness__fields input:not([type]),
+      .harness__fields select,
+      .harness__fields textarea {{
+        width: 100%; box-sizing: border-box;
+        font: inherit; font-size: 0.8125rem;
+        padding: 0.45rem 0.55rem;
+        background: var(--hx-bg);
+        border: 1px solid var(--hx-line); border-radius: 7px;
+        color: var(--hx-text);
+      }}
+      .harness__fields textarea {{ resize: vertical; line-height: 1.5; }}
+      .harness__fields input:focus-visible,
+      .harness__fields select:focus-visible,
+      .harness__fields textarea:focus-visible {{
+        outline: none; border-color: var(--hx-accent);
+        box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.18);
+      }}
+
+      /* Switch */
+      .hx-switch {{ display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }}
+      .hx-switch input {{ position: absolute; opacity: 0; width: 0; height: 0; }}
+      .hx-switch__track {{
+        width: 34px; height: 20px; border-radius: 999px;
+        background: var(--hx-line); position: relative; transition: background 140ms ease;
+      }}
+      .hx-switch__thumb {{
+        position: absolute; top: 2px; left: 2px;
+        width: 16px; height: 16px; border-radius: 50%;
+        background: #fff; transition: transform 140ms ease;
+      }}
+      .hx-switch input:checked + .hx-switch__track {{ background: var(--hx-accent); }}
+      .hx-switch input:checked + .hx-switch__track .hx-switch__thumb {{ transform: translateX(14px); }}
+      .hx-switch input:focus-visible + .hx-switch__track {{ box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.18); }}
+      .hx-switch__state {{ font-size: 0.75rem; color: var(--hx-muted); }}
+
+      .hx-apply {{
+        margin-top: 0.25rem; padding: 0.5rem;
+        border: 1px solid var(--hx-line); border-radius: 7px;
+        background: var(--hx-panel-2); color: var(--hx-muted);
+        font: inherit; font-size: 0.75rem; cursor: pointer;
+      }}
+      .hx-apply:hover {{ color: var(--hx-text); border-color: var(--hx-accent); }}
+
+      /* The preview is the point, so the panels give up width first. */
+      @media (max-width: 1200px) {{
+        .hx {{ grid-template-columns: 170px minmax(0, 1fr) 260px; }}
+        .hx-canvas {{ padding: 0.75rem; }}
+      }}
+
+      /*
+       * Below this, three columns leave the preview too narrow to judge
+       * anything, so the fields move underneath and the preview takes the width.
+       */
+      @media (max-width: 960px) {{
+        .hx {{
+          grid-template-columns: 150px minmax(0, 1fr);
+          grid-template-rows: 52px minmax(0, 1fr) minmax(160px, 34vh);
+        }}
+        .hx-fields {{
+          grid-column: 1 / -1;
+          border-left: 0;
+          border-top: 1px solid var(--hx-line);
+        }}
+      }}
     </style>
   </body>
 </html>
@@ -662,7 +946,7 @@ def write_harness(
         _astro_config(modules_dir(root, config.srcDir).resolve(), frameworks, harness.resolve()),
         encoding="utf-8",
     )
-    (harness / "src" / "pages" / "index.astro").write_text(_harness_page(modules), encoding="utf-8")
+    (harness / "src" / "pages" / "index.astro").write_text(_harness_page(modules, app_name), encoding="utf-8")
     (harness / "src" / "middleware.ts").write_text(_harness_middleware(), encoding="utf-8")
     (harness / "samples.json").write_text(
         json.dumps({m.name: sample_fields(m) for m in modules}, indent=2) + "\n", encoding="utf-8"
