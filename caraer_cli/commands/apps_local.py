@@ -317,8 +317,23 @@ def app_dev(
         )
 
     harness_process = None
+    company_api = None
     if harness is not None:
-        harness_env: dict[str, str] = {"CARAER_API_BASE_URL": ctx.obj.profile.base_url}
+        from caraer_cli.project.modules_dev_api import start_company_api
+        from caraer_cli.project.modules_dev import fetch_companies
+
+        # Served from memory for the life of the preview rather than written
+        # into the checkout: this is customer branding, not build output.
+        app_ctx = ctx.obj
+        company_api = start_company_api(
+            lambda: fetch_companies(app_ctx.api_client()) if app_ctx.token else []
+        )
+
+        harness_env: dict[str, str] = {
+            "CARAER_API_BASE_URL": ctx.obj.profile.base_url,
+            "CARAER_HARNESS_API": company_api.url,
+            "CARAER_HARNESS_TOKEN": company_api.token,
+        }
         if company:
             harness_env["CARAER_SUBDOMAIN"] = company
             if record_object:
@@ -369,6 +384,8 @@ def app_dev(
                 harness_process.wait(timeout=5)
             except Exception:  # noqa: BLE001
                 harness_process.kill()
+        if company_api is not None:
+            company_api.shutdown()
 
 
 def _prepare_cms_harness(root, config, app_ctx, *, install: bool):
@@ -378,7 +395,6 @@ def _prepare_cms_harness(root, config, app_ctx, *, install: bool):
     and 'caraer apps local dev' should still run them.
     """
     from caraer_cli.project.modules_dev import (
-        fetch_companies,
         install_harness,
         resolve_runtime_specs,
         write_harness,
@@ -394,14 +410,9 @@ def _prepare_cms_harness(root, config, app_ctx, *, install: bool):
     if runtime_spec.startswith("file:"):
         print_success(f"Using local runtime from {runtime_spec[5:]}")
 
-    # Read with the CLI's credentials and baked in as plain data, so the preview
-    # can offer every company you can reach without ever holding a token.
-    companies = fetch_companies(app_ctx.api_client()) if app_ctx.token else []
-    if companies:
-        print_success(f"Preview companies: {len(companies)} available in the picker")
-    else:
+    if not app_ctx.token:
         print_warning(
-            "No companies available to preview against. "
+            "Not signed in, so the preview offers sample data only. "
             "Run 'caraer auth login' to style modules with real branding."
         )
 
@@ -411,7 +422,6 @@ def _prepare_cms_harness(root, config, app_ctx, *, install: bool):
         app_name=config.name or "app",
         runtime_spec=runtime_spec,
         tokens_spec=tokens_spec,
-        companies=companies,
     )
     for module in modules:
         print_success(f"  module: {module.name} ({module.kind})")

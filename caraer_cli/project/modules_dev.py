@@ -262,9 +262,9 @@ def _harness_middleware() -> str:
 import { defineMiddleware } from 'astro:middleware';
 import { DEFAULT_TOKENS, resolveTokens } from '@caraer/cms-tokens';
 
-import COMPANIES from '../companies.json';
-
 const SUBDOMAIN = process.env.CARAER_SUBDOMAIN;
+const HARNESS_API = process.env.CARAER_HARNESS_API;
+const HARNESS_TOKEN = process.env.CARAER_HARNESS_TOKEN;
 const API_BASE = (process.env.CARAER_API_BASE_URL || '').replace(/\\/$/, '');
 const RECORD_OBJECT = process.env.CARAER_RECORD_OBJECT;
 
@@ -347,6 +347,38 @@ async function live(path, init = {}, subdomain = SUBDOMAIN) {
   }
 }
 
+/*
+ * The company list and its branding are real customer data, so the CLI holds
+ * them in memory and serves them over loopback for as long as the preview
+ * runs, rather than writing them into your checkout. Cached per process, so
+ * changing module or field does not refetch.
+ */
+async function harnessApi(path) {
+  if (!HARNESS_API) return null;
+  try {
+    const response = await fetch(`${HARNESS_API}${path}`, {
+      headers: { Authorization: `Bearer ${HARNESS_TOKEN}` },
+    });
+    return response.ok ? await response.json() : null;
+  } catch (error) {
+    console.warn(`[harness] Could not reach the CLI (${error.message}).`);
+    return null;
+  }
+}
+
+let companiesPromise;
+const loadCompanies = () =>
+  (companiesPromise ??= harnessApi('/companies').then((list) => list ?? []));
+
+// Branding is per company, so a preview you never point at one never asks.
+const companyCache = new Map();
+const loadCompany = (subdomain) => {
+  if (!companyCache.has(subdomain)) {
+    companyCache.set(subdomain, harnessApi(`/companies/${encodeURIComponent(subdomain)}`));
+  }
+  return companyCache.get(subdomain);
+};
+
 // Cached per company rather than per request: this data changes rarely while a
 // preview reloads on every keystroke, but switching companies must refetch.
 const settingsCache = new Map();
@@ -408,7 +440,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const requested = context.url.searchParams.has('company')
     ? context.url.searchParams.get('company')
     : SUBDOMAIN;
-  const selectedCompany = requested ? COMPANIES.find((c) => c.subdomain === requested) : null;
+  const selectedCompany = requested ? await loadCompany(requested) : null;
   const activeSubdomain = selectedCompany?.subdomain ?? requested ?? null;
 
   // Only companies missing from the list need fetching; the rest came baked.
@@ -460,7 +492,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     live: Boolean(selectedCompany || settings),
     subdomain: activeSubdomain,
     companyName: selectedCompany?.name ?? settings?.company?.name ?? null,
-    companies: COMPANIES.map((c) => ({ name: c.name, subdomain: c.subdomain })),
+    companies: await loadCompanies(),
   };
 
   context.locals.assetUrl = (key) => key ?? null;
@@ -1254,7 +1286,6 @@ def write_harness(
     app_name: str,
     runtime_spec: str,
     tokens_spec: str,
-    companies: list[dict[str, Any]] | None = None,
 ) -> tuple[Path, list[LocalModule]]:
     """Generate the harness workspace. Returns its directory and the modules."""
     modules = [m for m in discover_local_modules(root, config) if m.config and m.entry.is_file()]
@@ -1289,9 +1320,6 @@ def write_harness(
     (harness / "src" / "middleware.ts").write_text(_harness_middleware(), encoding="utf-8")
     (harness / "samples.json").write_text(
         json.dumps({m.name: sample_fields(m) for m in modules}, indent=2) + "\n", encoding="utf-8"
-    )
-    (harness / "companies.json").write_text(
-        json.dumps(companies or [], indent=2) + "\n", encoding="utf-8"
     )
     (harness / ".gitignore").write_text("*\n", encoding="utf-8")
 
