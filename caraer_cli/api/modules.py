@@ -25,11 +25,11 @@ def publish_module_catalog(
     """
     return client.request(
         "PUT",
-        f"/v2/apps/{app_uuid}/cms-modules",
+        f"/api/v2/apps/{app_uuid}/cms-modules",
         json_body=payload,
     )
 
 
 def list_module_catalog(client: CaraerApiClient, app_uuid: str) -> dict[str, Any]:
     """Read the modules currently registered for an app."""
-    return client.request("GET", f"/v2/apps/{app_uuid}/cms-modules")
+    return client.request("GET", f"/api/v2/apps/{app_uuid}/cms-modules")

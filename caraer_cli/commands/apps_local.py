@@ -7,7 +7,12 @@ import typer
 from caraer_cli.completion_callbacks import complete_local_function
 from caraer_cli.commands.deprecation import register_deprecated_leaf_alias
 from caraer_cli.context import AppContext
-from caraer_cli.formatters.output import print_data, print_logs, print_success
+from caraer_cli.formatters.output import (
+    print_data,
+    print_logs,
+    print_success,
+    print_warning,
+)
 
 local_app = typer.Typer(help="Local development and remote diagnostics.", no_args_is_help=True)
 
@@ -250,6 +255,16 @@ def app_dev(
         "--cms/--no-cms",
         help="Serve this app's CMS module preview.",
     ),
+    company: str | None = typer.Option(
+        None,
+        "--company",
+        help="Subdomain of a company to preview against: real branding, menus, forms and records.",
+    ),
+    record_object: str | None = typer.Option(
+        None,
+        "--record",
+        help="Object name whose first record binds PROPERTY_* fields. Needs --company.",
+    ),
     install: bool = typer.Option(
         False,
         "--install",
@@ -303,7 +318,22 @@ def app_dev(
 
     harness_process = None
     if harness is not None:
-        harness_process = start_harness(harness, port=cms_port, host=host)
+        harness_env: dict[str, str] = {}
+        if company:
+            harness_env["CARAER_SUBDOMAIN"] = company
+            harness_env["CARAER_API_BASE_URL"] = ctx.obj.profile.base_url
+            if record_object:
+                harness_env["CARAER_RECORD_OBJECT"] = record_object
+            print_success(
+                f"Previewing against '{company}' via {ctx.obj.profile.base_url}"
+                + (f", records from '{record_object}'" if record_object else "")
+            )
+        elif record_object:
+            print_warning("--record needs --company; falling back to sample data.")
+
+        harness_process = start_harness(
+            harness, port=cms_port, host=host, env=harness_env
+        )
         print_success(f"CMS preview:  http://{host}:{cms_port}")
 
     try:
