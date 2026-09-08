@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.3
+
+- Settings schema `filterTraits` on `OBJECT_SINGLE_SELECT` / `OBJECT_MULTI_SELECT`
+  so installers can be limited to objects that have specific traits
+- Parse CMS module `manifest` object literals without `json5`, so existing
+  `caraer` installs keep working after this release
+
 - Settings schema `ACTION` fields with `actionSource` trigger a serverless
   function without saving settings (cannot be `required` or a `visibleWhen` target)
 - App scaffolds write a public `# yaml-language-server: $schema=…` line that
