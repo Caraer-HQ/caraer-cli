@@ -22,6 +22,7 @@ LOCAL_SETTING_KEYS = (
     "visibleWhen",
     "defaultValue",
     "hidden",
+    "filterTraits",
     "value",
     "hasValue",
     "mappingValue",

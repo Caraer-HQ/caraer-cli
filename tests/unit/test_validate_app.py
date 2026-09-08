@@ -334,6 +334,50 @@ def test_validate_visible_when_is_set_needs_no_value(tmp_path: Path) -> None:
     assert report.ok
 
 
+def test_validate_filter_traits_on_object_select_ok(tmp_path: Path) -> None:
+    report = _settings_report(
+        tmp_path,
+        [
+            {
+                "name": "event_object",
+                "type": "OBJECT_SINGLE_SELECT",
+                "filterTraits": ["event"],
+            }
+        ],
+    )
+    assert report.ok
+
+
+def test_validate_filter_traits_on_other_type_is_invalid(tmp_path: Path) -> None:
+    report = _settings_report(
+        tmp_path,
+        [
+            {
+                "name": "event_object",
+                "type": "SINGLE_LINE",
+                "filterTraits": ["event"],
+            }
+        ],
+    )
+    assert not report.ok
+    assert any("filterTraits" in i.path for i in report.issues)
+
+
+def test_validate_filter_traits_rejects_blank_entry(tmp_path: Path) -> None:
+    report = _settings_report(
+        tmp_path,
+        [
+            {
+                "name": "event_object",
+                "type": "OBJECT_MULTI_SELECT",
+                "filterTraits": [" "],
+            }
+        ],
+    )
+    assert not report.ok
+    assert any("filterTraits[0]" in i.path for i in report.issues)
+
+
 def test_validate_action_setting_ok(tmp_path: Path) -> None:
     report = _settings_report(
         tmp_path,

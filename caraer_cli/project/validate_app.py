@@ -73,6 +73,12 @@ SELECT_FIELD_TYPES = frozenset(
         "MULTI_SELECT",
     }
 )
+OBJECT_SELECT_FIELD_TYPES = frozenset(
+    {
+        "OBJECT_SINGLE_SELECT",
+        "OBJECT_MULTI_SELECT",
+    }
+)
 CONDITION_OPERATORS = frozenset(
     {"EQUALS", "NOT_EQUALS", "IN", "NOT_IN", "IS_SET", "IS_NOT_SET"}
 )
@@ -1036,6 +1042,7 @@ def _validate_settings(
             _issue(issues, "error", f"{rel}:name", f"Duplicate setting name '{name}'.")
         seen.add(key)
         _validate_visible_when(item, name, known_names, action_names, rel, issues)
+        _validate_filter_traits(item, rel, issues)
         value_scope = str(item.get("valueScope") or "").strip().upper()
         if value_scope and value_scope not in ("COMPANY", "USER"):
             _issue(
@@ -1204,6 +1211,41 @@ def _validate_action_source(
             f"{rel}:actionSource.serverlessFunctionName",
             f"Unknown local function '{fn_name}'.",
         )
+
+
+def _validate_filter_traits(
+    item: dict[str, Any],
+    rel: str,
+    issues: list[ValidationIssue],
+) -> None:
+    """Validate the object-picker trait filter on one settings field."""
+    traits = item.get("filterTraits")
+    if traits is None:
+        return
+    where = f"{rel}:filterTraits"
+    if not isinstance(traits, list):
+        _issue(issues, "error", where, "filterTraits must be a list of trait names.")
+        return
+
+    field_type = str(item.get("type") or "").strip().upper()
+    if field_type and field_type not in OBJECT_SELECT_FIELD_TYPES:
+        _issue(
+            issues,
+            "error",
+            where,
+            "filterTraits only applies to OBJECT_SINGLE_SELECT and "
+            "OBJECT_MULTI_SELECT fields.",
+        )
+        return
+
+    for index, trait in enumerate(traits):
+        if not isinstance(trait, str) or not trait.strip():
+            _issue(
+                issues,
+                "error",
+                f"{where}[{index}]",
+                "Each filterTraits entry must be a non-empty trait name.",
+            )
 
 
 def _validate_visible_when(

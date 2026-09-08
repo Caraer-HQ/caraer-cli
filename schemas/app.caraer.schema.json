@@ -294,6 +294,11 @@
         "defaultValue": {
           "description": "Initial value before the installer saves."
         },
+        "filterTraits": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "OBJECT_SINGLE_SELECT / OBJECT_MULTI_SELECT only: limit the picker to objects that have every listed trait (for example [\"event\"])."
+        },
         "options": {
           "type": "array",
           "description": "Static choices for SINGLE_SELECT / MULTI_SELECT / RECORD_* when optionsSource is omitted.",
