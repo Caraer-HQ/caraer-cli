@@ -63,6 +63,7 @@ caraer apps local test --function <name> --sample-only
 ```text
 caraer.json
 package.json                # npm-style scripts (dev/validate/push/deploy); Node adds @caraer/client
+tsconfig.json               # resolves module npm imports (`three`, …) in the editor
 src/app/
   app.caraer.yaml           # identity, auth, brandmark, logo, settings, OAuth
   functions/<name>/         # index.js|main.py (function.caraer.json optional)

@@ -12,7 +12,7 @@ from caraer_cli.local_app import (
     local_app_summary,
     resolve_app_file_path,
 )
-from caraer_cli.project.scaffold import scaffold_app_project
+from caraer_cli.project.scaffold import ensure_tsconfig, scaffold_app_project
 
 
 def test_looks_like_uuid() -> None:
@@ -111,6 +111,25 @@ def test_scaffold_app_project_layout(tmp_path: Path) -> None:
 
     found = discover_local_app_files(tmp_path)
     assert result["app_file"].resolve() in found
+
+
+def test_node_init_writes_tsconfig_and_module_package_json(tmp_path: Path) -> None:
+    root = tmp_path / "cms_app"
+    payload = build_public_app_placeholder(label="CMS App", name="cms_app")
+    scaffold_app_project(
+        root,
+        app_payload=payload,
+        sample_function=None,
+        runtime="nodejs22",
+    )
+
+    tsconfig = json.loads((root / "tsconfig.json").read_text(encoding="utf-8"))
+    assert tsconfig["compilerOptions"]["moduleResolution"] == "bundler"
+    assert "src/**/*.ts" in tsconfig["include"]
+
+    package = json.loads((root / "package.json").read_text(encoding="utf-8"))
+    assert package["type"] == "module"
+    assert ensure_tsconfig(root) is None
 
 
 def test_legacy_json_manifest_still_loads(tmp_path: Path) -> None:

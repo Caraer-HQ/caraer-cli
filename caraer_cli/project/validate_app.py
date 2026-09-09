@@ -18,6 +18,7 @@ from caraer_cli.project.paths import (
     webhooks_dir,
 )
 from caraer_cli.project.modules_codegen import generate_module_types
+from caraer_cli.project.scaffold import ensure_tsconfig
 from caraer_cli.project.modules_sync import (
     DISALLOWED_MODULE_FIELD_TYPES,
     JSX_FRAMEWORKS,
@@ -1519,6 +1520,8 @@ def _validate_modules(
     # Types are only worth writing once the shape is known to be sound.
     if not any(i.severity == "error" and "modules/" in i.path for i in issues):
         generate_module_types(root, config)
+        if modules:
+            ensure_tsconfig(root)
 
     return len(modules)
 

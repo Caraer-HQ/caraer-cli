@@ -241,6 +241,8 @@ def test_codegen_runs_during_validation(tmp_path: Path) -> None:
     generated = root / "src" / "app" / "modules" / "hero" / "fields.d.ts"
     assert generated.is_file()
     assert "HeroFields" in generated.read_text(encoding="utf-8")
+    tsconfig = json.loads((root / "tsconfig.json").read_text(encoding="utf-8"))
+    assert tsconfig["compilerOptions"]["moduleResolution"] == "bundler"
 
 
 def test_scaffold_creates_a_valid_module(tmp_path: Path) -> None:

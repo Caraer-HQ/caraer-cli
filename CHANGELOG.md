@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `apps init` writes a root `tsconfig.json` (same options as `caraer-core`) so
+  module scripts can resolve npm libraries such as `three`. Node `package.json`
+  scaffolds set `"type": "module"`. `apps add module` and `apps validate` write
+  the tsconfig when it is missing.
+
 ## 0.1.3
 
 - Settings schema `filterTraits` on `OBJECT_SINGLE_SELECT` / `OBJECT_MULTI_SELECT`

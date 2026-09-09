@@ -318,6 +318,24 @@ node_modules/
 .DS_Store
 """
 
+#: Same compiler options as ``caraer-core``. Module scripts import npm
+#: packages (``three``, …); without this file the editor reports
+#: ``Cannot find module`` even after ``npm install``.
+TSCONFIG_CONTENTS = """\
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts"]
+}
+"""
+
 
 def resolve_project_root(path: str | Path, *, create: bool = False) -> Path:
     root = Path(path).expanduser().resolve()
@@ -367,6 +385,7 @@ def ensure_package_json(root: Path, name: str) -> Path | None:
     payload = {
         "name": name,
         "private": True,
+        "type": "module",
         "scripts": {
             "dev": "caraer apps local dev",
             "validate": "caraer apps validate",
@@ -379,6 +398,20 @@ def ensure_package_json(root: Path, name: str) -> Path | None:
         },
     }
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def ensure_tsconfig(root: Path) -> Path | None:
+    """Write the CMS-module TypeScript project file used by caraer-core.
+
+    Module entries import browser libraries from ``package.json``. The editor
+    only resolves those (and ``@types/*``) when a tsconfig sits at the app
+    root. Existing files are left alone.
+    """
+    path = root / "tsconfig.json"
+    if path.exists():
+        return None
+    path.write_text(TSCONFIG_CONTENTS, encoding="utf-8")
     return path
 
 
@@ -446,6 +479,7 @@ def scaffold_app_project(
 
     app_file = write_app_manifest(project_root, manifest_payload, src_dir=src_dir)
     ensure_gitignore(project_root)
+    ensure_tsconfig(project_root)
     if not str(runtime or "").startswith("python"):
         ensure_package_json(project_root, name)
 

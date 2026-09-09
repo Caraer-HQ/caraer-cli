@@ -426,6 +426,7 @@ def add_module(
         discover_local_modules,
     )
     from caraer_cli.project.modules_scaffold import scaffold_module
+    from caraer_cli.project.scaffold import ensure_package_json, ensure_tsconfig
     from caraer_cli.project.schema import load_workspace
     from caraer_cli.wizard.prompts import require_text
 
@@ -457,6 +458,8 @@ def add_module(
         framework=framework_value,
         force=force,
     )
+    ensure_tsconfig(root)
+    ensure_package_json(root, config.name or root.name)
 
     # Write the field types straight away so the scaffolded index.astro
     # type-checks in the editor without a separate validate run.
