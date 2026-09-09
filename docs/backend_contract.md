@@ -74,6 +74,15 @@ Headers:
 - `GET /api/v2/public/apps/{appUuid}/oauth/{provider}/authorize` (COMPANY providers; prefer authenticated start for USER)
 - `GET /api/v2/public/apps/{appUuid}/oauth/{provider}/callback`
 
+## CMS modules
+
+- `POST /api/v2/apps/{appUuid}/cms-modules/package` — body
+  `{package, version, modules, tarballBase64, filename?}`. The API publishes
+  the tarball with the host registry token and replaces the catalog. Developers
+  do not set `CARAER_REGISTRY_*`.
+- `PUT /api/v2/apps/{appUuid}/cms-modules` — catalog only (operator / retry)
+- `GET /api/v2/apps/{appUuid}/cms-modules`
+
 ## App serverless functions
 
 - `POST /api/v2/apps/{appUuid}/serverless-functions/index`

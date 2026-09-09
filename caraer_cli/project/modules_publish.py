@@ -1,9 +1,9 @@
-"""Publish CMS modules to the Caraer private npm registry.
+"""Publish CMS modules through the Caraer API.
 
 Modules are distributed as an npm package rather than through the app build
 archive, because the consumer is a per-company Astro build on Vercel that
-already runs `pnpm install`. Publishing this way gives version pinning,
-lockfiles and rollback for free.
+already runs `pnpm install`. Developers authenticate with ``caraer auth login``;
+the API holds the registry token and publishes the staged tarball.
 
 The package is assembled into a staging directory rather than published from
 ``src/app/modules`` directly, so the published tree contains only what a
@@ -27,7 +27,28 @@ from caraer_cli.project.modules_sync import (
 )
 from caraer_cli.project.schema import ProjectConfig
 
-PACKAGE_SCOPE = "@caraer-app"
+PACKAGE_SCOPE = "@caraer"
+
+#: Provided by the website build, not by the module package.
+_PEER_ONLY = frozenset(
+    {
+        "astro",
+        "@astrojs/react",
+        "@astrojs/preact",
+        "@astrojs/solid-js",
+        "@astrojs/svelte",
+        "@astrojs/vue",
+        "@caraer/cms-runtime",
+        "@caraer/cms-tokens",
+        "@caraer/client",
+        "react",
+        "react-dom",
+        "preact",
+        "solid-js",
+        "svelte",
+        "vue",
+    }
+)
 
 #: Files copied into the published package for each module.
 _ALLOWED_SUFFIXES = {
@@ -45,9 +66,56 @@ _ALLOWED_SUFFIXES = {
 }
 
 
-def package_name(app_name: str) -> str:
-    """npm package name for an app's modules, e.g. ``@caraer-app/caraer_core``."""
-    return f"{PACKAGE_SCOPE}/{app_name}"
+def package_name(
+    app_name: str,
+    *,
+    private: bool = False,
+    company: str | None = None,
+) -> str:
+    """npm package name for an app's modules.
+
+    Public marketplace apps publish as ``@caraer/<app>``. Company-private apps
+    add the company subdomain as a prefix (``@caraer/sem_notice``) so they
+    cannot collide with a marketplace name. The prefix is skipped when the
+    app name already starts with ``{company}_``.
+    """
+    slug = (app_name or "").strip()
+    if not slug:
+        raise ValueError("App name is required to name a module package.")
+    if private:
+        prefix_source = (company or os.environ.get("CARAER_SUBDOMAIN") or "").strip().lower()
+        if prefix_source:
+            prefix = f"{prefix_source}_"
+            if not slug.startswith(prefix):
+                slug = prefix + slug
+    return f"{PACKAGE_SCOPE}/{slug}"
+
+
+def read_app_dependencies(root: Path) -> dict[str, str]:
+    """Libraries a module may import, from the app's root ``package.json``.
+
+    ``three``, motion libraries, and similar belong in ``dependencies``. The
+    published module package carries them so the company's website build
+    installs them with the app. Frameworks and Caraer runtime packages stay
+    peers: the build already hoists one copy.
+    """
+    path = root / "package.json"
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    raw = payload.get("dependencies")
+    if not isinstance(raw, dict):
+        return {}
+    deps: dict[str, str] = {}
+    for name, spec in raw.items():
+        key = str(name)
+        if key in _PEER_ONLY or not isinstance(spec, str) or not spec.strip():
+            continue
+        deps[key] = spec
+    return deps
 
 
 def _peer_dependencies(modules: list[LocalModule]) -> dict[str, str]:
@@ -71,6 +139,9 @@ def build_package_json(
     modules: list[LocalModule],
     *,
     description: str | None = None,
+    private: bool = False,
+    company: str | None = None,
+    dependencies: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     exports: dict[str, str] = {}
     for module in modules:
@@ -78,8 +149,8 @@ def build_package_json(
         # both the markup and the field schema.
         exports[f"./modules/{module.name}/index.astro"] = f"./modules/{module.name}/index.astro"
 
-    return {
-        "name": package_name(app_name),
+    payload: dict[str, Any] = {
+        "name": package_name(app_name, private=private, company=company),
         "version": version,
         "type": "module",
         "private": False,
@@ -98,6 +169,9 @@ def build_package_json(
             "modules": [module.to_manifest_entry() for module in modules],
         },
     }
+    if dependencies:
+        payload["dependencies"] = dict(sorted(dependencies.items()))
+    return payload
 
 
 def stage_package(
@@ -108,6 +182,8 @@ def stage_package(
     version: str,
     destination: Path,
     description: str | None = None,
+    private: bool = False,
+    company: str | None = None,
 ) -> tuple[Path, list[LocalModule]]:
     """Copy modules into a publishable package tree. Returns the staging dir."""
     modules = [m for m in discover_local_modules(root, config) if m.config and m.entry.is_file()]
@@ -137,11 +213,19 @@ def stage_package(
             copy_to.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, copy_to)
 
-    payload = build_package_json(app_name, version, modules, description=description)
+    payload = build_package_json(
+        app_name,
+        version,
+        modules,
+        description=description,
+        private=private,
+        company=company,
+        dependencies=read_app_dependencies(root),
+    )
     (destination / "package.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
     readme = [
-        f"# {package_name(app_name)}",
+        f"# {package_name(app_name, private=private, company=company)}",
         "",
         "Caraer CMS v2 modules. Installed automatically into a company's website",
         "build; not intended to be added to a project by hand.",
@@ -187,6 +271,27 @@ def publish_package(
         (staging / ".npmrc").unlink(missing_ok=True)
 
 
+def pack_tarball(staging: Path) -> Path:
+    """Create the npm tarball developers would have published themselves."""
+    result = subprocess.run(
+        ["npm", "pack", "--silent"],
+        cwd=staging,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout or "npm pack failed").strip()[-2000:])
+    filename = (result.stdout or "").strip().splitlines()[-1]
+    packed = staging / filename
+    if not packed.is_file():
+        matches = list(staging.glob("*.tgz"))
+        if not matches:
+            raise RuntimeError("npm pack did not produce a tarball.")
+        packed = matches[0]
+    return packed
+
+
 def publish_modules(
     root: Path,
     config: ProjectConfig,
@@ -197,8 +302,20 @@ def publish_modules(
     token: str | None = None,
     dry_run: bool = False,
     description: str | None = None,
+    private: bool = False,
+    company: str | None = None,
+    client: Any | None = None,
 ) -> dict[str, Any]:
-    """Stage and publish an app's modules. Returns a summary for the caller."""
+    """Stage and publish an app's modules. Returns a summary for the caller.
+
+    The default path uploads the tarball through the authenticated Caraer API.
+    Developers only need ``caraer auth login``. Direct npm credentials are an
+    operator override, not part of the developer setup.
+    """
+    import base64
+
+    from caraer_cli.api import modules as modules_api
+
     registry_url = registry_url or os.environ.get("CARAER_REGISTRY_URL") or ""
     token = token or os.environ.get("CARAER_REGISTRY_TOKEN") or ""
 
@@ -210,25 +327,50 @@ def publish_modules(
             version=version,
             destination=Path(tmp) / "package",
             description=description,
+            private=private,
+            company=company,
         )
 
         summary: dict[str, Any] = {
-            "package": package_name(app_name),
+            "package": package_name(app_name, private=private, company=company),
             "version": version,
             "modules": [m.to_manifest_entry() for m in modules],
         }
 
+        if dry_run:
+            summary["published"] = False
+            summary["dryRun"] = True
+            return summary
+
+        if config.appUuid and client is not None:
+            tarball = pack_tarball(staging)
+            modules_api.publish_module_package(
+                client,
+                config.appUuid,
+                {
+                    "package": summary["package"],
+                    "version": version,
+                    "modules": summary["modules"],
+                    "tarballBase64": base64.b64encode(tarball.read_bytes()).decode("ascii"),
+                    "filename": tarball.name,
+                },
+            )
+            summary["published"] = True
+            summary["catalog"] = True
+            summary["via"] = "api"
+            return summary
+
         if not registry_url or not token:
             summary["published"] = False
             summary["reason"] = (
-                "CARAER_REGISTRY_URL and CARAER_REGISTRY_TOKEN are not set; "
-                "staged the package but did not publish."
+                "Not logged in or the app has no remote UUID. "
+                "Run 'caraer auth login' and 'caraer apps push' from an app folder."
             )
             return summary
 
-        result = publish_package(staging, registry_url=registry_url, token=token, dry_run=dry_run)
+        result = publish_package(staging, registry_url=registry_url, token=token, dry_run=False)
         summary["published"] = result.returncode == 0
-        summary["dryRun"] = dry_run
+        summary["via"] = "npm"
         if result.returncode != 0:
             summary["error"] = (result.stderr or result.stdout or "").strip()[-2000:]
         return summary

@@ -13,6 +13,20 @@ from typing import Any
 from caraer_cli.api.client import CaraerApiClient
 
 
+def publish_module_package(
+    client: CaraerApiClient,
+    app_uuid: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Upload a staged tarball. The API publishes it and registers the catalog."""
+    return client.request(
+        "POST",
+        f"/api/v2/apps/{app_uuid}/cms-modules/package",
+        json_body=payload,
+        timeout_seconds=180.0,
+    )
+
+
 def publish_module_catalog(
     client: CaraerApiClient,
     app_uuid: str,

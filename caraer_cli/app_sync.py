@@ -750,10 +750,18 @@ def push_cms_modules(
         config,
         app_name=app_name,
         version=resolved_version,
+        private=bool(config.privateApp),
+        company=_selected_company_subdomain(client),
+        client=client,
     )
 
     if not summary.get("published"):
         print_warning(f"Modules not published: {summary.get('reason') or summary.get('error')}")
+        return summary
+
+    if summary.get("via") == "api":
+        print_success("Published CMS modules through Caraer.")
+        return summary
 
     if config.appUuid:
         try:
@@ -775,6 +783,30 @@ def push_cms_modules(
             summary["catalog"] = False
 
     return summary
+
+
+def _selected_company_subdomain(client) -> str | None:
+    """Subdomain of the company selected on the CLI profile, if any."""
+    from caraer_cli.api import auth as auth_api
+
+    company_uuid = getattr(getattr(client, "context", None), "company_uuid", None)
+    if not company_uuid:
+        return None
+    try:
+        response = auth_api.companies(client)
+    except Exception:  # noqa: BLE001
+        return None
+    companies = response.get("data")
+    if not isinstance(companies, list):
+        return None
+    for company in companies:
+        if not isinstance(company, dict) or company.get("uuid") != company_uuid:
+            continue
+        settings = company.get("websiteSettings") or {}
+        subdomain = settings.get("subdomain")
+        if isinstance(subdomain, str) and subdomain.strip():
+            return subdomain.strip().lower()
+    return None
 
 
 def _resolved_build_version(
