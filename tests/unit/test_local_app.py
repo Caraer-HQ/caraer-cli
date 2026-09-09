@@ -12,7 +12,11 @@ from caraer_cli.local_app import (
     local_app_summary,
     resolve_app_file_path,
 )
-from caraer_cli.project.scaffold import ensure_tsconfig, scaffold_app_project
+from caraer_cli.project.scaffold import (
+    ensure_package_json,
+    ensure_tsconfig,
+    scaffold_app_project,
+)
 
 
 def test_looks_like_uuid() -> None:
@@ -129,7 +133,25 @@ def test_node_init_writes_tsconfig_and_module_package_json(tmp_path: Path) -> No
 
     package = json.loads((root / "package.json").read_text(encoding="utf-8"))
     assert package["type"] == "module"
+    assert package["dependencies"]["three"] == "^0.185.1"
+    assert package["devDependencies"]["@types/three"] == "^0.185.4"
     assert ensure_tsconfig(root) is None
+
+
+def test_three_types_backfill_existing_package_json(tmp_path: Path) -> None:
+    root = tmp_path / "legacy"
+    root.mkdir()
+    (root / "package.json").write_text(
+        json.dumps({"name": "legacy", "private": True, "devDependencies": {}}, indent=2)
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert ensure_package_json(root, "legacy") is not None
+    package = json.loads((root / "package.json").read_text(encoding="utf-8"))
+    assert package["dependencies"]["three"] == "^0.185.1"
+    assert package["devDependencies"]["@types/three"] == "^0.185.4"
+    assert ensure_package_json(root, "legacy") is None
 
 
 def test_legacy_json_manifest_still_loads(tmp_path: Path) -> None:

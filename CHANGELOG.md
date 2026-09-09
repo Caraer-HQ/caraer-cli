@@ -4,8 +4,9 @@
 
 - `apps init` writes a root `tsconfig.json` (same options as `caraer-core`) so
   module scripts can resolve npm libraries such as `three`. Node `package.json`
-  scaffolds set `"type": "module"`. `apps add module` and `apps validate` write
-  the tsconfig when it is missing.
+  scaffolds set `"type": "module"` and include `three` + `@types/three` (r185
+  has no bundled types). `apps add module` and `apps validate` write the
+  tsconfig and backfill those packages when they are missing.
 
 ## 0.1.3
 

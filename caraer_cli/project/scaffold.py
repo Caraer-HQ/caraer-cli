@@ -376,29 +376,67 @@ def ensure_gitignore(root: Path) -> Path | None:
     return path
 
 
+#: Same versions as ``caraer-core``. r185 ships no bundled types, so the
+#: editor reports ``Cannot find module 'three'`` unless both are present.
+THREE_DEPENDENCY = "^0.185.1"
+THREE_TYPES_DEPENDENCY = "^0.185.4"
+
+
 def ensure_package_json(root: Path, name: str) -> Path | None:
-    """Scaffold a root package.json so Node app projects behave like a
-    regular npm project (editor tooling, `npm run dev`, debugger attach)."""
+    """Scaffold or backfill a root package.json for Node app projects.
+
+    New files get scripts, ``@caraer/client``, and the ``three`` / ``@types/three``
+    pair caraer-core uses (r185 has no bundled types). Existing files only
+    receive the missing Three.js packages so older scaffolds type-check.
+    """
     path = root / "package.json"
-    if path.exists():
-        return None
-    payload = {
-        "name": name,
-        "private": True,
-        "type": "module",
-        "scripts": {
-            "dev": "caraer apps local dev",
-            "validate": "caraer apps validate",
-            "push": "caraer apps push",
-            "deploy": "caraer apps push --deploy",
-            "logs": "caraer apps local logs --all",
-        },
-        "devDependencies": {
-            "@caraer/client": "^2.0.366",
-        },
-    }
+    if not path.exists():
+        payload = {
+            "name": name,
+            "private": True,
+            "type": "module",
+            "scripts": {
+                "dev": "caraer apps local dev",
+                "validate": "caraer apps validate",
+                "push": "caraer apps push",
+                "deploy": "caraer apps push --deploy",
+                "logs": "caraer apps local logs --all",
+            },
+            "dependencies": {
+                "three": THREE_DEPENDENCY,
+            },
+            "devDependencies": {
+                "@caraer/client": "^2.0.366",
+                "@types/three": THREE_TYPES_DEPENDENCY,
+            },
+        }
+        path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        return path
+    return path if _backfill_three_types(path) else None
+
+
+def _backfill_three_types(path: Path) -> bool:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(payload, dict):
+        return False
+    dependencies = payload.setdefault("dependencies", {})
+    dev_dependencies = payload.setdefault("devDependencies", {})
+    if not isinstance(dependencies, dict) or not isinstance(dev_dependencies, dict):
+        return False
+    changed = False
+    if "three" not in dependencies:
+        dependencies["three"] = THREE_DEPENDENCY
+        changed = True
+    if "@types/three" not in dev_dependencies:
+        dev_dependencies["@types/three"] = THREE_TYPES_DEPENDENCY
+        changed = True
+    if not changed:
+        return False
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    return path
+    return True
 
 
 def ensure_tsconfig(root: Path) -> Path | None:
