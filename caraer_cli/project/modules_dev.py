@@ -85,16 +85,16 @@ def fetch_companies(client: Any) -> list[dict[str, Any]]:
     return companies
 
 
+PUBLISHED_RUNTIME_SPEC = "github:Caraer-HQ/caraer-cms-runtime#v0.1.1"
+PUBLISHED_TOKENS_SPEC = "github:Caraer-HQ/caraer-cms-tokens#v0.1.1"
+
+
 def resolve_runtime_specs(root: Path) -> tuple[str, str]:
     """Work out where to install ``@caraer/cms-runtime`` and ``-tokens`` from.
 
-    The published packages are the normal answer, but a developer working on
-    the runtime itself, or working before the first publish, needs the local
-    checkout instead. Falling back to ``latest`` without looking would fail the
-    install with a bare npm 404 that says nothing about what to do.
-
-    Order: explicit spec env vars, then ``CARAER_WEB_PATH``, then a sibling
-    ``caraer-web`` checkout, then the registry.
+    Order: explicit spec env vars, then ``CARAER_WEB_PATH`` / a sibling
+    ``caraer-web`` workspace copy, then sibling ``caraer-cms-runtime`` and
+    ``caraer-cms-tokens`` checkouts, then the published GitHub packages.
     """
     runtime = os.environ.get("CARAER_CMS_RUNTIME_SPEC")
     tokens = os.environ.get("CARAER_CMS_TOKENS_SPEC")
@@ -106,10 +106,11 @@ def resolve_runtime_specs(root: Path) -> tuple[str, str]:
     if configured:
         candidates.append(Path(configured).expanduser())
 
-    # Walk up looking for a sibling checkout: app repos and caraer-web usually
-    # live next to each other under one workspace directory.
+    # Walk up looking for sibling checkouts: app repos and the CMS packages
+    # usually live next to each other under one workspace directory.
     current = root.resolve()
-    for parent in [current, *current.parents][:5]:
+    parents = [current, *current.parents][:5]
+    for parent in parents:
         candidates.append(parent / "caraer-web")
 
     for candidate in candidates:
@@ -121,7 +122,16 @@ def resolve_runtime_specs(root: Path) -> tuple[str, str]:
                 tokens or f"file:{tokens_pkg.parent.resolve()}",
             )
 
-    return runtime or "latest", tokens or "latest"
+    for parent in parents:
+        runtime_pkg = parent / "caraer-cms-runtime" / "package.json"
+        tokens_pkg = parent / "caraer-cms-tokens" / "package.json"
+        if runtime_pkg.is_file() and tokens_pkg.is_file():
+            return (
+                runtime or f"file:{runtime_pkg.parent.resolve()}",
+                tokens or f"file:{tokens_pkg.parent.resolve()}",
+            )
+
+    return runtime or PUBLISHED_RUNTIME_SPEC, tokens or PUBLISHED_TOKENS_SPEC
 
 
 def sample_fields(module: LocalModule) -> dict[str, Any]:

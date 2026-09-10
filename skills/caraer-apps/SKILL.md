@@ -62,11 +62,12 @@ caraer apps local test --function <name> --sample-only
 
 ```text
 caraer.json
-package.json                # npm scripts; Node adds @caraer/client, three, @types/three
-tsconfig.json               # resolves module npm imports (`three`, …) in the editor
+package.json                # npm scripts; Node adds client + CMS packages and runs npm install
+tsconfig.json               # resolves module npm imports from package.json
 src/app/
   app.caraer.yaml           # identity, auth, brandmark, logo, settings, OAuth
   functions/<name>/         # index.js|main.py (function.caraer.json optional)
+  modules/<name>/           # CMS module (index.astro + fields.d.ts); init writes hello_world
   shared/                   # code shared by all functions (require "../../shared/...")
   settings/*.json           # modular settingsSchema fields
   settings-sections/*.json  # optional installer cards (title, subtitle, field names)

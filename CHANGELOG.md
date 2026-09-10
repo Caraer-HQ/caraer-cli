@@ -2,11 +2,16 @@
 
 ## Unreleased
 
+- `apps init` scaffolds `src/app/modules/hello_world` (entry + `fields.d.ts`),
+  the same starter CMS module `apps add module` would create.
+
 - `apps init` writes a root `tsconfig.json` (same options as `caraer-core`) so
-  module scripts can resolve npm libraries such as `three`. Node `package.json`
-  scaffolds set `"type": "module"` and include `three` + `@types/three` (r185
-  has no bundled types). `apps add module` and `apps validate` write the
-  tsconfig and backfill those packages when they are missing.
+  module scripts can resolve npm libraries from `package.json`. Node
+  `package.json` scaffolds set `"type": "module"`, `@caraer/client`, and the
+  published CMS contract packages (`@caraer/cms-runtime`, `@caraer/cms-tokens`)
+  and runs `npm install` so the default `hello_world` module resolves. They no
+  longer add `three` / `@types/three`. Add those only when a module imports
+  them.
 
 ## 0.1.3
 

@@ -13,7 +13,13 @@ from caraer_cli.completion_callbacks import (
     complete_runtime,
 )
 from caraer_cli.context import AppContext
-from caraer_cli.formatters.output import print_app_detail, print_data, print_success, project_rows
+from caraer_cli.formatters.output import (
+    print_app_detail,
+    print_data,
+    print_success,
+    print_warning,
+    project_rows,
+)
 from caraer_cli.local_app import (
     discover_local_app_files,
     load_local_app,
@@ -441,7 +447,11 @@ def init_app(
     from caraer_cli.api import projects as projects_api
     from caraer_cli.app_sync import ensure_linked
     from caraer_cli.errors import ApiError
-    from caraer_cli.project.scaffold import scaffold_app_project
+    from caraer_cli.project.scaffold import (
+        CMS_PACKAGES_INSTALLED,
+        install_npm_dependencies,
+        scaffold_app_project,
+    )
     from caraer_cli.project.schema import PLATFORM_VERSION, PLATFORM_VERSION_V1, load_workspace
 
     app_ctx: AppContext = ctx.obj
@@ -501,6 +511,13 @@ def init_app(
     except FileExistsError as exc:
         raise typer.BadParameter(str(exc)) from exc
 
+    if result.get("sample_module"):
+        try:
+            if install_npm_dependencies(result["root"]):
+                print_success(CMS_PACKAGES_INSTALLED)
+        except RuntimeError as exc:
+            print_warning(f"Could not install CMS module packages: {exc}")
+
     app_file: Path = result["app_file"]
     if linked_app:
         try:
@@ -520,11 +537,13 @@ def init_app(
             "app_file": str(app_file),
             "functions_dir": str(result["functions_dir"]),
             "webhooks_dir": str(result["webhooks_dir"]),
+            "modules_dir": str(result["modules_dir"]),
             "lifecycle_dir": str(result["lifecycle_dir"]),
             "lifecycle_hooks": [
                 h["event"] for h in (result.get("lifecycle_hooks") or [])
             ],
             "sample_function": str(result["sample_function"]) if result["sample_function"] else None,
+            "sample_module": str(result["sample_module"]) if result["sample_module"] else None,
         },
         app_ctx.output,
     )
@@ -532,7 +551,8 @@ def init_app(
         _select_local_file(app_ctx, app_file)
     print_success(
         "Lifecycle hooks (install/uninstall/rotate/update) are under "
-        "src/app/lifecycle/ + functions/on-*. Edit files under src/app/, "
+        "src/app/lifecycle/ + functions/on-*. A starter CMS module is under "
+        "src/app/modules/hello_world. Edit files under src/app/, "
         "then run: caraer apps push"
     )
 

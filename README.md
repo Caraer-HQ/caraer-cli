@@ -183,7 +183,9 @@ import type { LifecyclePayload, WebhookPayload } from "@caraer/client";
 from caraer_client import LifecyclePayload, WebhookPayload
 ```
 
-Node scaffolds add `@caraer/client` as a `devDependency`.
+Node scaffolds add `@caraer/client` as a `devDependency` and
+`@caraer/cms-runtime` / `@caraer/cms-tokens` as dependencies, then run
+`npm install` so the starter module resolves.
 
 Only the **app creator company** (or super-admin) can push builds for an app.
 
@@ -217,6 +219,7 @@ my_app/
     app.caraer.yaml           # identity, auth, OAuth, settings, app bars
     lifecycle/*.json          # install|uninstall|rotate|update hooks
     functions/<name>/         # function.caraer.json + entry source
+    modules/<name>/           # CMS module (index.astro + fields.d.ts)
     webhooks/*.json           # one webhook definition per file
     schedules/*.json          # cron → function (integration runtime)
     inbound/*.json            # public inbound routes → function
@@ -225,7 +228,8 @@ my_app/
 `add setting` appends to `app.caraer.yaml` by default.
 Optional modular JSON files (`settings/`) still merge on push when
 present (`--modular`). `apps init` always creates all four lifecycle hooks +
-`on-*` functions. See [docs/app_lifecycle.md](docs/app_lifecycle.md).
+`on-*` functions, plus a starter `modules/hello_world`. See
+[docs/app_lifecycle.md](docs/app_lifecycle.md).
 
 See [`examples/webhook-inbox`](examples/webhook-inbox) for a minimal sample
 (inbound route, settings, lifecycle, app bar).

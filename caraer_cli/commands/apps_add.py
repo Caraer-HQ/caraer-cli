@@ -11,7 +11,7 @@ from caraer_cli.completion_callbacks import (
 )
 from caraer_cli.commands.deprecation import register_deprecated_leaf_alias
 from caraer_cli.context import AppContext
-from caraer_cli.formatters.output import print_success
+from caraer_cli.formatters.output import print_success, print_warning
 
 add_app = typer.Typer(help="Scaffold local app resources.", no_args_is_help=True)
 
@@ -426,7 +426,12 @@ def add_module(
         discover_local_modules,
     )
     from caraer_cli.project.modules_scaffold import scaffold_module
-    from caraer_cli.project.scaffold import ensure_package_json, ensure_tsconfig
+    from caraer_cli.project.scaffold import (
+        CMS_PACKAGES_INSTALLED,
+        ensure_package_json,
+        ensure_tsconfig,
+        install_npm_dependencies,
+    )
     from caraer_cli.project.schema import load_workspace
     from caraer_cli.wizard.prompts import require_text
 
@@ -459,7 +464,13 @@ def add_module(
         force=force,
     )
     ensure_tsconfig(root)
-    ensure_package_json(root, config.name or root.name)
+    wrote_package = ensure_package_json(root, config.name or root.name)
+    if wrote_package or not (root / "node_modules").is_dir():
+        try:
+            if install_npm_dependencies(root):
+                print_success(CMS_PACKAGES_INSTALLED)
+        except RuntimeError as exc:
+            print_warning(f"Could not install CMS module packages: {exc}")
 
     # Write the field types straight away so the scaffolded index.astro
     # type-checks in the editor without a separate validate run.
