@@ -350,3 +350,10 @@ def test_a_leftover_json_config_is_flagged(tmp_path: Path) -> None:
     (directory / "module.caraer.json").write_text("{}", encoding="utf-8")
 
     assert any("A module is one file now" in error for error in _errors(root))
+
+
+def test_cookie_banner_is_a_valid_distinct_module_kind(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _write_module(root, "consent", {"name": "consent", "label": "Consent", "kind": "cookie_banner"})
+    assert _errors(root) == []
+    assert discover_local_modules(root, load_workspace(root))[0].kind == "cookie_banner"

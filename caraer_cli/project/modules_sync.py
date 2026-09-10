@@ -27,7 +27,7 @@ MODULE_ENTRY_FILE = "index.astro"
 GENERATED_TYPES_FILE = "fields.d.ts"
 
 #: What the module renders as, which decides where it may be placed.
-MODULE_KINDS = frozenset({"section", "page", "header", "footer"})
+MODULE_KINDS = frozenset({"section", "page", "header", "footer", "cookie_banner"})
 
 #: How the library picker groups modules. A fixed set, so the same kind of
 #: block lands in the same place whichever app shipped it.

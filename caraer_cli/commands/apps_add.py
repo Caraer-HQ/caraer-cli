@@ -401,7 +401,7 @@ def add_module(
     kind: str = typer.Option(
         "section",
         "--kind",
-        help="section (composes into a page), page (a whole page), header, or footer.",
+        help="section (composes into a page), page (a whole page), header, footer, or cookie_banner.",
     ),
     framework: str | None = typer.Option(
         None,
