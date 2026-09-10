@@ -174,6 +174,30 @@ def build_package_json(
     return payload
 
 
+def _copy_allowed_files(source_dir: Path, dest_dir: Path, *, skip_generated: bool = False) -> None:
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    for source in source_dir.rglob("*"):
+        if source.is_dir():
+            continue
+        if source.suffix not in _ALLOWED_SUFFIXES:
+            continue
+        if skip_generated and source.name == GENERATED_TYPES_FILE:
+            continue
+        relative = source.relative_to(source_dir)
+        copy_to = dest_dir / relative
+        copy_to.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, copy_to)
+
+
+def _copy_shared_module_files(modules_src: Path, modules_root: Path) -> None:
+    """Copy settings files and `_`-prefixed folders that modules import."""
+    for child in modules_src.iterdir():
+        if child.is_file() and child.suffix in _ALLOWED_SUFFIXES:
+            shutil.copy2(child, modules_root / child.name)
+        elif child.is_dir() and child.name.startswith("_"):
+            _copy_allowed_files(child, modules_root / child.name)
+
+
 def stage_package(
     root: Path,
     config: ProjectConfig,
@@ -195,23 +219,13 @@ def stage_package(
     modules_root.mkdir(parents=True, exist_ok=True)
 
     for module in modules:
-        target = modules_root / module.name
-        target.mkdir(parents=True, exist_ok=True)
+        _copy_allowed_files(
+            module.directory,
+            modules_root / module.name,
+            skip_generated=True,
+        )
 
-        for source in module.directory.rglob("*"):
-            if source.is_dir():
-                continue
-            if source.suffix not in _ALLOWED_SUFFIXES:
-                continue
-            # The generated declaration is for the developer's editor; the
-            # consuming build derives types from the manifest instead.
-            if source.name == GENERATED_TYPES_FILE:
-                continue
-
-            relative = source.relative_to(module.directory)
-            copy_to = target / relative
-            copy_to.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, copy_to)
+    _copy_shared_module_files(modules[0].directory.parent, modules_root)
 
     payload = build_package_json(
         app_name,

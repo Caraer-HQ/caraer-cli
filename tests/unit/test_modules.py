@@ -308,6 +308,125 @@ def test_a_manifest_that_is_not_a_literal_is_rejected(tmp_path: Path) -> None:
     assert any("plain literal" in error for error in _errors(root))
 
 
+def test_manifest_can_import_a_shared_field(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    modules = root / "src" / "app" / "modules"
+    modules.mkdir(parents=True, exist_ok=True)
+    (modules / "settings.ts").write_text(
+        """
+import type { ModuleField } from '@caraer/cms-runtime';
+
+export const widthField = {
+  name: 'width',
+  label: 'Width',
+  type: 'SINGLE_SELECT',
+  required: true,
+  defaultValue: 'max',
+  options: [
+    { name: 'max', label: 'Max width' },
+    { name: '1100px', label: '1100px' },
+  ],
+} satisfies ModuleField;
+
+export function containerMaxWidth(width: string | null | undefined): string {
+  return width === '1100px' ? '1100px' : 'var(--caraer-container-max-width)';
+}
+""",
+        encoding="utf-8",
+    )
+    (modules / "hero").mkdir()
+    (modules / "hero" / "index.astro").write_text(
+        """---
+import type { ModuleManifest } from '@caraer/cms-runtime';
+import { widthField, containerMaxWidth } from '../settings';
+
+export const manifest = {
+  name: 'hero',
+  label: 'Hero',
+  kind: 'section',
+  category: 'hero',
+  fields: [widthField],
+} satisfies ModuleManifest;
+---
+<div style={`max-width: ${containerMaxWidth('max')}`} />
+""",
+        encoding="utf-8",
+    )
+
+    module = discover_local_modules(root, load_workspace(root))[0]
+    assert module.fields == [
+        {
+            "name": "width",
+            "label": "Width",
+            "type": "SINGLE_SELECT",
+            "required": True,
+            "defaultValue": "max",
+            "options": [
+                {"name": "max", "label": "Max width"},
+                {"name": "1100px", "label": "1100px"},
+            ],
+        }
+    ]
+    assert _errors(root) == []
+
+
+def test_manifest_can_spread_imported_field_groups(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    modules = root / "src" / "app" / "modules"
+    modules.mkdir(parents=True, exist_ok=True)
+    (modules / "settings.ts").write_text(
+        """
+export const backgroundTypeField = {
+  name: 'background_type',
+  label: 'Background',
+  type: 'SINGLE_SELECT',
+  required: true,
+  defaultValue: 'color',
+  options: [
+    { name: 'color', label: 'Color' },
+    { name: 'image', label: 'Image' },
+  ],
+};
+
+export const backgroundColorField = {
+  name: 'background_color',
+  label: 'Background color',
+  type: 'SINGLE_SELECT',
+  options: [{ name: 'primary', label: 'Primary' }],
+  visibleWhen: [{ field: 'background_type', operator: 'EQUALS', value: 'color' }],
+};
+
+export const backgroundFields = [backgroundTypeField, backgroundColorField];
+""",
+        encoding="utf-8",
+    )
+    (modules / "hero").mkdir()
+    (modules / "hero" / "index.astro").write_text(
+        """---
+import type { ModuleManifest } from '@caraer/cms-runtime';
+import { backgroundFields } from '../settings';
+
+export const manifest = {
+  name: 'hero',
+  label: 'Hero',
+  kind: 'section',
+  category: 'hero',
+  fields: [...backgroundFields],
+} satisfies ModuleManifest;
+---
+<div />
+""",
+        encoding="utf-8",
+    )
+
+    module = discover_local_modules(root, load_workspace(root))[0]
+    assert [field["name"] for field in module.fields] == [
+        "background_type",
+        "background_color",
+    ]
+    assert _errors(root) == []
+
+
 def test_a_module_without_a_manifest_says_what_is_missing(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     directory = root / "src" / "app" / "modules" / "hero"

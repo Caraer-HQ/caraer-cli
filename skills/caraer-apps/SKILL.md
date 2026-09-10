@@ -67,6 +67,7 @@ src/app/
   app.caraer.yaml           # identity, auth, brandmark, logo, settings, OAuth
   functions/<name>/         # index.js|main.py (function.caraer.json optional)
   modules/<name>/           # CMS module (index.astro + fields.d.ts); init writes hello_world
+  modules/settings.ts       # optional shared module fields (import into manifests)
   shared/                   # code shared by all functions (require "../../shared/...")
   settings/*.json           # modular settingsSchema fields
   settings-sections/*.json  # optional installer cards (title, subtitle, field names)

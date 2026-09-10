@@ -7,13 +7,15 @@ build and the preview import that object directly. The CLI has no JavaScript
 runtime, so it reads the same declaration by slicing the object literal out of
 the frontmatter.
 
-That means the manifest has to be a literal, not something computed at runtime.
-Anything else is rejected with a message saying so, rather than being silently
-skipped.
+The manifest itself has to be a literal. Shared field objects can be imported
+from a sibling file under ``src/app/modules/`` (typically ``settings.ts``) and
+referenced by name in ``fields``. Anything computed at runtime is rejected
+with a message saying so, rather than being silently skipped.
 """
 
 from __future__ import annotations
 
+import copy
 import re
 from pathlib import Path
 from typing import Any
@@ -26,6 +28,15 @@ _EXPORT = re.compile(
     r"export\s+const\s+" + MANIFEST_EXPORT + r"\s*(?::[^=]*?)?=\s*",
     re.DOTALL,
 )
+_NAMED_IMPORT = re.compile(
+    r"^import\s+(type\s+)?\{([^}]+)\}\s+from\s+['\"]([^'\"]+)['\"]",
+    re.MULTILINE,
+)
+_EXPORTED_CONST = re.compile(
+    r"export\s+const\s+([A-Za-z_$][\w$]*)\s*(?::[^=]*?)?=\s*",
+    re.DOTALL,
+)
+_IMPORT_EXTENSIONS = (".ts", ".js", ".mjs", ".tsx")
 
 
 class ManifestError(ValueError):
@@ -38,14 +49,19 @@ def frontmatter(source: str) -> str | None:
     return match.group(1) if match else None
 
 
-def _object_literal(text: str, start: int) -> str:
-    """Slice a balanced ``{...}`` starting at ``start``.
+def _balanced_literal(text: str, start: int) -> str:
+    """Slice a balanced ``{...}`` or ``[...]`` starting at ``start``.
 
-    Counts braces while stepping over strings, template literals and comments,
-    so a `}` inside `"a}b"` or a comment does not end the object early. This
-    also drops any `satisfies ModuleManifest` suffix for free, since the slice
-    stops at the closing brace.
+    Counts the outer delimiter while stepping over strings, template literals
+    and comments, so a `}` inside `"a}b"` or a comment does not end the value
+    early. This also drops any `satisfies` / `as const` suffix for free, since
+    the slice stops at the closing delimiter.
     """
+    opener = text[start]
+    closer = {"{": "}", "[": "]"}.get(opener)
+    if closer is None:
+        raise ManifestError("Expected an object or array literal.")
+
     depth = 0
     index = start
     end = len(text)
@@ -77,18 +93,25 @@ def _object_literal(text: str, start: int) -> str:
                 index = end if close == -1 else close + 2
                 continue
 
-        if char == "{":
+        if char == opener:
             depth += 1
-        elif char == "}":
+        elif char == closer:
             depth -= 1
             if depth == 0:
                 return text[start : index + 1]
 
         index += 1
 
+    missing = "}}" if opener == "{" else "]"
     raise ManifestError(
-        f"The `{MANIFEST_EXPORT}` object is never closed. Check for a missing `}}`."
+        f"The `{MANIFEST_EXPORT}` object is never closed. Check for a missing `{missing}`."
+        if opener == "{"
+        else "An array literal is never closed. Check for a missing `]`."
     )
+
+
+def _object_literal(text: str, start: int) -> str:
+    return _balanced_literal(text, start)
 
 
 _IDENT = re.compile(r"[A-Za-z_$][\w$]*")
@@ -103,9 +126,10 @@ class _LiteralParser:
     leave every existing `caraer` install broken until it was reinstalled.
     """
 
-    def __init__(self, text: str) -> None:
+    def __init__(self, text: str, bindings: dict[str, Any] | None = None) -> None:
         self.text = text
         self.index = 0
+        self.bindings = bindings or {}
 
     def parse(self) -> Any:
         value = self._value()
@@ -158,6 +182,17 @@ class _LiteralParser:
             self.index = number.end()
             raw = number.group()
             return float(raw) if any(c in raw for c in ".eE") else int(raw)
+        ident = _IDENT.match(self.text, self.index)
+        if ident:
+            name = ident.group()
+            if name in self.bindings:
+                self.index = ident.end()
+                return copy.deepcopy(self.bindings[name])
+            raise ValueError(
+                f"Unknown name {name!r}. Import a shared field object from "
+                "src/app/modules/, or use a plain literal. Variables, spreads "
+                "and function calls are not allowed."
+            )
         raise ValueError(
             "Expected a plain value. Variables, spreads and function calls are not allowed."
         )
@@ -192,7 +227,16 @@ class _LiteralParser:
             if char == "]":
                 self.index += 1
                 return out
-            out.append(self._value())
+            if self.text.startswith("...", self.index):
+                self.index += 3
+                value = self._value()
+                if not isinstance(value, list):
+                    raise ValueError(
+                        "A spread in a field list must be an imported array of fields."
+                    )
+                out.extend(copy.deepcopy(value))
+            else:
+                out.append(self._value())
             char = self._peek()
             if char == ",":
                 self.index += 1
@@ -256,11 +300,97 @@ class _LiteralParser:
         raise ValueError("Unterminated string.")
 
 
-def _loads_literal(text: str) -> Any:
-    return _LiteralParser(text).parse()
+def _loads_literal(text: str, bindings: dict[str, Any] | None = None) -> Any:
+    return _LiteralParser(text, bindings).parse()
 
 
-def parse_manifest_source(source: str) -> dict[str, Any]:
+def _import_specifiers(clause: str) -> list[tuple[str, str]]:
+    """Local name and exported name for each value import in `{ a, b as c }`."""
+    names: list[tuple[str, str]] = []
+    for raw in clause.split(","):
+        tokens = raw.split()
+        if not tokens or tokens[0] == "type":
+            continue
+        if len(tokens) >= 3 and tokens[1] == "as":
+            names.append((tokens[2], tokens[0]))
+        else:
+            names.append((tokens[0], tokens[0]))
+    return names
+
+
+def _resolve_import_path(spec: str, source_path: Path) -> Path:
+    if not spec.startswith("."):
+        raise ManifestError(
+            f"Shared fields must be imported with a relative path, not {spec!r}."
+        )
+
+    modules_root = source_path.resolve().parent.parent
+    candidate = (source_path.parent / spec).resolve()
+    options = [candidate] if candidate.suffix else [candidate.with_suffix(ext) for ext in _IMPORT_EXTENSIONS]
+    if candidate.suffix:
+        options.extend(
+            candidate.with_suffix(ext) for ext in _IMPORT_EXTENSIONS if ext != candidate.suffix
+        )
+
+    resolved = next((path for path in options if path.is_file()), None)
+    if resolved is None:
+        raise ManifestError(f"Could not find imported module settings file {spec!r}.")
+
+    try:
+        resolved.relative_to(modules_root)
+    except ValueError as exc:
+        raise ManifestError(
+            "Imported field objects must live under src/app/modules/ so they "
+            "ship with the module package."
+        ) from exc
+    return resolved
+
+
+def exported_literals(source: str) -> dict[str, Any]:
+    """Object and array literals bound to `export const` in a settings file."""
+    out: dict[str, Any] = {}
+    for match in _EXPORTED_CONST.finditer(source):
+        rest = source[match.end() :].lstrip()
+        if not rest or rest[0] not in "{[":
+            continue
+        start = source.index(rest[0], match.end())
+        try:
+            # Later exports may name earlier ones, e.g. `backgroundFields = [colorField]`.
+            out[match.group(1)] = _loads_literal(_balanced_literal(source, start), out)
+        except (ValueError, ManifestError):
+            continue
+    return out
+
+
+def _resolve_frontmatter_imports(script: str, source_path: Path) -> dict[str, Any]:
+    bindings: dict[str, Any] = {}
+    loaded: dict[Path, dict[str, Any]] = {}
+
+    for match in _NAMED_IMPORT.finditer(script):
+        if match.group(1):
+            continue
+        spec = match.group(3)
+        if not spec.startswith("."):
+            continue
+
+        resolved = _resolve_import_path(spec, source_path)
+        if resolved not in loaded:
+            try:
+                imported_source = resolved.read_text(encoding="utf-8")
+            except OSError as exc:
+                raise ManifestError(f"Could not read {resolved}: {exc}") from exc
+            loaded[resolved] = exported_literals(imported_source)
+
+        exports = loaded[resolved]
+        for local, exported in _import_specifiers(match.group(2)):
+            # Helpers and types live in the same file; only bind object/array literals.
+            if exported in exports:
+                bindings[local] = exports[exported]
+
+    return bindings
+
+
+def parse_manifest_source(source: str, source_path: Path | None = None) -> dict[str, Any]:
     """Read the manifest out of one Astro component's source."""
     script = frontmatter(source)
     if script is None:
@@ -283,15 +413,16 @@ def parse_manifest_source(source: str) -> dict[str, Any]:
             "running your code, so no variables, spreads or function calls."
         )
 
+    bindings = _resolve_frontmatter_imports(script, source_path) if source_path else {}
     literal = _object_literal(script, script.index("{", match.end()))
 
     try:
-        parsed = _loads_literal(literal)
+        parsed = _loads_literal(literal, bindings)
     except ValueError as exc:
         raise ManifestError(
             f"Could not read the `{MANIFEST_EXPORT}` object: {exc}. It has to be a "
-            "plain literal the CLI can read without running your code, so no "
-            "variables, spreads or function calls."
+            "plain literal the CLI can read without running your code. Shared field "
+            "objects may be imported from src/app/modules/ and referenced by name."
         ) from exc
 
     if not isinstance(parsed, dict):
@@ -305,4 +436,4 @@ def parse_manifest_file(entry: Path) -> dict[str, Any]:
         source = entry.read_text(encoding="utf-8")
     except OSError as exc:
         raise ManifestError(f"Could not read {entry}: {exc}") from exc
-    return parse_manifest_source(source)
+    return parse_manifest_source(source, source_path=entry)

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- CMS module manifests can import shared field objects (for example
+  `widthField` from `src/app/modules/settings.ts`) instead of repeating
+  options in every module. Field groups can be spread (`...backgroundFields`).
+  Shared files at the modules root, and `_`-prefixed folders, are included
+  in the published package.
+
 - `caraer apps push` is the one command for private and public apps: it
   deploys by default, publishes CMS modules, and installs on the selected
   company. `--no-deploy` syncs without a build. `--wait` blocks on function
