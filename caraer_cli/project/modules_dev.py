@@ -1382,6 +1382,10 @@ def write_harness(
         json.dumps({m.name: sample_fields(m) for m in modules}, indent=2) + "\n", encoding="utf-8"
     )
     (harness / ".gitignore").write_text("*\n", encoding="utf-8")
+    # The app root now has its own package.json. Without this, `pnpm install`
+    # in the harness walks up, treats the app as the project, and skips
+    # @astrojs/node. Vite then loads from the app and the preview dies.
+    (harness / ".npmrc").write_text("ignore-workspace=true\n", encoding="utf-8")
 
     return harness, modules
 
@@ -1390,13 +1394,24 @@ def _package_manager() -> str:
     return "pnpm" if shutil.which("pnpm") else "npm"
 
 
+def _harness_install_command() -> list[str]:
+    manager = _package_manager()
+    if manager == "pnpm":
+        return ["pnpm", "install", "--ignore-workspace"]
+    return ["npm", "install"]
+
+
+def _harness_ready(harness: Path) -> bool:
+    return (harness / "node_modules" / "@astrojs" / "node").is_dir()
+
+
 def install_harness(harness: Path, *, force: bool = False) -> int:
     """Install the harness dependencies. Returns the exit code."""
-    if not force and (harness / "node_modules").is_dir():
+    if not force and _harness_ready(harness):
         return 0
 
     return subprocess.run(
-        [_package_manager(), "install"], cwd=harness, env={**os.environ}, check=False
+        _harness_install_command(), cwd=harness, env={**os.environ}, check=False
     ).returncode
 
 
@@ -1412,8 +1427,19 @@ def start_harness(
     Non-blocking so the caller can run the function server in the foreground at
     the same time; the two together are what "run my app locally" means.
     """
-    return subprocess.Popen(
+    astro = harness / "node_modules" / ".bin" / "astro"
+    command = (
         [
+            str(astro),
+            "dev",
+            "--port",
+            str(port),
+            "--host",
+            host,
+            "--ignore-lock",
+        ]
+        if astro.is_file()
+        else [
             _package_manager(),
             "exec",
             "astro",
@@ -1425,7 +1451,10 @@ def start_harness(
             # A crashed previous run leaves a lock behind and Astro then refuses
             # to start, which would look like the harness is simply broken.
             "--ignore-lock",
-        ],
+        ]
+    )
+    return subprocess.Popen(
+        command,
         cwd=harness,
         env={**os.environ, **(env or {})},
     )

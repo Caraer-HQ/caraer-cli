@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `apps local dev --cms` isolates the preview harness from the app
+  `package.json`, so pnpm does not skip `@astrojs/node`.
+
 - `apps init` scaffolds `src/app/modules/hello_world` (entry + `fields.d.ts`),
   the same starter CMS module `apps add module` would create.
 

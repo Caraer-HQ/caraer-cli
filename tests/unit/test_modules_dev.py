@@ -5,7 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from caraer_cli.project.modules_dev import write_harness
+from caraer_cli.project.modules_dev import (
+    _harness_install_command,
+    _harness_ready,
+    write_harness,
+)
 from caraer_cli.project.schema import load_workspace
 
 
@@ -87,3 +91,9 @@ def test_harness_installs_app_module_libraries(tmp_path: Path) -> None:
     )
     payload = json.loads((harness / "package.json").read_text(encoding="utf-8"))
     assert payload["dependencies"]["three"] == "^0.185.1"
+    assert "ignore-workspace=true" in (harness / ".npmrc").read_text(encoding="utf-8")
+    assert not _harness_ready(harness)
+    command = _harness_install_command()
+    assert command[0] in {"pnpm", "npm"}
+    if command[0] == "pnpm":
+        assert "--ignore-workspace" in command
