@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- CMS module preview (`.harness__preview`) uses block flow like live
+  `#main`, so section modules fill the frame instead of shrink-wrapping
+  in a centered flex row.
+
 - CMS module manifests can import shared field objects (for example
   `widthField` from `src/app/modules/settings.ts`) instead of repeating
   options in every module. Field groups can be spread (`...backgroundFields`).

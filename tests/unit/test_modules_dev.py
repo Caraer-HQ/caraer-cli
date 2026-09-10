@@ -74,6 +74,26 @@ def test_harness_does_not_statically_import_modules(tmp_path: Path) -> None:
     assert "overlay: false" in config
 
 
+def test_harness_preview_uses_block_flow_like_live_pages(tmp_path: Path) -> None:
+    """Modules must fill the frame the way they fill `#main` in production."""
+    root = _workspace(tmp_path)
+    _write_module(root, "hero")
+
+    harness, _ = write_harness(
+        root,
+        load_workspace(root),
+        app_name="demo_app",
+        runtime_spec="latest",
+        tokens_spec="latest",
+    )
+    page = (harness / "src" / "pages" / "index.astro").read_text(encoding="utf-8")
+    preview = page.split(".harness__preview {", 1)[1].split("}", 1)[0]
+    assert "display: block;" in preview
+    assert "width: 100%;" in preview
+    assert "display: flex;" not in preview
+    assert "justify-content: center;" not in preview
+
+
 def test_harness_installs_app_module_libraries(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     _write_module(root, "aurora")

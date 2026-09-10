@@ -1218,13 +1218,18 @@ const tokenGroups = [
        */
       .harness__preview {{
         /*
+         * Same formatting context as caraer-web `#main`: a block box that
+         * stretches to the frame. Flex + `justify-content: center` made
+         * section modules shrink-wrap (`flex-grow: 0`) instead of filling
+         * the way they do on a live page.
+         *
          * No overflow clipping. `overflow-x: hidden` forces overflow-y to auto,
          * which makes this an extra scroll container and breaks `position:
          * sticky` in a header module. It also hid horizontal overflow, which is
          * a module bug worth seeing rather than concealing; the canvas scrolls.
          */
-        display: flex;
-        justify-content: center;
+        display: block;
+        width: 100%;
         background: var(--caraer-color-background);
         color: var(--caraer-color-font);
         font-family: var(--caraer-font-body);
