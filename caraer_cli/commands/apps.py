@@ -640,6 +640,130 @@ def pull_app(
     print_data(result, app_ctx.output)
 
 
+def _require_app_root(selected_file: str | None) -> Path:
+    from caraer_cli.app_sync import resolve_app_root
+
+    try:
+        return resolve_app_root(app_file=selected_file)
+    except FileNotFoundError:
+        if selected_file:
+            raise typer.BadParameter(
+                "Could not resolve an app folder. Run 'caraer apps init' or select a local app."
+            ) from None
+        raise typer.BadParameter(
+            "No app folder found. Run 'caraer apps init' or 'cd' into an app directory."
+        ) from None
+
+
+def _normalize_release_args(
+    *,
+    version: str | None,
+    release_notes: str | None,
+    yes: bool,
+    dry_run: bool,
+    require_release: bool,
+) -> tuple[str | None, str | None]:
+    from caraer_cli.project.release import is_semver
+
+    if version is not None:
+        version = version.strip()
+        if not is_semver(version):
+            raise typer.BadParameter("--version must be MAJOR.MINOR.PATCH (e.g. 1.2.3).")
+    if require_release and yes and not dry_run and (not version or not (release_notes or "").strip()):
+        raise typer.BadParameter("--yes requires both --version and --notes.")
+    return version, release_notes
+
+
+def _confirm_push_plan(
+    app_ctx: AppContext,
+    client: Any,
+    root: Path,
+    *,
+    app_uuid: str | None = None,
+    delete_missing: bool,
+    dry_run: bool,
+    yes: bool,
+    confirm_message: str,
+    extra_dry_run: str | None = None,
+) -> bool:
+    """Print the push plan. Return True to continue, False after a dry-run."""
+    import sys
+
+    from caraer_cli.project.push_plan import build_push_plan, print_push_plan
+    from caraer_cli.project.schema import load_workspace
+    from caraer_cli.wizard.prompts import WizardCancelled, ask_confirm
+
+    config = load_workspace(root)
+    if app_uuid:
+        config.appUuid = app_uuid
+    elif not config.appUuid and app_ctx.profile.app_uuid:
+        config.appUuid = app_ctx.profile.app_uuid
+    interactive_tty = sys.stdin.isatty() and sys.stdout.isatty()
+    show_plan = dry_run or (interactive_tty and not yes)
+    if not show_plan:
+        return True
+    plan = build_push_plan(client, root, config, delete_missing=delete_missing)
+    if app_ctx.output in {"json", "yaml"}:
+        print_data(plan, app_ctx.output)
+    else:
+        print_push_plan(plan)
+    if extra_dry_run:
+        print_success(extra_dry_run)
+    if dry_run:
+        print_success("Dry run complete — no changes written.")
+        return False
+    try:
+        if not ask_confirm(confirm_message, default=False):
+            print_warning("Push cancelled.")
+            raise typer.Exit(code=1)
+    except WizardCancelled:
+        raise typer.Exit(code=1) from None
+    return True
+
+
+def _run_push(
+    app_ctx: AppContext,
+    *,
+    root: Path,
+    selected_file: str | None,
+    app_uuid: str | None,
+    patch: str | None,
+    deploy: bool,
+    wait: bool,
+    version: str | None,
+    release_notes: str | None,
+    yes: bool,
+    delete_missing: bool,
+    legacy_functions: bool,
+    target: str,
+) -> dict[str, Any]:
+    from caraer_cli.app_sync import push_app
+    from caraer_cli.wizard.prompts import WizardCancelled
+
+    patch_data = parse_patch(patch) if patch else None
+    try:
+        result = push_app(
+            app_ctx.api_client(),
+            root,
+            app_uuid=app_uuid or app_ctx.profile.app_uuid,
+            patch=patch_data,
+            deploy=deploy,
+            delete_missing=delete_missing,
+            legacy_functions=legacy_functions,
+            target=target,
+            wait=wait,
+            version=version,
+            release_notes=release_notes,
+            interactive=not yes,
+        )
+    except WizardCancelled:
+        raise typer.Exit(code=1) from None
+    if result.get("appUuid"):
+        manifest = resolve_app_file_path(selected_file or root)
+        _save_selection(app_ctx, app_uuid=str(result["appUuid"]), app_file=str(manifest))
+    return result
+
+
 @app.command("push")
 def push_public(
     ctx: typer.Context,
@@ -651,11 +775,18 @@ def push_public(
         help="App folder or app.caraer.yaml (defaults to selected local app file / cwd).",
     ),
     patch: str | None = typer.Option(None, "--patch", help="JSON patch merged onto the manifest."),
-    deploy: bool = typer.Option(False, "--deploy", help="Deploy after creating a function build."),
-    wait: bool = typer.Option(
+    deploy: bool = typer.Option(
         True,
+        "--deploy/--no-deploy",
+        help="Create a function build and deploy it (default). Use --no-deploy to sync only.",
+    ),
+    wait: bool = typer.Option(
+        False,
         "--wait/--no-wait",
-        help="After --deploy on V2 apps, wait for runtimeStatus READY/FAILED (default: wait).",
+        help=(
+            "Wait for function runtime provisioning (READY/FAILED) before "
+            "publishing CMS modules. Default: skip wait and continue."
+        ),
     ),
     version: str | None = typer.Option(
         None,
@@ -673,7 +804,7 @@ def push_public(
         False,
         "--yes",
         "-y",
-        help="Non-interactive: skip confirmation; require --version and --notes.",
+        help="Non-interactive: skip confirmation; require --version and --notes when deploying.",
     ),
     dry_run: bool = typer.Option(
         False,
@@ -692,88 +823,71 @@ def push_public(
     ),
     target: str = typer.Option("production", "--target", help="production|sandbox"),
 ) -> None:
-    """Push the full local app (manifest, functions, webhooks, schedules, inbound, OAuth) to Caraer."""
-    import sys
+    """Push the local app to Caraer and deploy it.
 
-    from caraer_cli.app_sync import push_app, resolve_app_root
-    from caraer_cli.formatters.output import print_warning
-    from caraer_cli.project.push_plan import build_push_plan, print_push_plan
-    from caraer_cli.project.release import is_semver
-    from caraer_cli.project.schema import load_workspace
-    from caraer_cli.wizard.prompts import WizardCancelled, ask_confirm
+    Same command for private and public apps. Creates the remote app on first
+    run, deploys the function build, publishes CMS modules, and installs on
+    the selected company. Use --no-deploy to sync without a build, and --wait
+    to block until function runtime provisioning finishes.
+    """
+    from caraer_cli.app_install import install_app_on_company
 
     app_ctx: AppContext = ctx.obj
-    if version is not None:
-        version = version.strip()
-        if not is_semver(version):
-            raise typer.BadParameter("--version must be MAJOR.MINOR.PATCH (e.g. 1.2.3).")
-    if yes and not dry_run and (not version or not (release_notes or "").strip()):
-        raise typer.BadParameter("--yes requires both --version and --notes.")
+    version, release_notes = _normalize_release_args(
+        version=version,
+        release_notes=release_notes,
+        yes=yes,
+        dry_run=dry_run,
+        require_release=deploy,
+    )
     selected_file = file or app_ctx.pinned_app_file
-    try:
-        root = resolve_app_root(app_file=selected_file)
-    except FileNotFoundError:
-        if selected_file:
-            raise typer.BadParameter(
-                "Could not resolve an app folder. Run 'caraer apps init' or select a local app."
-            ) from None
-        raise typer.BadParameter(
-            "No app folder found. Run 'caraer apps init' or 'cd' into an app directory."
-        ) from None
-
+    root = _require_app_root(selected_file)
     if target == "sandbox":
         print_warning(
             "Sandbox target isolates Neo4j data via X-Caraer-Sandbox-Uuid, "
             "but function runtime code is shared with production."
         )
-
-    client = app_ctx.api_client()
-    config = load_workspace(root)
-    if app_uuid:
-        config.appUuid = app_uuid
-    elif not config.appUuid and app_ctx.profile.app_uuid:
-        config.appUuid = app_ctx.profile.app_uuid
-
-    interactive_tty = sys.stdin.isatty() and sys.stdout.isatty()
-    show_plan = dry_run or (interactive_tty and not yes)
-    if show_plan:
-        plan = build_push_plan(client, root, config, delete_missing=delete_missing)
-        if app_ctx.output in {"json", "yaml"}:
-            print_data(plan, app_ctx.output)
-        else:
-            print_push_plan(plan)
-        if dry_run:
-            print_success("Dry run complete — no changes written.")
-            return
-        try:
-            if not ask_confirm("Proceed with push?", default=False):
-                print_warning("Push cancelled.")
-                raise typer.Exit(code=1)
-        except WizardCancelled:
-            raise typer.Exit(code=1) from None
-
-    patch_data = parse_patch(patch) if patch else None
-    try:
-        result = push_app(
-            client,
-            root,
-            app_uuid=app_uuid or app_ctx.profile.app_uuid,
-            patch=patch_data,
-            deploy=deploy,
-            delete_missing=delete_missing,
-            legacy_functions=legacy_functions,
-            target=target,
-            wait=wait,
-            version=version,
-            release_notes=release_notes,
-            interactive=not yes,
-        )
-    except WizardCancelled:
-        raise typer.Exit(code=1) from None
-    if result.get("appUuid"):
-        manifest = resolve_app_file_path(selected_file or root)
-        _save_selection(app_ctx, app_uuid=str(result["appUuid"]), app_file=str(manifest))
-    print_success("Pushed app (manifest + functions + webhooks).")
+    company = app_ctx.profile.company_uuid
+    extra = f"Would install on company {company}." if dry_run and company else None
+    if not _confirm_push_plan(
+        app_ctx,
+        app_ctx.api_client(),
+        root,
+        app_uuid=app_uuid,
+        delete_missing=delete_missing,
+        dry_run=dry_run,
+        yes=yes,
+        confirm_message="Proceed with push?",
+        extra_dry_run=extra,
+    ):
+        return
+    result = _run_push(
+        app_ctx,
+        root=root,
+        selected_file=selected_file,
+        app_uuid=app_uuid,
+        patch=patch,
+        deploy=deploy,
+        wait=wait,
+        version=version,
+        release_notes=release_notes,
+        yes=yes,
+        delete_missing=delete_missing,
+        legacy_functions=legacy_functions,
+        target=target,
+    )
+    installed_uuid = str(result.get("appUuid") or "")
+    if company and installed_uuid:
+        print_success(f"Installing app '{installed_uuid}' on company {company}…")
+        result["install"] = install_app_on_company(app_ctx.api_client(), installed_uuid)
+        print_success(f"Pushed and installed app '{installed_uuid}'.")
+    else:
+        print_success("Pushed app (manifest + functions + webhooks).")
+        if not company:
+            print_warning(
+                "Skipped company install. Select a company with "
+                "'caraer company select <uuid>'."
+            )
     print_data(result, app_ctx.output)
 
 

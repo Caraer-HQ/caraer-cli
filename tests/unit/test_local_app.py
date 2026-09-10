@@ -143,6 +143,7 @@ def test_node_init_writes_tsconfig_and_module_package_json(tmp_path: Path) -> No
     assert "@types/three" not in package.get("devDependencies", {})
     assert package["devDependencies"]["@caraer/client"] == "^2.0.366"
     assert package["scripts"]["dev"] == "caraer apps local dev"
+    assert package["scripts"]["push"] == "caraer apps push"
     assert package["dependencies"]["@caraer/cms-runtime"].startswith("github:Caraer-HQ/caraer-cms-runtime")
     assert package["dependencies"]["@caraer/cms-tokens"].startswith("github:Caraer-HQ/caraer-cms-tokens")
     assert (root / "src" / "app" / "modules" / "hello_world" / "index.astro").is_file()

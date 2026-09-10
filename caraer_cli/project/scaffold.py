@@ -423,7 +423,7 @@ def ensure_package_json(root: Path, name: str) -> Path | None:
             "dev": APP_DEV_SCRIPT,
             "validate": "caraer apps validate",
             "push": "caraer apps push",
-            "deploy": "caraer apps push --deploy",
+            "deploy": "caraer apps push",
             "logs": "caraer apps local logs --all",
         },
         "dependencies": {

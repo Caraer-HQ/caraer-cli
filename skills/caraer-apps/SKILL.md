@@ -45,8 +45,7 @@ cd my_app
 # edit src/app/app.caraer.yaml + functions
 caraer apps validate
 caraer apps push --dry-run
-caraer apps push --deploy
-caraer apps install
+caraer apps push
 caraer apps status
 caraer apps local logs --follow
 ```
@@ -108,7 +107,7 @@ App progress:
 - [ ] Add/edit functions (shared helpers in `src/app/shared/`)
 - [ ] Wire inbound / schedule / webhook / lifecycle
 - [ ] `caraer apps validate` → fix until 0 errors
-- [ ] `caraer apps push --dry-run` then `--deploy` when user asks
+- [ ] `caraer apps push --dry-run` then `caraer apps push` when user asks
 ```
 
 ### Clarify before coding
@@ -174,7 +173,7 @@ Installation settings are for **admins installing the app**, not developers.
 - The pushed build archive is the source of truth for V2 runtimes: the
   platform keeps function metadata only, not code. Editing function code in
   the Caraer UI is rejected for build-deployed apps — always change code
-  locally and `caraer apps push --deploy`.
+  locally and `caraer apps push`.
 
 ### Scaffolding commands
 

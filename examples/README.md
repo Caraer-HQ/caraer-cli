@@ -10,8 +10,7 @@ cd examples/webhook-inbox
 caraer auth login
 caraer company select <company-uuid>
 caraer apps select .
-caraer apps push --deploy
-caraer apps install
+caraer apps push
 ```
 
 See [`webhook-inbox/README.md`](webhook-inbox/README.md).

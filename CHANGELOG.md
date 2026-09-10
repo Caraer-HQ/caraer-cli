@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `caraer apps push` is the one command for private and public apps: it
+  deploys by default, publishes CMS modules, and installs on the selected
+  company. `--no-deploy` syncs without a build. `--wait` blocks on function
+  runtime provisioning; the default skips that wait.
+
 - App `package.json` `dev` is `caraer apps local dev`, so `npm run dev` /
   `pnpm dev` starts functions and the CMS preview. A missing `dev` script
   is filled in; an existing one is left alone.

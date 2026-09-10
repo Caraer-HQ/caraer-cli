@@ -73,7 +73,7 @@ caraer apps init --label "My App"
 caraer apps init --private --label "Internal Tool" --auth-method API_KEY
 cd my_app
 # edit src/app/app.caraer.yaml, src/app/functions/, src/app/webhooks/
-caraer apps push --deploy       # prompts for version (> previous) + release notes
+caraer apps push                # deploy + install (add --wait to block on runtime)
 caraer apps release version     # live semver + recent builds
 caraer apps status
 caraer apps local logs          # uses the only local function (or prompts)
@@ -89,13 +89,14 @@ New apps default to workspace `platformVersion: 2026.2` (App platform V2: one as
 container runtime per app). Use `caraer apps init --platform 2026.1` only for the
 legacy per-function Cloud Functions model. See [docs/platform_versioning.md](docs/platform_versioning.md).
 
-`apps push` syncs the full app: marketplace or private-app manifest (including
-settings), functions, webhooks, schedules, inbound routes, and external OAuth
-providers. There is no separate upload command. Use `--private` on `apps init`
-(or `caraer.json` `privateApp: true`) so create/update go to
-`/api/v2/apps/private*`. Public apps still use `/api/v2/apps/public*`.
-Private apps are auto-installed for the creating company and cannot be
-submitted with `caraer publish`.
+`apps push` is the same for private and public apps: it syncs the manifest,
+functions, webhooks, schedules, inbound routes, and OAuth providers, deploys
+the function build, publishes CMS modules, and installs on the selected
+company. Use `--private` on `apps init` (or `caraer.json` `privateApp: true`)
+so create/update go to `/api/v2/apps/private*`. Public apps use
+`/api/v2/apps/public*`. `--no-deploy` syncs without a build. `--wait` blocks
+until function runtime READY/FAILED. Private apps cannot be submitted with
+`caraer publish`.
 
 Add local scaffolds inside an app folder:
 
