@@ -1223,6 +1223,8 @@ const tokenGroups = [
          * sticky` in a header module. It also hid horizontal overflow, which is
          * a module bug worth seeing rather than concealing; the canvas scrolls.
          */
+        display: flex;
+        justify-content: center;
         background: var(--caraer-color-background);
         color: var(--caraer-color-font);
         font-family: var(--caraer-font-body);
