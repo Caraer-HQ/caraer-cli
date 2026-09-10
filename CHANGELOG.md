@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- App `package.json` `dev` is `caraer apps local dev`, so `npm run dev` /
+  `pnpm dev` starts functions and the CMS preview. A missing `dev` script
+  is filled in; an existing one is left alone.
+
 - `apps local dev --cms` isolates the preview harness from the app
   `package.json`, so pnpm does not skip `@astrojs/node`.
 

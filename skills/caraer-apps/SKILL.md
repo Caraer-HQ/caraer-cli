@@ -62,7 +62,7 @@ caraer apps local test --function <name> --sample-only
 
 ```text
 caraer.json
-package.json                # npm scripts; Node adds client + CMS packages and runs npm install
+package.json                # npm/pnpm `dev` = caraer apps local dev (functions + CMS)
 tsconfig.json               # resolves module npm imports from package.json
 src/app/
   app.caraer.yaml           # identity, auth, brandmark, logo, settings, OAuth

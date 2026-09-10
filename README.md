@@ -185,7 +185,8 @@ from caraer_client import LifecyclePayload, WebhookPayload
 
 Node scaffolds add `@caraer/client` as a `devDependency` and
 `@caraer/cms-runtime` / `@caraer/cms-tokens` as dependencies, then run
-`npm install` so the starter module resolves.
+`npm install` so the starter module resolves. `npm run dev` / `pnpm dev`
+is `caraer apps local dev` (functions + CMS preview).
 
 Only the **app creator company** (or super-admin) can push builds for an app.
 

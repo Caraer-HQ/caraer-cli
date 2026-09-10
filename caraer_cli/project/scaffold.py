@@ -379,22 +379,48 @@ def ensure_gitignore(root: Path) -> Path | None:
     return path
 
 
+APP_DEV_SCRIPT = "caraer apps local dev"
+
+
+def ensure_dev_script(root: Path) -> bool:
+    """Make ``npm run dev`` / ``pnpm dev`` start functions and the CMS preview.
+
+    Existing ``scripts.dev`` values are left alone.
+    """
+    path = root / "package.json"
+    if not path.is_file():
+        return False
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(payload, dict):
+        return False
+    scripts = payload.setdefault("scripts", {})
+    if not isinstance(scripts, dict) or scripts.get("dev"):
+        return False
+    scripts["dev"] = APP_DEV_SCRIPT
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return True
+
+
 def ensure_package_json(root: Path, name: str) -> Path | None:
     """Scaffold a root package.json for Node app projects.
 
     New files get scripts, ``@caraer/client``, and the CMS module contract
-    packages. Existing files are left alone so an app only takes on libraries
-    it actually imports.
+    packages. Existing files keep their dependencies; a missing ``dev``
+    script is filled in so ``npm run dev`` matches ``caraer apps local dev``.
     """
     path = root / "package.json"
     if path.exists():
+        ensure_dev_script(root)
         return None
     payload = {
         "name": name,
         "private": True,
         "type": "module",
         "scripts": {
-            "dev": "caraer apps local dev",
+            "dev": APP_DEV_SCRIPT,
             "validate": "caraer apps validate",
             "push": "caraer apps push",
             "deploy": "caraer apps push --deploy",

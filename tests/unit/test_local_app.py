@@ -142,6 +142,7 @@ def test_node_init_writes_tsconfig_and_module_package_json(tmp_path: Path) -> No
     assert "three" not in package.get("dependencies", {})
     assert "@types/three" not in package.get("devDependencies", {})
     assert package["devDependencies"]["@caraer/client"] == "^2.0.366"
+    assert package["scripts"]["dev"] == "caraer apps local dev"
     assert package["dependencies"]["@caraer/cms-runtime"].startswith("github:Caraer-HQ/caraer-cms-runtime")
     assert package["dependencies"]["@caraer/cms-tokens"].startswith("github:Caraer-HQ/caraer-cms-tokens")
     assert (root / "src" / "app" / "modules" / "hello_world" / "index.astro").is_file()
@@ -160,7 +161,21 @@ def test_existing_package_json_is_left_alone(tmp_path: Path) -> None:
 
     assert ensure_package_json(root, "legacy") is None
     package = json.loads((root / "package.json").read_text(encoding="utf-8"))
-    assert package == {"name": "legacy", "private": True, "devDependencies": {}}
+    assert package["devDependencies"] == {}
+    assert package["scripts"]["dev"] == "caraer apps local dev"
+
+
+def test_existing_dev_script_is_left_alone(tmp_path: Path) -> None:
+    root = tmp_path / "custom"
+    root.mkdir()
+    (root / "package.json").write_text(
+        json.dumps({"name": "custom", "scripts": {"dev": "astro dev"}}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    assert ensure_package_json(root, "custom") is None
+    package = json.loads((root / "package.json").read_text(encoding="utf-8"))
+    assert package["scripts"]["dev"] == "astro dev"
 
 
 def test_legacy_json_manifest_still_loads(tmp_path: Path) -> None:
