@@ -6,7 +6,8 @@
   `widthField` from `src/app/modules/settings.ts`) instead of repeating
   options in every module. Field groups can be spread (`...backgroundFields`).
   Shared files at the modules root, and `_`-prefixed folders, are included
-  in the published package.
+  in the published package. Nested settings files may reuse exported arrays
+  such as `COLORS`.
 
 - `caraer apps push` is the one command for private and public apps: it
   deploys by default, publishes CMS modules, and installs on the selected

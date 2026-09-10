@@ -427,6 +427,72 @@ export const manifest = {
     assert _errors(root) == []
 
 
+def test_manifest_can_import_fields_that_reuse_colors_from_settings(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    modules = root / "src" / "app" / "modules"
+    modules.mkdir(parents=True, exist_ok=True)
+    (modules / "settings.ts").write_text(
+        """
+export const COLORS = [
+  { name: 'primary', label: 'Primary' },
+  { name: 'font', label: 'Font' },
+];
+""",
+        encoding="utf-8",
+    )
+    text = modules / "_text"
+    text.mkdir()
+    (text / "fields.ts").write_text(
+        """
+import { COLORS } from '../settings';
+
+export const headingColorField = {
+  name: 'heading_color',
+  label: 'Heading color',
+  type: 'SINGLE_SELECT',
+  defaultValue: 'font',
+  options: COLORS,
+};
+
+export const headingTextFields = [headingColorField];
+""",
+        encoding="utf-8",
+    )
+    (modules / "hero").mkdir()
+    (modules / "hero" / "index.astro").write_text(
+        """---
+import type { ModuleManifest } from '@caraer/cms-runtime';
+import { headingTextFields } from '../_text/fields';
+
+export const manifest = {
+  name: 'hero',
+  label: 'Hero',
+  kind: 'section',
+  category: 'hero',
+  fields: [...headingTextFields],
+} satisfies ModuleManifest;
+---
+<div />
+""",
+        encoding="utf-8",
+    )
+
+    module = discover_local_modules(root, load_workspace(root))[0]
+    assert module.fields == [
+        {
+            "name": "heading_color",
+            "label": "Heading color",
+            "type": "SINGLE_SELECT",
+            "defaultValue": "font",
+            "options": [
+                {"name": "primary", "label": "Primary"},
+                {"name": "font", "label": "Font"},
+            ],
+        }
+    ]
+    assert _errors(root) == []
+
+
 def test_a_module_without_a_manifest_says_what_is_missing(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     directory = root / "src" / "app" / "modules" / "hero"

@@ -346,8 +346,9 @@ def _resolve_import_path(spec: str, source_path: Path) -> Path:
     return resolved
 
 
-def exported_literals(source: str) -> dict[str, Any]:
+def exported_literals(source: str, source_path: Path | None = None) -> dict[str, Any]:
     """Object and array literals bound to `export const` in a settings file."""
+    imported = _resolve_frontmatter_imports(source, source_path) if source_path else {}
     out: dict[str, Any] = {}
     for match in _EXPORTED_CONST.finditer(source):
         rest = source[match.end() :].lstrip()
@@ -356,7 +357,11 @@ def exported_literals(source: str) -> dict[str, Any]:
         start = source.index(rest[0], match.end())
         try:
             # Later exports may name earlier ones, e.g. `backgroundFields = [colorField]`.
-            out[match.group(1)] = _loads_literal(_balanced_literal(source, start), out)
+            # Imported names such as `COLORS` from a sibling settings file also bind.
+            out[match.group(1)] = _loads_literal(
+                _balanced_literal(source, start),
+                {**imported, **out},
+            )
         except (ValueError, ManifestError):
             continue
     return out
@@ -379,7 +384,7 @@ def _resolve_frontmatter_imports(script: str, source_path: Path) -> dict[str, An
                 imported_source = resolved.read_text(encoding="utf-8")
             except OSError as exc:
                 raise ManifestError(f"Could not read {resolved}: {exc}") from exc
-            loaded[resolved] = exported_literals(imported_source)
+            loaded[resolved] = exported_literals(imported_source, resolved)
 
         exports = loaded[resolved]
         for local, exported in _import_specifiers(match.group(2)):
