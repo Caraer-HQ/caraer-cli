@@ -94,6 +94,29 @@ def test_harness_preview_uses_block_flow_like_live_pages(tmp_path: Path) -> None
     assert "justify-content: center;" not in preview
 
 
+def test_harness_preview_uses_an_iframe_so_media_queries_see_the_frame_width(
+    tmp_path: Path,
+) -> None:
+    """Mobile/Tablet only change a parent max-width; @media needs a viewport."""
+    root = _workspace(tmp_path)
+    _write_module(root, "hero")
+
+    harness, _ = write_harness(
+        root,
+        load_workspace(root),
+        app_name="demo_app",
+        runtime_spec="latest",
+        tokens_spec="latest",
+    )
+    page = (harness / "src" / "pages" / "index.astro").read_text(encoding="utf-8")
+    assert "searchParams.get('embed') === '1'" in page
+    assert 'params.set(\'embed\', \'1\')' in page
+    assert '<iframe' in page
+    assert 'class="hx-frame__doc"' in page
+    assert "HTMLIFrameElement" in page
+    assert "querySelectorAll('.hx-bar .hx-seg button')" in page
+
+
 def test_harness_installs_app_module_libraries(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     _write_module(root, "aurora")

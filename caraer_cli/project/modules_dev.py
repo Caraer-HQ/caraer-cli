@@ -683,6 +683,19 @@ const tokenGroups = [
     tokens: Object.entries(tokenValues).filter(([name]) => group.match(name)),
   }}))
   .filter((group) => group.tokens.length > 0);
+
+/*
+ * Media queries evaluate against the viewport, not a parent max-width. The
+ * production builder already renders the page in an iframe for that reason.
+ * This embed document is the same idea: Mobile/Tablet resize the iframe, so
+ * `@media (max-width: 640px)` in a module actually fires.
+ */
+const embed = Astro.url.searchParams.get('embed') === '1';
+const embedSrc = (() => {{
+  const params = new URLSearchParams(Astro.url.search);
+  params.set('embed', '1');
+  return `?${{params}}`;
+}})();
 ---
 
 <html lang="nl" style={{style}}>
@@ -691,7 +704,16 @@ const tokenGroups = [
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{selected?.label ?? 'Modules'}} - Caraer module preview</title>
   </head>
-  <body>
+  <body class={{embed ? 'is-embed' : undefined}}>
+    {{embed ? (
+      <div class="harness__preview" id="harness-preview">
+        {{loadError ? (
+          <Fragment set:html={{renderModuleErrorHtml({{ moduleRef: `local/${{selected?.name}}`, detail: true }}, loadError)}} />
+        ) : (
+          Selected && props && <Selected {{...props}} />
+        )}}
+      </div>
+    ) : (
     <div class="hx">
       <header class="hx-bar">
         <div class="hx-brand">
@@ -736,13 +758,12 @@ const tokenGroups = [
 
       <main class="hx-canvas">
         <div class="hx-frame" id="harness-frame">
-          <div class="harness__preview" id="harness-preview">
-            {{loadError ? (
-              <Fragment set:html={{renderModuleErrorHtml({{ moduleRef: `local/${{selected?.name}}`, detail: true }}, loadError)}} />
-            ) : (
-              Selected && props && <Selected {{...props}} />
-            )}}
-          </div>
+          <iframe
+            id="harness-preview"
+            class="hx-frame__doc"
+            title="Module preview"
+            src={{embedSrc}}
+          ></iframe>
         </div>
       </main>
 
@@ -848,6 +869,7 @@ const tokenGroups = [
         </div>
       </aside>
     </div>
+    )}}
 
     <script>
       // Live preview: re-render as you type instead of on Apply. Only the
@@ -856,7 +878,7 @@ const tokenGroups = [
       const form = document.querySelector('.harness__fields');
       const preview = document.getElementById('harness-preview');
 
-      if (form instanceof HTMLFormElement && preview) {{
+      if (form instanceof HTMLFormElement && preview instanceof HTMLIFrameElement) {{
         let timer;
         let inFlight;
 
@@ -869,8 +891,11 @@ const tokenGroups = [
             if (!box.checked) params.set(box.name, 'false');
           }});
 
+          const chrome = params.toString();
+          history.replaceState(null, '', '?' + chrome);
+
+          params.set('embed', '1');
           const query = params.toString();
-          history.replaceState(null, '', '?' + query);
 
           inFlight?.abort();
           inFlight = new AbortController();
@@ -884,10 +909,16 @@ const tokenGroups = [
             // browser upgrade Astro's island elements so they rehydrate.
             const parsed = new DOMParser().parseFromString(await response.text(), 'text/html');
             const next = parsed.getElementById('harness-preview');
+            const doc = preview.contentDocument;
+            const current = doc?.getElementById('harness-preview');
             if (!next) return;
+            if (!current) {{
+              preview.src = '/?' + query;
+              return;
+            }}
 
-            preview.replaceChildren(
-              ...Array.from(next.childNodes).map((node) => document.adoptNode(node)),
+            current.replaceChildren(
+              ...Array.from(next.childNodes).map((node) => doc.adoptNode(node)),
             );
           }} catch (error) {{
             if (error.name !== 'AbortError') console.error(error);
@@ -976,9 +1007,11 @@ const tokenGroups = [
       // Viewport width toggle. Chrome-only, so it lives here rather than in the
       // live-update script that talks to the server.
       const frame = document.getElementById('harness-frame');
-      document.querySelectorAll('.hx-seg button').forEach((button) => {{
+      document.querySelectorAll('.hx-bar .hx-seg button').forEach((button) => {{
         button.addEventListener('click', () => {{
-          document.querySelectorAll('.hx-seg button').forEach((b) => b.classList.remove('is-on'));
+          document.querySelectorAll('.hx-bar .hx-seg button').forEach((b) => {{
+            b.classList.remove('is-on');
+          }});
           button.classList.add('is-on');
           const width = Number(button.dataset.width);
           frame.style.maxWidth = width ? width + 'px' : '';
@@ -1009,6 +1042,28 @@ const tokenGroups = [
         background: var(--hx-bg);
         font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
         color: var(--hx-text);
+      }}
+      /*
+       * Embed document: chrome styles stay namespaced under .hx, so they do
+       * not leak in. These reset the iframe document to a live page shell.
+       */
+      body.is-embed {{
+        height: auto;
+        min-height: 100%;
+        background: var(--caraer-color-background);
+        color: var(--caraer-color-font);
+        font-family: var(--caraer-font-body);
+        font-size: var(--caraer-size-body);
+        line-height: var(--caraer-leading-body);
+      }}
+      body.is-embed .harness__preview {{
+        display: block;
+        width: 100%;
+        background: var(--caraer-color-background);
+        color: var(--caraer-color-font);
+        font-family: var(--caraer-font-body);
+        font-size: var(--caraer-size-body);
+        line-height: var(--caraer-leading-body);
       }}
 
       .hx {{
@@ -1187,7 +1242,10 @@ const tokenGroups = [
       /* Preview canvas */
       .hx-canvas {{
         padding: 1.25rem;
-        overflow: auto;
+        overflow: hidden;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
         background:
           linear-gradient(45deg, #14171d 25%, transparent 25%) -8px 0/16px 16px,
           linear-gradient(-45deg, #14171d 25%, transparent 25%) -8px 0/16px 16px,
@@ -1195,14 +1253,19 @@ const tokenGroups = [
       }}
       /*
        * Full width is deliberately unstyled: no radius and no clipping, because
-       * both are chrome a real page does not have. `overflow: hidden` in
-       * particular would silently break `position: sticky` in a header module.
+       * both are chrome a real page does not have. Sticky positioning lives
+       * inside the iframe document, so it sticks to that viewport the way it
+       * does on a live page.
        *
        * A constrained width is different - there the rounding reads as a device
        * frame, which is the whole point of the mobile and tablet views.
        */
       .hx-frame {{
+        position: relative;
         margin: 0 auto;
+        width: 100%;
+        flex: 1 1 auto;
+        min-height: 0;
         background: var(--caraer-color-background, #fff);
         box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
         transition: max-width 180ms ease;
@@ -1211,30 +1274,13 @@ const tokenGroups = [
         border-radius: 14px;
         overflow: hidden;
       }}
-      /*
-       * Reset the chrome's dark text inside the frame and apply the same body
-       * styles caraer-web's page shell uses, so the preview matches production
-       * instead of inheriting the harness's own theme.
-       */
-      .harness__preview {{
-        /*
-         * Same formatting context as caraer-web `#main`: a block box that
-         * stretches to the frame. Flex + `justify-content: center` made
-         * section modules shrink-wrap (`flex-grow: 0`) instead of filling
-         * the way they do on a live page.
-         *
-         * No overflow clipping. `overflow-x: hidden` forces overflow-y to auto,
-         * which makes this an extra scroll container and breaks `position:
-         * sticky` in a header module. It also hid horizontal overflow, which is
-         * a module bug worth seeing rather than concealing; the canvas scrolls.
-         */
-        display: block;
+      .hx-frame__doc {{
+        position: absolute;
+        inset: 0;
         width: 100%;
-        background: var(--caraer-color-background);
-        color: var(--caraer-color-font);
-        font-family: var(--caraer-font-body);
-        font-size: var(--caraer-size-body);
-        line-height: var(--caraer-leading-body);
+        height: 100%;
+        border: 0;
+        background: var(--caraer-color-background, #fff);
       }}
 
       /* Field panel */
