@@ -117,6 +117,27 @@ def test_harness_preview_uses_an_iframe_so_media_queries_see_the_frame_width(
     assert "querySelectorAll('.hx-bar .hx-seg button')" in page
 
 
+def test_harness_hides_fields_that_are_not_visible(tmp_path: Path) -> None:
+    """visibleWhen must hide unused slots, the same as the builder sidebar."""
+    root = _workspace(tmp_path)
+    _write_module(root, "hero")
+
+    harness, _ = write_harness(
+        root,
+        load_workspace(root),
+        app_name="demo_app",
+        runtime_spec="latest",
+        tokens_spec="latest",
+    )
+    page = (harness / "src" / "pages" / "index.astro").read_text(encoding="utf-8")
+    assert "isFieldVisible" in page
+    assert "data-visible-when" in page
+    assert "applyFieldVisibility" in page
+    assert ".hx-field[hidden] { display: none; }" in page
+    assert "field.type === 'MULTI_FILE'" in page
+    assert "One image URL per line" in page
+
+
 def test_harness_installs_app_module_libraries(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     _write_module(root, "aurora")
