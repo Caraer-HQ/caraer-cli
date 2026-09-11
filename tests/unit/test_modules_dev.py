@@ -134,8 +134,11 @@ def test_harness_hides_fields_that_are_not_visible(tmp_path: Path) -> None:
     assert "data-visible-when" in page
     assert "applyFieldVisibility" in page
     assert ".hx-field[hidden] { display: none; }" in page
-    assert "field.type === 'MULTI_FILE'" in page
-    assert "One image URL per line" in page
+    assert "field.type === 'FILE' || field.type === 'MULTI_FILE'" in page
+    assert 'class="hx-file"' in page
+    assert "/api/upload" in page
+    assert "One image URL per line" not in page
+    assert (harness / "src" / "pages" / "api" / "upload.ts").is_file()
 
 
 def test_harness_installs_app_module_libraries(tmp_path: Path) -> None:
