@@ -789,6 +789,71 @@ def _harness_file_field_markup() -> str:
 """
 
 
+def _harness_field_rows(fields_expr: str) -> str:
+    """One sidebar field list. Used for both normal and advanced fields."""
+    return f"""          {{{fields_expr}.map((field) => (
+            <div
+              class="hx-field"
+              data-type={{field.type}}
+              data-visible-when={{JSON.stringify(field.visibleWhen ?? [])}}
+              hidden={{!isFieldVisible(field, stored)}}
+            >
+              <label class="hx-field__label" for={{`f-${{field.name}}`}}>
+                <span>
+                  {{field.label}}
+                  {{field.required && <em class="hx-req" title="Required">*</em>}}
+                </span>
+                <code>{{field.type.toLowerCase().replace(/_/g, ' ')}}</code>
+              </label>
+
+              {{field.type === 'SWITCH' ? (
+                <label class="hx-switch">
+                  <input
+                    id={{`f-${{field.name}}`}}
+                    type="checkbox"
+                    name={{`f.${{field.name}}`}}
+                    checked={{Boolean(stored[field.name])}}
+                    value="true"
+                  />
+                  <span class="hx-switch__track"><span class="hx-switch__thumb"></span></span>
+                  <span class="hx-switch__state">{{stored[field.name] ? 'On' : 'Off'}}</span>
+                </label>
+              ) : field.type === 'MULTI_LINE' ? (
+                <textarea id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}} rows="4">{{String(stored[field.name] ?? '')}}</textarea>
+{_harness_file_field_markup()}              ) : field.type === 'FORM_SINGLE_SELECT' ? (
+                <select id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}}>
+                  <option value="">Select a form</option>
+                  {{forms.map((form) => (
+                    <option
+                      value={{form.uuid}}
+                      selected={{stored[field.name] === form.uuid || stored[field.name] === form.name}}
+                    >{{form.label || form.name || form.uuid}}</option>
+                  ))}}
+                  {{stored[field.name] && !forms.some((form) => form.uuid === stored[field.name] || form.name === stored[field.name]) && (
+                    <option value={{stored[field.name]}} selected>{{String(stored[field.name])}}</option>
+                  )}}
+                </select>
+              ) : field.options ? (
+                <select id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}}>
+                  {{field.options.map((o) => (
+                    <option value={{o.name}} selected={{stored[field.name] === o.name}}>{{o.label}}</option>
+                  ))}}
+                </select>
+              ) : (
+                <input
+                  id={{`f-${{field.name}}`}}
+                  name={{`f.${{field.name}}`}}
+                  value={{String(stored[field.name] ?? '')}}
+                  placeholder={{field.helpText ?? ''}}
+                />
+              )}}
+
+              {{field.helpText && <small class="hx-help">{{field.helpText}}</small>}}
+            </div>
+          ))}}
+"""
+
+
 def _harness_file_field_script() -> str:
     """Uploads picked files to /api/upload and writes the returned URLs."""
     return """
@@ -1002,6 +1067,8 @@ const loaders = {{
 const active = Astro.url.searchParams.get('module') ?? modules[0]?.name;
 const selected = modules.find((m) => m.name === active) ?? modules[0];
 const manifestFields = selected?.fields ?? [];
+const normalFields = manifestFields.filter((field) => field.advanced !== true);
+const advancedFields = manifestFields.filter((field) => field.advanced === true);
 
 /*
  * Query strings carry everything as text, but a field's declared type is what
@@ -1211,66 +1278,13 @@ const embedSrc = (() => {{
           )}}
 
           {{/* Note: a textarea's tag content is its value, so it stays on one line. */}}
-          {{manifestFields.map((field) => (
-            <div
-              class="hx-field"
-              data-type={{field.type}}
-              data-visible-when={{JSON.stringify(field.visibleWhen ?? [])}}
-              hidden={{!isFieldVisible(field, stored)}}
-            >
-              <label class="hx-field__label" for={{`f-${{field.name}}`}}>
-                <span>
-                  {{field.label}}
-                  {{field.required && <em class="hx-req" title="Required">*</em>}}
-                </span>
-                <code>{{field.type.toLowerCase().replace(/_/g, ' ')}}</code>
-              </label>
-
-              {{field.type === 'SWITCH' ? (
-                <label class="hx-switch">
-                  <input
-                    id={{`f-${{field.name}}`}}
-                    type="checkbox"
-                    name={{`f.${{field.name}}`}}
-                    checked={{Boolean(stored[field.name])}}
-                    value="true"
-                  />
-                  <span class="hx-switch__track"><span class="hx-switch__thumb"></span></span>
-                  <span class="hx-switch__state">{{stored[field.name] ? 'On' : 'Off'}}</span>
-                </label>
-              ) : field.type === 'MULTI_LINE' ? (
-                <textarea id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}} rows="4">{{String(stored[field.name] ?? '')}}</textarea>
-{_harness_file_field_markup()}              ) : field.type === 'FORM_SINGLE_SELECT' ? (
-                <select id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}}>
-                  <option value="">Select a form</option>
-                  {{forms.map((form) => (
-                    <option
-                      value={{form.uuid}}
-                      selected={{stored[field.name] === form.uuid || stored[field.name] === form.name}}
-                    >{{form.label || form.name || form.uuid}}</option>
-                  ))}}
-                  {{stored[field.name] && !forms.some((form) => form.uuid === stored[field.name] || form.name === stored[field.name]) && (
-                    <option value={{stored[field.name]}} selected>{{String(stored[field.name])}}</option>
-                  )}}
-                </select>
-              ) : field.options ? (
-                <select id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}}>
-                  {{field.options.map((o) => (
-                    <option value={{o.name}} selected={{stored[field.name] === o.name}}>{{o.label}}</option>
-                  ))}}
-                </select>
-              ) : (
-                <input
-                  id={{`f-${{field.name}}`}}
-                  name={{`f.${{field.name}}`}}
-                  value={{String(stored[field.name] ?? '')}}
-                  placeholder={{field.helpText ?? ''}}
-                />
-              )}}
-
-              {{field.helpText && <small class="hx-help">{{field.helpText}}</small>}}
-            </div>
-          ))}}
+{_harness_field_rows("normalFields")}
+          {{advancedFields.length > 0 && (
+            <details class="hx-advanced">
+              <summary>Advanced settings</summary>
+{_harness_field_rows("advancedFields")}
+            </details>
+          )}}
 
           <button type="submit" class="hx-apply">Apply</button>
         </form>
@@ -1428,6 +1442,9 @@ const embedSrc = (() => {{
             rules = [];
           }}
           row.hidden = !(Array.isArray(rules) && rules.every((rule) => conditionHolds(rule, values)));
+        }});
+        form.querySelectorAll('.hx-advanced').forEach((section) => {{
+          section.hidden = ![...section.querySelectorAll('.hx-field')].some((row) => !row.hidden);
         }});
       }};
 
@@ -1804,6 +1821,25 @@ const embedSrc = (() => {{
       .harness__fields {{ display: grid; gap: 0.875rem; }}
       .hx-field {{ display: grid; gap: 0.3rem; }}
       .hx-field[hidden] {{ display: none; }}
+      .hx-advanced {{
+        display: grid; gap: 0.875rem;
+        border-top: 1px solid var(--hx-line);
+        padding-top: 0.25rem;
+      }}
+      .hx-advanced[hidden] {{ display: none; }}
+      .hx-advanced summary {{
+        cursor: pointer;
+        font-size: 0.75rem; font-weight: 600;
+        color: var(--hx-text);
+        list-style: none;
+        display: flex; align-items: center; justify-content: space-between;
+      }}
+      .hx-advanced summary::-webkit-details-marker {{ display: none; }}
+      .hx-advanced summary::after {{
+        content: '▸';
+        font-size: 0.7rem; color: var(--hx-muted);
+      }}
+      .hx-advanced[open] summary::after {{ content: '▾'; }}
       .hx-field__label {{
         display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
         font-size: 0.75rem; font-weight: 600;

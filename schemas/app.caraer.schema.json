@@ -317,6 +317,10 @@
           "type": "boolean",
           "description": "Never show this field. The value is still stored (provisioned ids, workspace handles)."
         },
+        "advanced": {
+          "type": "boolean",
+          "description": "Show this field under a collapsed Advanced settings section. Unlike hidden, the value is still editable once opened."
+        },
         "visibleWhen": {
           "type": "array",
           "items": { "$ref": "#/$defs/settingCondition" },

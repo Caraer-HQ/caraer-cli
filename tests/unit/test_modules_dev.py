@@ -134,6 +134,9 @@ def test_harness_hides_fields_that_are_not_visible(tmp_path: Path) -> None:
     assert "data-visible-when" in page
     assert "applyFieldVisibility" in page
     assert ".hx-field[hidden] { display: none; }" in page
+    assert "Advanced settings" in page
+    assert 'class="hx-advanced"' in page
+    assert "field.advanced !== true" in page
     assert "field.type === 'FILE' || field.type === 'MULTI_FILE'" in page
     assert 'class="hx-file"' in page
     assert "/api/upload" in page
