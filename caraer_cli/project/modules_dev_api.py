@@ -48,6 +48,7 @@ def start_company_api(
     fetch: Callable[[], list[dict[str, Any]]],
     *,
     fetch_forms: Callable[[str], list[dict[str, Any]]] | None = None,
+    fetch_form: Callable[[str, str], dict[str, Any] | None] | None = None,
     host: str = "127.0.0.1",
 ) -> CompanyApi:
     """Serve the company list and per-company branding on an ephemeral port.
@@ -55,6 +56,7 @@ def start_company_api(
     ``fetch`` is called at most once, on the first request that needs it, and
     its result is held in memory only. ``fetch_forms`` is keyed by company
     uuid so switching preview company lists that company's forms.
+    ``fetch_form`` loads one form by uuid or name for ``CaraerForm``.
     """
     token = secrets.token_urlsafe(24)
     lock = threading.Lock()
@@ -81,6 +83,19 @@ def start_company_api(
                 except Exception as e:  # noqa: BLE001
                     log.debug("Could not list forms for the module preview: %s", e)
                     cache[key] = []
+            return cache[key]
+
+    def form_for(company_uuid: str, form_ref: str) -> dict[str, Any] | None:
+        if fetch_form is None:
+            return None
+        with lock:
+            key = f"form:{company_uuid}:{form_ref}"
+            if key not in cache:
+                try:
+                    cache[key] = fetch_form(company_uuid, form_ref)
+                except Exception as e:  # noqa: BLE001
+                    log.debug("Could not load form '%s' for the module preview: %s", form_ref, e)
+                    cache[key] = None
             return cache[key]
 
     class Handler(BaseHTTPRequestHandler):
@@ -124,20 +139,31 @@ def start_company_api(
                 return
 
             if path.startswith("/forms/"):
-                wanted = unquote(path[len("/forms/") :])
+                rest = unquote(path[len("/forms/") :])
+                company_key, _, form_ref = rest.partition("/")
                 company_uuid = next(
                     (
                         company.get("uuid")
                         for company in companies()
-                        if company.get("subdomain") == wanted
-                        or company.get("uuid") == wanted
+                        if company.get("subdomain") == company_key
+                        or company.get("uuid") == company_key
                     ),
                     None,
                 )
                 if not company_uuid:
                     self._send(404, {"error": "unknown company"})
                     return
-                self._send(200, forms_for(str(company_uuid)))
+                if not form_ref:
+                    self._send(200, forms_for(str(company_uuid)))
+                    return
+                if fetch_form is None:
+                    self._send(404, {"error": "form not found"})
+                    return
+                form = form_for(str(company_uuid), form_ref)
+                if not form:
+                    self._send(404, {"error": "form not found"})
+                    return
+                self._send(200, form)
                 return
 
             self._send(404, {"error": "not found"})

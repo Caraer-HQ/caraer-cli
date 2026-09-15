@@ -320,7 +320,7 @@ def app_dev(
     company_api = None
     if harness is not None:
         from caraer_cli.project.modules_dev_api import start_company_api
-        from caraer_cli.project.modules_dev import fetch_companies, fetch_forms
+        from caraer_cli.project.modules_dev import fetch_companies, fetch_form, fetch_forms
 
         # Served from memory for the life of the preview rather than written
         # into the checkout: this is customer branding, not build output.
@@ -331,9 +331,15 @@ def app_dev(
                 return []
             return fetch_forms(app_ctx.api_client(), company_uuid)
 
+        def _form_for_company(company_uuid: str, form_ref: str):
+            if not app_ctx.token:
+                return None
+            return fetch_form(app_ctx.api_client(), company_uuid, form_ref)
+
         company_api = start_company_api(
             lambda: fetch_companies(app_ctx.api_client()) if app_ctx.token else [],
             fetch_forms=_forms_for_company,
+            fetch_form=_form_for_company,
         )
 
         harness_env: dict[str, str] = {

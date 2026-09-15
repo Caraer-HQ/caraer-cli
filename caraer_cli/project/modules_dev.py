@@ -133,6 +133,29 @@ def fetch_forms(client: Any, company_uuid: str) -> list[dict[str, Any]]:
     return forms
 
 
+def fetch_form(client: Any, company_uuid: str, form_ref: str) -> dict[str, Any] | None:
+    """Full form definition for the preview, uuid or machine name.
+
+    Uses the authenticated forms API the CLI already has, not the CMS public
+    website routes. The preview maps grids onto CaraerForm itself.
+    """
+    if not company_uuid or not form_ref:
+        return None
+
+    try:
+        payload = client.request(
+            "GET",
+            f"/api/v2/forms/{form_ref}",
+            company_uuid=company_uuid,
+        )
+    except Exception as e:  # noqa: BLE001
+        log.debug("Could not load form '%s' for the module preview: %s", form_ref, e)
+        return None
+
+    raw = payload.get("data") if isinstance(payload, dict) else payload
+    return raw if isinstance(raw, dict) and raw.get("uuid") else None
+
+
 PUBLISHED_RUNTIME_SPEC = "github:Caraer-HQ/caraer-cms-runtime#v0.1.1"
 PUBLISHED_TOKENS_SPEC = "github:Caraer-HQ/caraer-cms-tokens#v0.1.1"
 
@@ -375,6 +398,62 @@ const SAMPLE_FORMS = [
   { uuid: 'job-alert', name: 'job-alert', label: 'Sample form' },
 ];
 
+const text = (value) => (typeof value === 'string' && value.trim() ? value : null);
+
+const toCaraerForm = (form) => {
+  const fieldsOf = (step) => {
+    const fields = [];
+    for (const row of step.grid ?? []) {
+      for (const cell of row ?? []) {
+        const property = cell.property;
+        if (!property?.name || cell.settings?.hidden) continue;
+        const format = property.format;
+        const options = (property.options ?? [])
+          .map((option) => {
+            const name = text(option.name);
+            return name ? { name, label: text(option.label) ?? name } : null;
+          })
+          .filter(Boolean);
+        fields.push({
+          uuid: text(property.uuid) ?? property.name,
+          name: property.name,
+          label: text(cell.settings?.label) ?? text(property.label) ?? property.name,
+          type: text(property.type) ?? 'string',
+          format: typeof format === 'string' ? format : text(format?.name),
+          required: Boolean(cell.settings?.isRequired),
+          placeholder: text(cell.settings?.placeholder),
+          helpText: text(cell.settings?.helpText),
+          options: options.length > 0 ? options : undefined,
+        });
+      }
+    }
+    return fields;
+  };
+  let submitLabel = null;
+  for (const step of form.grids ?? []) {
+    for (const row of step.grid ?? []) {
+      for (const cell of row ?? []) {
+        const label = text(cell.submitButton);
+        if (label) submitLabel = label;
+      }
+    }
+  }
+  return {
+    uuid: form.uuid,
+    name: form.name,
+    label: text(form.label) ?? form.name,
+    wizard: Boolean(form.wizard),
+    steps: (form.grids ?? []).map((step) => ({
+      title: text(step.title),
+      description: text(step.description),
+      fields: fieldsOf(step),
+    })),
+    submitLabel,
+    thankYouMessage: text(form.thankYouMessage),
+    redirectUrl: text(form.redirectUrl),
+  };
+};
+
 const sampleRecords = (object, limit) => ({
   total: limit,
   records: Array.from({ length: limit }, (_, index) => {
@@ -605,9 +684,16 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return match ?? { ...SAMPLE_MENU, location };
   };
 
-  context.locals.getForm = async (form) =>
-    (await live(`/forms/${encodeURIComponent(String(form))}`, {}, activeSubdomain)) ??
-    SAMPLE_FORM(form);
+  context.locals.getForm = async (form) => {
+    const raw = activeSubdomain
+      ? await harnessApi(
+          `/forms/${encodeURIComponent(activeSubdomain)}/${encodeURIComponent(String(form))}`,
+        )
+      : null;
+    if (raw?.uuid && Array.isArray(raw.grids)) return toCaraerForm(raw);
+    if (raw?.uuid && Array.isArray(raw.steps)) return raw;
+    return SAMPLE_FORM(form);
+  };
 
   context.locals.listRecords = async ({ object, limit = 6, offset, orderBy, filter }) =>
     (await live(
