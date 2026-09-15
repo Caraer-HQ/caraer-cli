@@ -80,6 +80,26 @@ def test_an_unknown_company_is_a_404(api) -> None:
     assert caught.value.code == 404
 
 
+def test_forms_are_listed_for_the_preview_company() -> None:
+    def fetch_forms(company_uuid: str):
+        assert company_uuid == "u-1"
+        return [{"uuid": "form-1", "name": "job-alert", "label": "Job alert"}]
+
+    served = start_company_api(lambda: COMPANIES, fetch_forms=fetch_forms)
+    try:
+        forms = _get(served, "/forms/gartenlux")
+        assert forms == [{"uuid": "form-1", "name": "job-alert", "label": "Job alert"}]
+    finally:
+        served.shutdown()
+
+
+def test_an_unknown_company_forms_list_is_a_404(api) -> None:
+    with pytest.raises(urllib.error.HTTPError) as caught:
+        _get(api, "/forms/nope")
+
+    assert caught.value.code == 404
+
+
 def test_the_token_is_required(api) -> None:
     """Loopback is reachable by anything else on the machine, including a
     page open in the browser."""

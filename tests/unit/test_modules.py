@@ -224,6 +224,26 @@ def test_codegen_narrows_selects_and_nulls_optional_fields(tmp_path: Path) -> No
     assert "enabled: boolean;" in types
 
 
+def test_codegen_maps_form_single_select_to_string(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _write_module(
+        root,
+        "cta",
+        {
+            "name": "cta",
+            "label": "CTA",
+            "kind": "section",
+            "fields": [
+                {"name": "form", "label": "Form", "type": "FORM_SINGLE_SELECT", "required": True},
+            ],
+        },
+    )
+    module = discover_local_modules(root, load_workspace(root))[0]
+    types = render_module_types(module)
+
+    assert "form: string;" in types
+
+
 def test_codegen_runs_during_validation(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     _write_module(

@@ -30,6 +30,7 @@ _FIELD_TS_TYPES: dict[str, str] = {
     "MULTI_SELECT": "string[]",
     "RECORD_SINGLE_SELECT": "string",
     "RECORD_MULTI_SELECT": "string[]",
+    "FORM_SINGLE_SELECT": "string",
     "OBJECT_SINGLE_SELECT": "string",
     "OBJECT_MULTI_SELECT": "string[]",
     # Resolved to the record's value, whose type depends on the property.

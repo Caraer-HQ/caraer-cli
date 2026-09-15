@@ -35,6 +35,7 @@ _SAMPLE_VALUES: dict[str, Any] = {
     "MULTI_SELECT": [],
     "RECORD_SINGLE_SELECT": None,
     "RECORD_MULTI_SELECT": [],
+    "FORM_SINGLE_SELECT": "job-alert",
     "OBJECT_SINGLE_SELECT": "vacancy",
     "OBJECT_MULTI_SELECT": [],
     "PROPERTY_SINGLE_SELECT": "title",
@@ -83,6 +84,53 @@ def fetch_companies(client: Any) -> list[dict[str, Any]]:
 
     companies.sort(key=lambda c: (c["name"] or "").lower())
     return companies
+
+
+def fetch_forms(client: Any, company_uuid: str) -> list[dict[str, Any]]:
+    """Forms the signed-in user can pick for the given company.
+
+    Loaded through the CLI so the preview never holds a token. The sidebar
+    FORM_SINGLE_SELECT picker shows these instead of asking for a uuid.
+    """
+    if not company_uuid:
+        return []
+
+    try:
+        payload = client.request(
+            "POST",
+            "/api/v2/forms/index",
+            json_body={
+                "page": 1,
+                "limit": 200,
+                "query": "",
+                "filters": [{"key": "deletedAt", "operator": "isnull"}],
+            },
+            company_uuid=company_uuid,
+        )
+    except Exception as e:  # noqa: BLE001
+        log.debug("Could not list forms for the module preview: %s", e)
+        return []
+
+    raw = payload.get("data") if isinstance(payload, dict) else payload
+    if not isinstance(raw, list):
+        return []
+
+    forms: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        uuid = item.get("uuid")
+        if not uuid:
+            continue
+        name = item.get("name") or ""
+        forms.append(
+            {
+                "uuid": uuid,
+                "name": name,
+                "label": item.get("label") or name or uuid,
+            }
+        )
+    return forms
 
 
 PUBLISHED_RUNTIME_SPEC = "github:Caraer-HQ/caraer-cms-runtime#v0.1.1"
@@ -323,15 +371,23 @@ const SAMPLE_FORM = (form) => ({
   ],
 });
 
+const SAMPLE_FORMS = [
+  { uuid: 'job-alert', name: 'job-alert', label: 'Sample form' },
+];
+
 const sampleRecords = (object, limit) => ({
   total: limit,
-  records: Array.from({ length: limit }, (_, index) => ({
-    uuid: `sample-${index + 1}`,
-    slug: `/sample-${index + 1}`,
-    url: `/sample-${index + 1}`,
-    properties: { title: `Sample ${object} ${index + 1}`, location: 'Utrecht' },
-    parsedProperties: { title: `Sample ${object} ${index + 1}`, location: 'Utrecht' },
-  })),
+  records: Array.from({ length: limit }, (_, index) => {
+    const title = `Sample ${object} ${index + 1}`;
+    const description = `Short description for sample ${object} ${index + 1}.`;
+    return {
+      uuid: `sample-${index + 1}`,
+      slug: `/sample-${index + 1}`,
+      url: `/sample-${index + 1}`,
+      properties: { title, description, location: 'Utrecht' },
+      parsedProperties: { title, description, location: 'Utrecht' },
+    };
+  }),
 });
 
 /**
@@ -391,6 +447,21 @@ async function harnessApi(path) {
 let companiesPromise;
 const loadCompanies = () =>
   (companiesPromise ??= harnessApi('/companies').then((list) => list ?? []));
+
+const formsCache = new Map();
+const loadForms = (subdomain) => {
+  if (!subdomain) return Promise.resolve(SAMPLE_FORMS);
+  if (!formsCache.has(subdomain)) {
+    formsCache.set(
+      subdomain,
+      (async () => {
+        const listed = await harnessApi(`/forms/${encodeURIComponent(subdomain)}`);
+        return Array.isArray(listed) && listed.length > 0 ? listed : SAMPLE_FORMS;
+      })(),
+    );
+  }
+  return formsCache.get(subdomain);
+};
 
 // Branding is per company, so a preview you never point at one never asks.
 const companyCache = new Map();
@@ -519,6 +590,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     subdomain: activeSubdomain,
     companyName: selectedCompany?.name ?? settings?.company?.name ?? null,
     companies: await loadCompanies(),
+    forms: await loadForms(activeSubdomain),
   };
 
   context.locals.assetUrl = (key) => key ?? null;
@@ -917,6 +989,7 @@ const style = toStyleAttribute(toCustomProperties(Astro.locals.tokens ?? DEFAULT
 const live = Astro.locals.harness?.live ?? false;
 const subdomain = Astro.locals.harness?.subdomain ?? '';
 const companies = Astro.locals.harness?.companies ?? [];
+const forms = Astro.locals.harness?.forms ?? [];
 
 // Carry the exact choice across module links, including the empty value that
 // means "sample data even though --company is set". Dropping the parameter
@@ -1081,7 +1154,20 @@ const embedSrc = (() => {{
                 </label>
               ) : field.type === 'MULTI_LINE' ? (
                 <textarea id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}} rows="4">{{String(stored[field.name] ?? '')}}</textarea>
-{_harness_file_field_markup()}              ) : field.options ? (
+{_harness_file_field_markup()}              ) : field.type === 'FORM_SINGLE_SELECT' ? (
+                <select id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}}>
+                  <option value="">Select a form</option>
+                  {{forms.map((form) => (
+                    <option
+                      value={{form.uuid}}
+                      selected={{stored[field.name] === form.uuid || stored[field.name] === form.name}}
+                    >{{form.label || form.name || form.uuid}}</option>
+                  ))}}
+                  {{stored[field.name] && !forms.some((form) => form.uuid === stored[field.name] || form.name === stored[field.name]) && (
+                    <option value={{stored[field.name]}} selected>{{String(stored[field.name])}}</option>
+                  )}}
+                </select>
+              ) : field.options ? (
                 <select id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}}>
                   {{field.options.map((o) => (
                     <option value={{o.name}} selected={{stored[field.name] === o.name}}>{{o.label}}</option>
@@ -1764,9 +1850,23 @@ def write_harness(
     (harness / "public" / "uploads").mkdir(parents=True, exist_ok=True)
     (harness / "src" / "pages" / "api" / "upload.ts").write_text(_harness_upload_api(), encoding="utf-8")
     (harness / "src" / "middleware.ts").write_text(_harness_middleware(), encoding="utf-8")
-    (harness / "samples.json").write_text(
-        json.dumps({m.name: sample_fields(m) for m in modules}, indent=2) + "\n", encoding="utf-8"
-    )
+    samples_path = harness / "samples.json"
+    existing_samples: dict[str, Any] = {}
+    if samples_path.is_file():
+        try:
+            loaded = json.loads(samples_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                existing_samples = loaded
+        except json.JSONDecodeError:
+            existing_samples = {}
+    samples = {}
+    for module in modules:
+        generated = sample_fields(module)
+        stored = existing_samples.get(module.name)
+        samples[module.name] = (
+            {**generated, **stored} if isinstance(stored, dict) else generated
+        )
+    samples_path.write_text(json.dumps(samples, indent=2) + "\n", encoding="utf-8")
     (harness / ".gitignore").write_text("*\n", encoding="utf-8")
     # The app root now has its own package.json. Without this, `pnpm install`
     # in the harness walks up, treats the app as the project, and skips

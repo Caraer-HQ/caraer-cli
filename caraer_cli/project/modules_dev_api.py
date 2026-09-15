@@ -47,12 +47,14 @@ class CompanyApi:
 def start_company_api(
     fetch: Callable[[], list[dict[str, Any]]],
     *,
+    fetch_forms: Callable[[str], list[dict[str, Any]]] | None = None,
     host: str = "127.0.0.1",
 ) -> CompanyApi:
     """Serve the company list and per-company branding on an ephemeral port.
 
     ``fetch`` is called at most once, on the first request that needs it, and
-    its result is held in memory only.
+    its result is held in memory only. ``fetch_forms`` is keyed by company
+    uuid so switching preview company lists that company's forms.
     """
     token = secrets.token_urlsafe(24)
     lock = threading.Lock()
@@ -67,6 +69,19 @@ def start_company_api(
                     log.debug("Could not list companies for the module preview: %s", e)
                     cache["all"] = []
             return cache["all"]
+
+    def forms_for(company_uuid: str) -> list[dict[str, Any]]:
+        if fetch_forms is None:
+            return []
+        with lock:
+            key = f"forms:{company_uuid}"
+            if key not in cache:
+                try:
+                    cache[key] = fetch_forms(company_uuid)
+                except Exception as e:  # noqa: BLE001
+                    log.debug("Could not list forms for the module preview: %s", e)
+                    cache[key] = []
+            return cache[key]
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args: Any) -> None:  # noqa: D102
@@ -106,6 +121,23 @@ def start_company_api(
                         self._send(200, company)
                         return
                 self._send(404, {"error": "unknown company"})
+                return
+
+            if path.startswith("/forms/"):
+                wanted = unquote(path[len("/forms/") :])
+                company_uuid = next(
+                    (
+                        company.get("uuid")
+                        for company in companies()
+                        if company.get("subdomain") == wanted
+                        or company.get("uuid") == wanted
+                    ),
+                    None,
+                )
+                if not company_uuid:
+                    self._send(404, {"error": "unknown company"})
+                    return
+                self._send(200, forms_for(str(company_uuid)))
                 return
 
             self._send(404, {"error": "not found"})

@@ -40,6 +40,7 @@ class CaraerApiClient:
         send_company_header: bool = True,
         send_sandbox_header: bool = True,
         timeout_seconds: float | None = None,
+        company_uuid: str | None = None,
         _retried: bool = False,
     ) -> dict[str, Any]:
         headers: dict[str, str] = {
@@ -48,8 +49,11 @@ class CaraerApiClient:
         }
         if self.context.token:
             headers["Authorization"] = f"Bearer {self.context.token}"
-        if send_company_header and self.context.company_uuid:
-            headers["X-Caraer-Company-Uuid"] = self.context.company_uuid
+        header_company = company_uuid or (
+            self.context.company_uuid if send_company_header else None
+        )
+        if header_company:
+            headers["X-Caraer-Company-Uuid"] = header_company
         # Sandbox management APIs must hit the owner company, not the clone.
         if send_company_header and send_sandbox_header and self.context.sandbox_uuid:
             headers["X-Caraer-Sandbox-Uuid"] = self.context.sandbox_uuid
@@ -102,6 +106,7 @@ class CaraerApiClient:
                         send_company_header=send_company_header,
                         send_sandbox_header=send_sandbox_header,
                         timeout_seconds=timeout_seconds,
+                        company_uuid=company_uuid,
                         _retried=True,
                     )
             error = parse_api_error(response.status_code, payload)
