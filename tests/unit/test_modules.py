@@ -244,6 +244,37 @@ def test_codegen_maps_form_single_select_to_string(tmp_path: Path) -> None:
     assert "form: string;" in types
 
 
+def test_codegen_maps_repeatable_to_array_of_items(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _write_module(
+        root,
+        "steps",
+        {
+            "name": "steps",
+            "label": "Steps",
+            "kind": "section",
+            "fields": [
+                {
+                    "name": "steps",
+                    "label": "Steps",
+                    "type": "REPEATABLE",
+                    "min": 1,
+                    "max": 6,
+                    "itemLabel": "Step",
+                    "itemFields": [
+                        {"name": "title", "label": "Title", "type": "SINGLE_LINE", "required": True},
+                        {"name": "text", "label": "Text", "type": "MULTI_LINE"},
+                    ],
+                },
+            ],
+        },
+    )
+    module = discover_local_modules(root, load_workspace(root))[0]
+    types = render_module_types(module)
+
+    assert "steps: Array<{ title: string; text: string | null }>;" in types
+
+
 def test_codegen_runs_during_validation(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     _write_module(

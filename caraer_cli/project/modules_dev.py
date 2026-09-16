@@ -217,7 +217,9 @@ def sample_fields(module: LocalModule) -> dict[str, Any]:
             continue
 
         field_type = str(item.get("type") or "").upper()
-        if field_type == "SINGLE_SELECT":
+        if field_type == "REPEATABLE":
+            values[name] = _sample_repeatable(item)
+        elif field_type == "SINGLE_SELECT":
             options = item.get("options") or []
             values[name] = options[0].get("name") if options else None
         elif field_type == "SINGLE_LINE":
@@ -227,6 +229,38 @@ def sample_fields(module: LocalModule) -> dict[str, Any]:
         else:
             values[name] = _SAMPLE_VALUES.get(field_type)
     return values
+
+
+def _sample_repeatable_item(item: dict[str, Any]) -> dict[str, Any]:
+    row: dict[str, Any] = {}
+    nested = item.get("itemFields")
+    if not isinstance(nested, list):
+        return row
+    for child in nested:
+        if not isinstance(child, dict):
+            continue
+        child_name = str(child.get("name") or "")
+        if not child_name:
+            continue
+        if "defaultValue" in child and child["defaultValue"] is not None:
+            row[child_name] = child["defaultValue"]
+            continue
+        child_type = str(child.get("type") or "").upper()
+        if child_type == "SINGLE_SELECT":
+            options = child.get("options") or []
+            row[child_name] = options[0].get("name") if options else None
+        elif child_type == "SINGLE_LINE":
+            row[child_name] = str(child.get("label") or child_name)
+        else:
+            row[child_name] = _SAMPLE_VALUES.get(child_type)
+    return row
+
+
+def _sample_repeatable(item: dict[str, Any]) -> list[dict[str, Any]]:
+    minimum = item.get("min", 0)
+    count = minimum if isinstance(minimum, int) and minimum > 0 else 1
+    template = _sample_repeatable_item(item)
+    return [dict(template) for _ in range(count)]
 
 
 def _package_json(
@@ -786,6 +820,31 @@ def _harness_file_field_markup() -> str:
                     hidden
                   />
                 </div>
+              ) : field.type === 'REPEATABLE' ? (
+                <div
+                  class="hx-repeat"
+                  data-min={String(field.min ?? 0)}
+                  data-max={String(field.max ?? 20)}
+                  data-item-label={field.itemLabel || 'Item'}
+                  data-item-fields={JSON.stringify(field.itemFields ?? [])}
+                >
+                  <input
+                    type="hidden"
+                    id={`f-${field.name}`}
+                    name={`f.${field.name}`}
+                    value={JSON.stringify(Array.isArray(stored[field.name]) ? stored[field.name] : [])}
+                  />
+                  <div class="hx-repeat__bar">
+                    <button type="button" class="hx-repeat__prev" aria-label="Previous item">‹</button>
+                    <span class="hx-repeat__status"></span>
+                    <button type="button" class="hx-repeat__next" aria-label="Next item">›</button>
+                  </div>
+                  <div class="hx-repeat__body"></div>
+                  <div class="hx-repeat__actions">
+                    <button type="button" class="hx-repeat__add">Add</button>
+                    <button type="button" class="hx-repeat__remove">Remove</button>
+                  </div>
+                </div>
 """
 
 
@@ -987,6 +1046,204 @@ def _harness_file_field_script() -> str:
 """
 
 
+def _harness_repeatable_script() -> str:
+    """Pages through REPEATABLE items so the sidebar does not grow a long list."""
+    return r"""
+    <script is:inline>
+      const emptyRepeatItem = (fields) => {
+        const row = {};
+        for (const field of fields) {
+          if (field.defaultValue !== undefined && field.defaultValue !== null) {
+            row[field.name] = field.defaultValue;
+            continue;
+          }
+          if (field.type === 'SWITCH') row[field.name] = false;
+          else if (field.type === 'MULTI_FILE' || field.type === 'MULTI_SELECT') row[field.name] = [];
+          else row[field.name] = '';
+        }
+        return row;
+      };
+
+      const readRepeatItems = (input) => {
+        try {
+          const parsed = JSON.parse(input.value || '[]');
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      };
+
+      const bindRepeatable = (root) => {
+        const input = root.querySelector('input[type="hidden"]');
+        const body = root.querySelector('.hx-repeat__body');
+        const status = root.querySelector('.hx-repeat__status');
+        const prev = root.querySelector('.hx-repeat__prev');
+        const next = root.querySelector('.hx-repeat__next');
+        const add = root.querySelector('.hx-repeat__add');
+        const remove = root.querySelector('.hx-repeat__remove');
+        if (!(input instanceof HTMLInputElement) || !body || !status) return;
+
+        const min = Math.max(0, Number(root.dataset.min || '0') || 0);
+        const max = Math.max(min || 1, Number(root.dataset.max || '20') || 20);
+        const itemLabel = root.dataset.itemLabel || 'Item';
+        let fields = [];
+        try {
+          fields = JSON.parse(root.dataset.itemFields || '[]');
+        } catch {
+          fields = [];
+        }
+        if (!Array.isArray(fields)) fields = [];
+
+        let items = readRepeatItems(input);
+        if (items.length < min) {
+          while (items.length < min) items.push(emptyRepeatItem(fields));
+        }
+        let index = 0;
+
+        const commit = () => {
+          input.value = JSON.stringify(items);
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+
+        const fieldControl = (field, value, onValue) => {
+          const wrap = document.createElement('label');
+          wrap.className = 'hx-repeat__field';
+          const caption = document.createElement('span');
+          caption.textContent = field.label || field.name;
+          wrap.append(caption);
+
+          if (field.type === 'MULTI_LINE') {
+            const box = document.createElement('textarea');
+            box.rows = 4;
+            box.value = String(value ?? '');
+            box.addEventListener('input', () => onValue(box.value));
+            wrap.append(box);
+            return wrap;
+          }
+          if (field.type === 'SWITCH') {
+            const box = document.createElement('input');
+            box.type = 'checkbox';
+            box.checked = value === true || value === 'true';
+            box.addEventListener('change', () => onValue(box.checked));
+            wrap.append(box);
+            return wrap;
+          }
+          if (field.type === 'SINGLE_SELECT' && Array.isArray(field.options)) {
+            const select = document.createElement('select');
+            for (const option of field.options) {
+              const node = document.createElement('option');
+              node.value = option.name;
+              node.textContent = option.label || option.name;
+              if (String(value ?? '') === String(option.name)) node.selected = true;
+              select.append(node);
+            }
+            select.addEventListener('change', () => onValue(select.value));
+            wrap.append(select);
+            return wrap;
+          }
+          if (field.type === 'FILE' || field.type === 'MULTI_FILE') {
+            const pick = document.createElement('button');
+            pick.type = 'button';
+            pick.className = 'hx-file__pick';
+            pick.textContent = field.type === 'MULTI_FILE' ? 'Add files' : (value ? 'Replace file' : 'Upload file');
+            const hint = document.createElement('small');
+            hint.className = 'hx-help';
+            hint.textContent = typeof value === 'string' && value ? value : (Array.isArray(value) ? value.join(', ') : '');
+            pick.addEventListener('click', async () => {
+              const picker = document.createElement('input');
+              picker.type = 'file';
+              picker.accept = 'image/*,video/*';
+              picker.multiple = field.type === 'MULTI_FILE';
+              picker.addEventListener('change', async () => {
+                const files = Array.from(picker.files || []);
+                if (!files.length || typeof uploadFiles !== 'function') return;
+                const urls = await uploadFiles(files);
+                if (field.type === 'MULTI_FILE') {
+                  const next = Array.isArray(value) ? [...value, ...urls] : urls;
+                  onValue(next);
+                } else {
+                  onValue(urls[0] || '');
+                }
+              });
+              picker.click();
+            });
+            wrap.append(pick, hint);
+            return wrap;
+          }
+
+          const box = document.createElement('input');
+          box.type = 'text';
+          box.value = String(value ?? '');
+          box.addEventListener('input', () => onValue(box.value));
+          wrap.append(box);
+          return wrap;
+        };
+
+        const paint = () => {
+          if (items.length === 0) {
+            status.textContent = `No ${itemLabel.toLowerCase()}s`;
+            body.replaceChildren();
+            prev.disabled = true;
+            next.disabled = true;
+            add.disabled = items.length >= max;
+            remove.disabled = true;
+            const empty = document.createElement('p');
+            empty.className = 'hx-empty';
+            empty.textContent = `Add a ${itemLabel.toLowerCase()} to start.`;
+            body.append(empty);
+            return;
+          }
+          index = Math.min(Math.max(0, index), items.length - 1);
+          status.textContent = `${itemLabel} ${index + 1} of ${items.length}`;
+          prev.disabled = index <= 0;
+          next.disabled = index >= items.length - 1;
+          add.disabled = items.length >= max;
+          add.textContent = `Add ${itemLabel.toLowerCase()}`;
+          remove.disabled = items.length <= min;
+          const current = items[index] && typeof items[index] === 'object' ? items[index] : {};
+          body.replaceChildren();
+          for (const field of fields) {
+            body.append(
+              fieldControl(field, current[field.name], (nextValue) => {
+                items[index] = { ...items[index], [field.name]: nextValue };
+                commit();
+              }),
+            );
+          }
+        };
+
+        prev.addEventListener('click', () => {
+          index -= 1;
+          paint();
+        });
+        next.addEventListener('click', () => {
+          index += 1;
+          paint();
+        });
+        add.addEventListener('click', () => {
+          if (items.length >= max) return;
+          items.push(emptyRepeatItem(fields));
+          index = items.length - 1;
+          commit();
+          paint();
+        });
+        remove.addEventListener('click', () => {
+          if (items.length <= min) return;
+          items.splice(index, 1);
+          index = Math.max(0, index - 1);
+          commit();
+          paint();
+        });
+
+        commit();
+        paint();
+      };
+
+      document.querySelectorAll('.hx-repeat').forEach(bindRepeatable);
+    </script>
+"""
+
+
 def _harness_file_field_styles() -> str:
     return """
       .hx-file { display: grid; gap: 0.4rem; }
@@ -1028,6 +1285,29 @@ def _harness_file_field_styles() -> str:
         cursor: pointer;
       }
       .hx-file__pick:hover { color: var(--hx-text); border-color: var(--hx-accent); }
+
+      .hx-repeat { display: grid; gap: 0.65rem; }
+      .hx-repeat__bar {
+        display: flex; align-items: center; gap: 0.4rem;
+      }
+      .hx-repeat__status {
+        flex: 1; text-align: center;
+        font-size: 0.75rem; color: var(--hx-muted);
+      }
+      .hx-repeat__prev, .hx-repeat__next, .hx-repeat__add, .hx-repeat__remove {
+        border: 1px solid var(--hx-line); border-radius: 7px;
+        background: var(--hx-panel-2); color: var(--hx-text);
+        font: inherit; font-size: 0.75rem;
+        padding: 0.3rem 0.55rem; cursor: pointer;
+      }
+      .hx-repeat__prev:disabled, .hx-repeat__next:disabled,
+      .hx-repeat__add:disabled, .hx-repeat__remove:disabled {
+        opacity: 0.4; cursor: default;
+      }
+      .hx-repeat__body { display: grid; gap: 0.65rem; }
+      .hx-repeat__field { display: grid; gap: 0.3rem; font-size: 0.75rem; }
+      .hx-repeat__field span { color: var(--hx-muted); }
+      .hx-repeat__actions { display: flex; gap: 0.4rem; }
 """
 
 
@@ -1089,6 +1369,13 @@ function coerce(name: string, raw: string): unknown {{
     case 'RECORD_MULTI_SELECT':
     case 'OBJECT_MULTI_SELECT':
       return raw.split(/[\\n,]+/).map((part) => part.trim()).filter(Boolean);
+    case 'REPEATABLE':
+      try {{
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      }} catch {{
+        return [];
+      }}
     default:
       return raw;
   }}
@@ -1455,6 +1742,7 @@ const embedSrc = (() => {{
       }}
     </script>
 {_harness_file_field_script()}
+{_harness_repeatable_script()}
 
     <script is:inline>
       // Company switch. A reload rather than a partial swap: the whole document
