@@ -27,6 +27,8 @@ def test_setting_field_types_include_object_and_property_selects() -> None:
         "MAPPING",
         "FILE",
         "MULTI_FILE",
+        "IMAGE",
+        "COLOR",
         "SECRET",
         "ACTION",
         "SINGLE_SELECT",

@@ -47,13 +47,13 @@ Ship an Agent Skill so Cursor (and similar IDEs) can scaffold and validate Carae
 apps correctly:
 
 ```bash
-caraer skill install              # ~/.cursor/skills/caraer-apps
-caraer skill install --project    # ./.cursor/skills/caraer-apps
+caraer skill install              # ~/.cursor/skills/caraer-apps and caraer-cms
+caraer skill install --project    # ./.cursor/skills/...
 caraer skill list
 ```
 
-Source of truth: [`skills/caraer-apps`](skills/caraer-apps). After install, start a
-new agent chat and ask it to create or edit a Caraer app.
+Source of truth: [`skills/caraer-apps`](skills/caraer-apps) and
+[`skills/caraer-cms`](skills/caraer-cms). After install, start a new agent chat.
 
 ## Quick start
 
@@ -282,7 +282,8 @@ production. Prefer `caraer apps push --dry-run` to preview changes, and treat
 - [Backend contract](docs/backend_contract.md) — REST endpoints used by the CLI
 - [Changelog](CHANGELOG.md)
 - [Security](SECURITY.md)
-- Cursor skill: [`skills/caraer-apps`](skills/caraer-apps) (`caraer skill install`)
+- Cursor skills: [`skills/caraer-apps`](skills/caraer-apps),
+  [`skills/caraer-cms`](skills/caraer-cms) (`caraer skill install`)
 
 ## Related
 

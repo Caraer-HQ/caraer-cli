@@ -64,6 +64,8 @@ SETTING_FIELD_TYPES = frozenset(
         "MAPPING",
         "FILE",
         "MULTI_FILE",
+        "IMAGE",
+        "COLOR",
         "SECRET",
         "ACTION",
     }
@@ -1679,7 +1681,7 @@ def _validate_repeatable_field(
     rel_config: str,
     issues: list[ValidationIssue],
 ) -> None:
-    """A REPEATABLE field is a paged list; authors set min/max and itemFields."""
+    """A REPEATABLE field is a list of tiles; authors set min/max and itemFields."""
     nested = item.get("itemFields")
     if not isinstance(nested, list) or not nested:
         _issue(

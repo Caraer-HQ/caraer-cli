@@ -171,6 +171,8 @@ SETTING_FIELD_TYPES: tuple[tuple[str, str], ...] = (
     ("MAPPING", "Property mapping"),
     ("FILE", "File upload"),
     ("MULTI_FILE", "Multiple file upload"),
+    ("IMAGE", "Image upload"),
+    ("COLOR", "Colour"),
     ("ACTION", "Action button (runs a serverless function, not stored)"),
 )
 

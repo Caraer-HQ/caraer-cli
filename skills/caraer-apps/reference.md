@@ -88,7 +88,10 @@ Base: `{caraerApiBase}` (no trailing slash).
 `SINGLE_LINE`, `MULTI_LINE`, `SINGLE_SELECT`, `MULTI_SELECT`,
 `RECORD_SINGLE_SELECT`, `RECORD_MULTI_SELECT`, `OBJECT_SINGLE_SELECT`,
 `OBJECT_MULTI_SELECT`, `PROPERTY_SINGLE_SELECT`, `PROPERTY_MULTI_SELECT`,
-`SWITCH`, `MAPPING`, `FILE`, `MULTI_FILE`, `SECRET`.
+`SWITCH`, `MAPPING`, `FILE`, `MULTI_FILE`, `IMAGE`, `COLOR`, `SECRET`.
+
+CMS modules also allow `FORM_SINGLE_SELECT` and `REPEATABLE`. They reject
+`SECRET` and `ACTION`. See the `caraer-cms` skill.
 
 Use `caraer apps add setting` for the interactive picker (includes object /
 property selects). For `SINGLE_SELECT` / `MULTI_SELECT` choose static

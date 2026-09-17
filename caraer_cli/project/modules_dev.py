@@ -44,6 +44,8 @@ _SAMPLE_VALUES: dict[str, Any] = {
     "MAPPING": {},
     "FILE": None,
     "MULTI_FILE": [],
+    "IMAGE": None,
+    "COLOR": "#1a73e8",
 }
 
 
@@ -796,7 +798,7 @@ export const POST: APIRoute = async ({ request }) => {
 
 def _harness_file_field_markup() -> str:
     """Sidebar control for FILE / MULTI_FILE: upload instead of pasting a URL."""
-    return """              ) : field.type === 'FILE' || field.type === 'MULTI_FILE' ? (
+    return """              ) : field.type === 'FILE' || field.type === 'MULTI_FILE' || field.type === 'IMAGE' ? (
                 <div
                   class="hx-file"
                   data-multiple={field.type === 'MULTI_FILE' ? '' : undefined}
@@ -811,13 +813,31 @@ def _harness_file_field_markup() -> str:
                   />
                   <div class="hx-file__list"></div>
                   <button type="button" class="hx-file__pick">
-                    {field.type === 'MULTI_FILE' ? 'Add files' : 'Upload file'}
+                    {field.type === 'MULTI_FILE' ? 'Add files' : field.type === 'IMAGE' ? 'Upload image' : 'Upload file'}
                   </button>
                   <input
                     type="file"
-                    accept="image/*,video/*"
+                    accept={field.type === 'IMAGE' ? 'image/*' : 'image/*,video/*'}
                     multiple={field.type === 'MULTI_FILE'}
                     hidden
+                  />
+                </div>
+              ) : field.type === 'COLOR' ? (
+                <div class="hx-color">
+                  <input
+                    type="color"
+                    value={String(stored[field.name] || '#1a73e8').startsWith('#') ? String(stored[field.name] || '#1a73e8') : '#1a73e8'}
+                    onInput={(event) => {
+                      const text = event.currentTarget.parentElement?.querySelector('input[type="text"]');
+                      if (text) text.value = event.currentTarget.value;
+                    }}
+                  />
+                  <input
+                    id={`f-${field.name}`}
+                    type="text"
+                    name={`f.${field.name}`}
+                    value={String(stored[field.name] ?? '')}
+                    placeholder="#RRGGBB or var(--caraer-color-primary)"
                   />
                 </div>
               ) : field.type === 'REPEATABLE' ? (
@@ -1182,18 +1202,34 @@ def _harness_repeatable_script() -> str:
             wrap.append(select);
             return wrap;
           }
-          if (field.type === 'FILE' || field.type === 'MULTI_FILE') {
+          if (field.type === 'COLOR') {
+            const swatch = document.createElement('input');
+            swatch.type = 'color';
+            swatch.value = String(value || '#1a73e8').startsWith('#') ? String(value || '#1a73e8') : '#1a73e8';
+            const text = document.createElement('input');
+            text.type = 'text';
+            text.value = String(value ?? '');
+            text.placeholder = '#RRGGBB or var(--caraer-color-primary)';
+            swatch.addEventListener('input', () => {
+              text.value = swatch.value;
+              onValue(swatch.value);
+            });
+            text.addEventListener('input', () => onValue(text.value));
+            wrap.append(swatch, text);
+            return wrap;
+          }
+          if (field.type === 'FILE' || field.type === 'MULTI_FILE' || field.type === 'IMAGE') {
             const pick = document.createElement('button');
             pick.type = 'button';
             pick.className = 'hx-file__pick';
-            pick.textContent = field.type === 'MULTI_FILE' ? 'Add files' : (value ? 'Replace file' : 'Upload file');
+            pick.textContent = field.type === 'MULTI_FILE' ? 'Add files' : (value ? 'Replace' : field.type === 'IMAGE' ? 'Upload image' : 'Upload file');
             const hint = document.createElement('small');
             hint.className = 'hx-help';
             hint.textContent = typeof value === 'string' && value ? value : (Array.isArray(value) ? value.join(', ') : '');
             pick.addEventListener('click', async () => {
               const picker = document.createElement('input');
               picker.type = 'file';
-              picker.accept = 'image/*,video/*';
+              picker.accept = field.type === 'IMAGE' ? 'image/*' : 'image/*,video/*';
               picker.multiple = field.type === 'MULTI_FILE';
               picker.addEventListener('change', async () => {
                 const files = Array.from(picker.files || []);
@@ -1306,6 +1342,8 @@ def _harness_repeatable_script() -> str:
 def _harness_file_field_styles() -> str:
     return """
       .hx-file { display: grid; gap: 0.4rem; }
+      .hx-color { display: flex; align-items: center; gap: 0.5rem; }
+      .hx-color input[type="color"] { width: 2.5rem; height: 2rem; padding: 0; border: 1px solid var(--border); background: transparent; }
       .hx-file[data-drop] { outline: 1px dashed var(--hx-accent); outline-offset: 2px; }
       .hx-file[data-busy] .hx-file__pick { opacity: 0.6; pointer-events: none; }
       .hx-file__list { display: flex; flex-wrap: wrap; gap: 0.4rem; }

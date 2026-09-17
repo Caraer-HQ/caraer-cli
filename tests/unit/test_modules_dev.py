@@ -137,7 +137,7 @@ def test_harness_hides_fields_that_are_not_visible(tmp_path: Path) -> None:
     assert "Advanced settings" in page
     assert 'class="hx-advanced"' in page
     assert "field.advanced !== true" in page
-    assert "field.type === 'FILE' || field.type === 'MULTI_FILE'" in page
+    assert "field.type === 'FILE' || field.type === 'MULTI_FILE' || field.type === 'IMAGE'" in page
     assert 'class="hx-file"' in page
     assert "/api/upload" in page
     assert "One image URL per line" not in page

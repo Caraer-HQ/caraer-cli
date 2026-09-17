@@ -186,6 +186,7 @@ Installation settings are for **admins installing the app**, not developers.
 | Schedule | `caraer apps add schedule` (wizard prompts for cron presets / custom) |
 | Webhook | `caraer apps add webhook` |
 | Setting | `caraer apps add setting` (YAML by default; `--modular` → `settings/`) |
+| CMS module | `caraer apps add module` (Astro + `module.caraer.json` fields) |
 | Lifecycle | `caraer apps add lifecycle-hook` |
 
 ### Validate loop

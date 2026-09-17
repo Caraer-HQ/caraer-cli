@@ -284,6 +284,10 @@
             "MAPPING",
             "FILE",
             "MULTI_FILE",
+            "IMAGE",
+            "COLOR",
+            "FORM_SINGLE_SELECT",
+            "REPEATABLE",
             "SECRET",
             "ACTION"
           ],

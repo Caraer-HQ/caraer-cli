@@ -40,6 +40,8 @@ _FIELD_TS_TYPES: dict[str, str] = {
     "MAPPING": "Record<string, unknown>",
     "FILE": "string",
     "MULTI_FILE": "string[]",
+    "IMAGE": "string",
+    "COLOR": "string",
 }
 
 _ALWAYS_PRESENT = {"SWITCH", "MULTI_SELECT", "MULTI_FILE", "RECORD_MULTI_SELECT", "OBJECT_MULTI_SELECT", "REPEATABLE"}
