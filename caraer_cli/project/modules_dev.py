@@ -1099,6 +1099,47 @@ def _harness_repeatable_script() -> str:
           while (items.length < min) items.push(emptyRepeatItem(fields));
         }
         let index = 0;
+        const visibilityKeys = [...new Set(
+          fields.flatMap((field) => (Array.isArray(field.visibleWhen) ? field.visibleWhen : [])
+            .map((rule) => rule && rule.field)
+            .filter(Boolean)),
+        )];
+
+        const readParentValues = () => {
+          const values = {};
+          const form = root.closest('form');
+          if (!(form instanceof HTMLFormElement)) return values;
+          new FormData(form).forEach((value, key) => {
+            if (key.startsWith('f.')) values[key.slice(2)] = String(value);
+          });
+          return values;
+        };
+
+        const itemConditionHolds = (condition, values) => {
+          const actual = values[condition.field];
+          const set = actual !== undefined && actual !== null && actual !== '';
+          switch (condition.operator) {
+            case 'IS_SET':
+              return set;
+            case 'IS_NOT_SET':
+              return !set;
+            case 'EQUALS':
+              return actual === condition.value;
+            case 'NOT_EQUALS':
+              return actual !== condition.value;
+            case 'IN':
+              return Array.isArray(condition.value) && condition.value.includes(actual);
+            case 'NOT_IN':
+              return !(Array.isArray(condition.value) && condition.value.includes(actual));
+            default:
+              return true;
+          }
+        };
+
+        const visibilitySnapshot = () => {
+          const values = readParentValues();
+          return JSON.stringify(Object.fromEntries(visibilityKeys.map((key) => [key, values[key]])));
+        };
 
         const commit = () => {
           input.value = JSON.stringify(items);
@@ -1201,8 +1242,13 @@ def _harness_repeatable_script() -> str:
           add.textContent = `Add ${itemLabel.toLowerCase()}`;
           remove.disabled = items.length <= min;
           const current = items[index] && typeof items[index] === 'object' ? items[index] : {};
+          const context = { ...readParentValues(), ...current };
           body.replaceChildren();
           for (const field of fields) {
+            const rules = Array.isArray(field.visibleWhen) ? field.visibleWhen : [];
+            if (rules.length && !rules.every((rule) => itemConditionHolds(rule, context))) {
+              continue;
+            }
             body.append(
               fieldControl(field, current[field.name], (nextValue) => {
                 items[index] = { ...items[index], [field.name]: nextValue };
@@ -1237,6 +1283,19 @@ def _harness_repeatable_script() -> str:
 
         commit();
         paint();
+
+        const form = root.closest('form');
+        if (form instanceof HTMLFormElement && visibilityKeys.length) {
+          let lastVisibility = visibilitySnapshot();
+          const refreshIfParentChanged = () => {
+            const next = visibilitySnapshot();
+            if (next === lastVisibility) return;
+            lastVisibility = next;
+            paint();
+          };
+          form.addEventListener('change', refreshIfParentChanged);
+          form.addEventListener('input', refreshIfParentChanged);
+        }
       };
 
       document.querySelectorAll('.hx-repeat').forEach(bindRepeatable);

@@ -201,7 +201,7 @@ caraer apps add options-function list-calendars
 ```
 
 Request action is `loadSettingOptions`. Response must be
-`{ "options": [{ "name", "label", "helpText?" }, ...] }`.
+`{ "options": [{ "name", "label", "helpText?", "preview?" }, ...] }`.
 
 Sibling values are available as:
 - `settingsValues` — flat `{ [fieldName]: value }` (preferred)

@@ -1626,6 +1626,52 @@ def _validate_module_fields(
                     f"field '{name}' uses {operator}, which needs a list 'value'.",
                 )
 
+        if str(item.get("type") or "").strip().upper() != "REPEATABLE":
+            continue
+        nested = item.get("itemFields")
+        if not isinstance(nested, list):
+            continue
+        nested_names = set(field_names)
+        for child in nested:
+            if isinstance(child, dict):
+                child_name = str(child.get("name") or "").strip()
+                if child_name:
+                    nested_names.add(child_name)
+        parent_name = str(item.get("name") or "?")
+        for child in nested:
+            if not isinstance(child, dict):
+                continue
+            child_name = str(child.get("name") or "").strip() or "?"
+            for condition in child.get("visibleWhen") or []:
+                if not isinstance(condition, dict):
+                    continue
+                target = str(condition.get("field") or "").strip()
+                operator = str(condition.get("operator") or "").strip().upper()
+                scoped = f"{parent_name}.{child_name}"
+                if target and target not in nested_names:
+                    _issue(
+                        issues,
+                        "error",
+                        rel_config,
+                        f"field '{scoped}' has a visibleWhen on unknown field '{target}'.",
+                    )
+                if operator and operator not in CONDITION_OPERATORS:
+                    _issue(
+                        issues,
+                        "error",
+                        rel_config,
+                        f"field '{scoped}' has unknown visibleWhen operator '{operator}'.",
+                    )
+                if operator in LIST_CONDITION_OPERATORS and not isinstance(
+                    condition.get("value"), list
+                ):
+                    _issue(
+                        issues,
+                        "error",
+                        rel_config,
+                        f"field '{scoped}' uses {operator}, which needs a list 'value'.",
+                    )
+
 
 def _validate_repeatable_field(
     item: dict,

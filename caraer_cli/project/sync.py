@@ -356,7 +356,7 @@ _OPTIONS_FUNCTION_JS = '''\
  *     object?: string                     // open object for RECORD_* app bars
  *   }
  *
- * Response MUST be: { options: [{ name, label, helpText? }, ...] }
+ * Response MUST be: { options: [{ name, label, helpText?, preview? }, ...] }
  * Prefer HTTP 200 even on soft failures so the settings UI stays usable.
  */
 function flattenSettings(schema) {
@@ -419,7 +419,7 @@ Request body (approx):
     "object": "<open object>"
   }
 
-Response body MUST be: {"options": [{"name", "label", "helpText?"}, ...]}
+Response body MUST be: {"options": [{"name", "label", "helpText?", "preview?"}, ...]}
 Prefer status 200 even on soft failures so the settings UI stays usable.
 """
 

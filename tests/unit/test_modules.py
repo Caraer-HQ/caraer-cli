@@ -421,6 +421,67 @@ export const manifest = {
     assert _errors(root) == []
 
 
+def test_manifest_can_reuse_string_consts_from_a_fields_file(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    modules = root / "src" / "app" / "modules"
+    directory = modules / "steps"
+    directory.mkdir(parents=True)
+    (directory / "fields.ts").write_text(
+        """
+import type { ModuleField } from '@caraer/cms-runtime';
+
+export const CARD_STYLE_PROCESS = "process";
+export const CARD_STYLE_STATUS = "status";
+
+export const cardStyleField = {
+  name: "card_style",
+  label: "Card style",
+  type: "SINGLE_SELECT",
+  required: true,
+  defaultValue: CARD_STYLE_PROCESS,
+  options: [
+    { name: CARD_STYLE_PROCESS, label: "Process", helpText: "Plain cards." },
+    { name: CARD_STYLE_STATUS, label: "Status", helpText: "Badges." },
+  ],
+} satisfies ModuleField;
+""",
+        encoding="utf-8",
+    )
+    (directory / "index.astro").write_text(
+        """---
+import type { ModuleManifest } from '@caraer/cms-runtime';
+import { CARD_STYLE_PROCESS, cardStyleField } from './fields';
+
+export const manifest = {
+  name: 'steps',
+  label: 'Steps',
+  kind: 'section',
+  category: 'content',
+  fields: [
+    cardStyleField,
+    {
+      name: 'body',
+      label: 'Text',
+      type: 'MULTI_LINE',
+      visibleWhen: [
+        { field: 'card_style', operator: 'EQUALS', value: CARD_STYLE_PROCESS },
+      ],
+    },
+  ],
+} satisfies ModuleManifest;
+---
+<div />
+""",
+        encoding="utf-8",
+    )
+
+    module = discover_local_modules(root, load_workspace(root))[0]
+    assert module.fields[0]["defaultValue"] == "process"
+    assert module.fields[0]["options"][0]["name"] == "process"
+    assert module.fields[1]["visibleWhen"][0]["value"] == "process"
+    assert _errors(root) == []
+
+
 def test_manifest_can_spread_imported_field_groups(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     modules = root / "src" / "app" / "modules"
