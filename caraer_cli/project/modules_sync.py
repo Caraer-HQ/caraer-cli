@@ -84,6 +84,7 @@ MODULE_FIELD_TYPES = frozenset(
         "MAPPING",
         "FILE",
         "MULTI_FILE",
+        "REPEATABLE",
     }
 )
 

@@ -95,3 +95,16 @@ def is_private_remote(data: dict[str, Any] | None) -> bool:
 
 def submit_for_review(client: CaraerApiClient, app_uuid: str) -> dict[str, Any]:
     return client.request("POST", f"/api/v2/apps/public/{app_uuid}/submit")
+
+
+def install_app(
+    client: CaraerApiClient,
+    app_uuid: str,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Install or re-save the app on the selected company."""
+    return client.request(
+        "POST",
+        f"/api/v2/apps/{app_uuid}/install",
+        json_body=payload or {},
+    )

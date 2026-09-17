@@ -35,6 +35,7 @@ _SAMPLE_VALUES: dict[str, Any] = {
     "MULTI_SELECT": [],
     "RECORD_SINGLE_SELECT": None,
     "RECORD_MULTI_SELECT": [],
+    "FORM_SINGLE_SELECT": "job-alert",
     "OBJECT_SINGLE_SELECT": "vacancy",
     "OBJECT_MULTI_SELECT": [],
     "PROPERTY_SINGLE_SELECT": "title",
@@ -85,16 +86,86 @@ def fetch_companies(client: Any) -> list[dict[str, Any]]:
     return companies
 
 
+def fetch_forms(client: Any, company_uuid: str) -> list[dict[str, Any]]:
+    """Forms the signed-in user can pick for the given company.
+
+    Loaded through the CLI so the preview never holds a token. The sidebar
+    FORM_SINGLE_SELECT picker shows these instead of asking for a uuid.
+    """
+    if not company_uuid:
+        return []
+
+    try:
+        payload = client.request(
+            "POST",
+            "/api/v2/forms/index",
+            json_body={
+                "page": 1,
+                "limit": 200,
+                "query": "",
+                "filters": [{"key": "deletedAt", "operator": "isnull"}],
+            },
+            company_uuid=company_uuid,
+        )
+    except Exception as e:  # noqa: BLE001
+        log.debug("Could not list forms for the module preview: %s", e)
+        return []
+
+    raw = payload.get("data") if isinstance(payload, dict) else payload
+    if not isinstance(raw, list):
+        return []
+
+    forms: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        uuid = item.get("uuid")
+        if not uuid:
+            continue
+        name = item.get("name") or ""
+        forms.append(
+            {
+                "uuid": uuid,
+                "name": name,
+                "label": item.get("label") or name or uuid,
+            }
+        )
+    return forms
+
+
+def fetch_form(client: Any, company_uuid: str, form_ref: str) -> dict[str, Any] | None:
+    """Full form definition for the preview, uuid or machine name.
+
+    Uses the authenticated forms API the CLI already has, not the CMS public
+    website routes. The preview maps grids onto CaraerForm itself.
+    """
+    if not company_uuid or not form_ref:
+        return None
+
+    try:
+        payload = client.request(
+            "GET",
+            f"/api/v2/forms/{form_ref}",
+            company_uuid=company_uuid,
+        )
+    except Exception as e:  # noqa: BLE001
+        log.debug("Could not load form '%s' for the module preview: %s", form_ref, e)
+        return None
+
+    raw = payload.get("data") if isinstance(payload, dict) else payload
+    return raw if isinstance(raw, dict) and raw.get("uuid") else None
+
+
+PUBLISHED_RUNTIME_SPEC = "github:Caraer-HQ/caraer-cms-runtime#v0.1.1"
+PUBLISHED_TOKENS_SPEC = "github:Caraer-HQ/caraer-cms-tokens#v0.1.1"
+
+
 def resolve_runtime_specs(root: Path) -> tuple[str, str]:
     """Work out where to install ``@caraer/cms-runtime`` and ``-tokens`` from.
 
-    The published packages are the normal answer, but a developer working on
-    the runtime itself, or working before the first publish, needs the local
-    checkout instead. Falling back to ``latest`` without looking would fail the
-    install with a bare npm 404 that says nothing about what to do.
-
-    Order: explicit spec env vars, then ``CARAER_WEB_PATH``, then a sibling
-    ``caraer-web`` checkout, then the registry.
+    Order: explicit spec env vars, then ``CARAER_WEB_PATH`` / a sibling
+    ``caraer-web`` workspace copy, then sibling ``caraer-cms-runtime`` and
+    ``caraer-cms-tokens`` checkouts, then the published GitHub packages.
     """
     runtime = os.environ.get("CARAER_CMS_RUNTIME_SPEC")
     tokens = os.environ.get("CARAER_CMS_TOKENS_SPEC")
@@ -106,10 +177,11 @@ def resolve_runtime_specs(root: Path) -> tuple[str, str]:
     if configured:
         candidates.append(Path(configured).expanduser())
 
-    # Walk up looking for a sibling checkout: app repos and caraer-web usually
-    # live next to each other under one workspace directory.
+    # Walk up looking for sibling checkouts: app repos and the CMS packages
+    # usually live next to each other under one workspace directory.
     current = root.resolve()
-    for parent in [current, *current.parents][:5]:
+    parents = [current, *current.parents][:5]
+    for parent in parents:
         candidates.append(parent / "caraer-web")
 
     for candidate in candidates:
@@ -121,7 +193,16 @@ def resolve_runtime_specs(root: Path) -> tuple[str, str]:
                 tokens or f"file:{tokens_pkg.parent.resolve()}",
             )
 
-    return runtime or "latest", tokens or "latest"
+    for parent in parents:
+        runtime_pkg = parent / "caraer-cms-runtime" / "package.json"
+        tokens_pkg = parent / "caraer-cms-tokens" / "package.json"
+        if runtime_pkg.is_file() and tokens_pkg.is_file():
+            return (
+                runtime or f"file:{runtime_pkg.parent.resolve()}",
+                tokens or f"file:{tokens_pkg.parent.resolve()}",
+            )
+
+    return runtime or PUBLISHED_RUNTIME_SPEC, tokens or PUBLISHED_TOKENS_SPEC
 
 
 def sample_fields(module: LocalModule) -> dict[str, Any]:
@@ -136,7 +217,9 @@ def sample_fields(module: LocalModule) -> dict[str, Any]:
             continue
 
         field_type = str(item.get("type") or "").upper()
-        if field_type == "SINGLE_SELECT":
+        if field_type == "REPEATABLE":
+            values[name] = _sample_repeatable(item)
+        elif field_type == "SINGLE_SELECT":
             options = item.get("options") or []
             values[name] = options[0].get("name") if options else None
         elif field_type == "SINGLE_LINE":
@@ -146,6 +229,38 @@ def sample_fields(module: LocalModule) -> dict[str, Any]:
         else:
             values[name] = _SAMPLE_VALUES.get(field_type)
     return values
+
+
+def _sample_repeatable_item(item: dict[str, Any]) -> dict[str, Any]:
+    row: dict[str, Any] = {}
+    nested = item.get("itemFields")
+    if not isinstance(nested, list):
+        return row
+    for child in nested:
+        if not isinstance(child, dict):
+            continue
+        child_name = str(child.get("name") or "")
+        if not child_name:
+            continue
+        if "defaultValue" in child and child["defaultValue"] is not None:
+            row[child_name] = child["defaultValue"]
+            continue
+        child_type = str(child.get("type") or "").upper()
+        if child_type == "SINGLE_SELECT":
+            options = child.get("options") or []
+            row[child_name] = options[0].get("name") if options else None
+        elif child_type == "SINGLE_LINE":
+            row[child_name] = str(child.get("label") or child_name)
+        else:
+            row[child_name] = _SAMPLE_VALUES.get(child_type)
+    return row
+
+
+def _sample_repeatable(item: dict[str, Any]) -> list[dict[str, Any]]:
+    minimum = item.get("min", 0)
+    count = minimum if isinstance(minimum, int) and minimum > 0 else 1
+    template = _sample_repeatable_item(item)
+    return [dict(template) for _ in range(count)]
 
 
 def _package_json(
@@ -313,15 +428,79 @@ const SAMPLE_FORM = (form) => ({
   ],
 });
 
+const SAMPLE_FORMS = [
+  { uuid: 'job-alert', name: 'job-alert', label: 'Sample form' },
+];
+
+const text = (value) => (typeof value === 'string' && value.trim() ? value : null);
+
+const toCaraerForm = (form) => {
+  const fieldsOf = (step) => {
+    const fields = [];
+    for (const row of step.grid ?? []) {
+      for (const cell of row ?? []) {
+        const property = cell.property;
+        if (!property?.name || cell.settings?.hidden) continue;
+        const format = property.format;
+        const options = (property.options ?? [])
+          .map((option) => {
+            const name = text(option.name);
+            return name ? { name, label: text(option.label) ?? name } : null;
+          })
+          .filter(Boolean);
+        fields.push({
+          uuid: text(property.uuid) ?? property.name,
+          name: property.name,
+          label: text(cell.settings?.label) ?? text(property.label) ?? property.name,
+          type: text(property.type) ?? 'string',
+          format: typeof format === 'string' ? format : text(format?.name),
+          required: Boolean(cell.settings?.isRequired),
+          placeholder: text(cell.settings?.placeholder),
+          helpText: text(cell.settings?.helpText),
+          options: options.length > 0 ? options : undefined,
+        });
+      }
+    }
+    return fields;
+  };
+  let submitLabel = null;
+  for (const step of form.grids ?? []) {
+    for (const row of step.grid ?? []) {
+      for (const cell of row ?? []) {
+        const label = text(cell.submitButton);
+        if (label) submitLabel = label;
+      }
+    }
+  }
+  return {
+    uuid: form.uuid,
+    name: form.name,
+    label: text(form.label) ?? form.name,
+    wizard: Boolean(form.wizard),
+    steps: (form.grids ?? []).map((step) => ({
+      title: text(step.title),
+      description: text(step.description),
+      fields: fieldsOf(step),
+    })),
+    submitLabel,
+    thankYouMessage: text(form.thankYouMessage),
+    redirectUrl: text(form.redirectUrl),
+  };
+};
+
 const sampleRecords = (object, limit) => ({
   total: limit,
-  records: Array.from({ length: limit }, (_, index) => ({
-    uuid: `sample-${index + 1}`,
-    slug: `/sample-${index + 1}`,
-    url: `/sample-${index + 1}`,
-    properties: { title: `Sample ${object} ${index + 1}`, location: 'Utrecht' },
-    parsedProperties: { title: `Sample ${object} ${index + 1}`, location: 'Utrecht' },
-  })),
+  records: Array.from({ length: limit }, (_, index) => {
+    const title = `Sample ${object} ${index + 1}`;
+    const description = `Short description for sample ${object} ${index + 1}.`;
+    return {
+      uuid: `sample-${index + 1}`,
+      slug: `/sample-${index + 1}`,
+      url: `/sample-${index + 1}`,
+      properties: { title, description, location: 'Utrecht' },
+      parsedProperties: { title, description, location: 'Utrecht' },
+    };
+  }),
 });
 
 /**
@@ -381,6 +560,21 @@ async function harnessApi(path) {
 let companiesPromise;
 const loadCompanies = () =>
   (companiesPromise ??= harnessApi('/companies').then((list) => list ?? []));
+
+const formsCache = new Map();
+const loadForms = (subdomain) => {
+  if (!subdomain) return Promise.resolve(SAMPLE_FORMS);
+  if (!formsCache.has(subdomain)) {
+    formsCache.set(
+      subdomain,
+      (async () => {
+        const listed = await harnessApi(`/forms/${encodeURIComponent(subdomain)}`);
+        return Array.isArray(listed) && listed.length > 0 ? listed : SAMPLE_FORMS;
+      })(),
+    );
+  }
+  return formsCache.get(subdomain);
+};
 
 // Branding is per company, so a preview you never point at one never asks.
 const companyCache = new Map();
@@ -442,6 +636,10 @@ const loadRecord = (subdomain) => {
 };
 
 export const onRequest = defineMiddleware(async (context, next) => {
+  if (context.url.pathname.startsWith('/api/')) {
+    return next();
+  }
+
   /*
    * The dropdown picks a company per request. Its branding already arrived with
    * the company list, so switching restyles the preview with no network call
@@ -505,6 +703,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     subdomain: activeSubdomain,
     companyName: selectedCompany?.name ?? settings?.company?.name ?? null,
     companies: await loadCompanies(),
+    forms: await loadForms(activeSubdomain),
   };
 
   context.locals.assetUrl = (key) => key ?? null;
@@ -519,9 +718,16 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return match ?? { ...SAMPLE_MENU, location };
   };
 
-  context.locals.getForm = async (form) =>
-    (await live(`/forms/${encodeURIComponent(String(form))}`, {}, activeSubdomain)) ??
-    SAMPLE_FORM(form);
+  context.locals.getForm = async (form) => {
+    const raw = activeSubdomain
+      ? await harnessApi(
+          `/forms/${encodeURIComponent(activeSubdomain)}/${encodeURIComponent(String(form))}`,
+        )
+      : null;
+    if (raw?.uuid && Array.isArray(raw.grids)) return toCaraerForm(raw);
+    if (raw?.uuid && Array.isArray(raw.steps)) return raw;
+    return SAMPLE_FORM(form);
+  };
 
   context.locals.listRecords = async ({ object, limit = 6, offset, orderBy, filter }) =>
     (await live(
@@ -532,6 +738,635 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   return next();
 });
+"""
+
+
+def _harness_upload_api() -> str:
+    """Accepts local FILE / MULTI_FILE uploads and stores them under public/."""
+    return """// GENERATED by `caraer apps local dev --cms` - do not edit.
+import type { APIRoute } from 'astro';
+import { randomBytes } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+
+const MAX_BYTES = 20 * 1024 * 1024;
+const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads');
+
+function safeName(name: string): string {
+  const base = path
+    .basename(name)
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return base.slice(0, 80) || 'file';
+}
+
+function allowed(file: File): boolean {
+  if (!file.type) {
+    return /\\.(avif|gif|jpe?g|png|svg|webp|mp4|webm|ogg|mov)$/i.test(file.name);
+  }
+  return /^(image|video)\\//.test(file.type);
+}
+
+export const POST: APIRoute = async ({ request }) => {
+  const form = await request.formData();
+  const incoming = form.getAll('file').filter((item): item is File => item instanceof File);
+  if (incoming.length === 0) {
+    return Response.json({ error: 'No file' }, { status: 400 });
+  }
+
+  await mkdir(UPLOAD_DIR, { recursive: true });
+  const urls: string[] = [];
+
+  for (const file of incoming) {
+    if (file.size > MAX_BYTES) {
+      return Response.json({ error: 'File is too large' }, { status: 413 });
+    }
+    if (!allowed(file)) {
+      return Response.json({ error: 'Only images and videos can be uploaded' }, { status: 415 });
+    }
+    const name = `${randomBytes(6).toString('hex')}-${safeName(file.name)}`;
+    await writeFile(path.join(UPLOAD_DIR, name), Buffer.from(await file.arrayBuffer()));
+    urls.push(`/uploads/${name}`);
+  }
+
+  return Response.json({ urls });
+};
+"""
+
+
+def _harness_file_field_markup() -> str:
+    """Sidebar control for FILE / MULTI_FILE: upload instead of pasting a URL."""
+    return """              ) : field.type === 'FILE' || field.type === 'MULTI_FILE' ? (
+                <div
+                  class="hx-file"
+                  data-multiple={field.type === 'MULTI_FILE' ? '' : undefined}
+                >
+                  <input
+                    type="hidden"
+                    id={`f-${field.name}`}
+                    name={`f.${field.name}`}
+                    value={field.type === 'MULTI_FILE'
+                      ? (Array.isArray(stored[field.name]) ? (stored[field.name] as string[]).join('\\n') : String(stored[field.name] ?? ''))
+                      : String(stored[field.name] ?? '')}
+                  />
+                  <div class="hx-file__list"></div>
+                  <button type="button" class="hx-file__pick">
+                    {field.type === 'MULTI_FILE' ? 'Add files' : 'Upload file'}
+                  </button>
+                  <input
+                    type="file"
+                    accept="image/*,video/*"
+                    multiple={field.type === 'MULTI_FILE'}
+                    hidden
+                  />
+                </div>
+              ) : field.type === 'REPEATABLE' ? (
+                <div
+                  class="hx-repeat"
+                  data-min={String(field.min ?? 0)}
+                  data-max={String(field.max ?? 20)}
+                  data-item-label={field.itemLabel || 'Item'}
+                  data-item-fields={JSON.stringify(field.itemFields ?? [])}
+                >
+                  <input
+                    type="hidden"
+                    id={`f-${field.name}`}
+                    name={`f.${field.name}`}
+                    value={JSON.stringify(Array.isArray(stored[field.name]) ? stored[field.name] : [])}
+                  />
+                  <div class="hx-repeat__bar">
+                    <button type="button" class="hx-repeat__prev" aria-label="Previous item">‹</button>
+                    <span class="hx-repeat__status"></span>
+                    <button type="button" class="hx-repeat__next" aria-label="Next item">›</button>
+                  </div>
+                  <div class="hx-repeat__body"></div>
+                  <div class="hx-repeat__actions">
+                    <button type="button" class="hx-repeat__add">Add</button>
+                    <button type="button" class="hx-repeat__remove">Remove</button>
+                  </div>
+                </div>
+"""
+
+
+def _harness_field_rows(fields_expr: str) -> str:
+    """One sidebar field list. Used for both normal and advanced fields."""
+    return f"""          {{{fields_expr}.map((field) => (
+            <div
+              class="hx-field"
+              data-type={{field.type}}
+              data-visible-when={{JSON.stringify(field.visibleWhen ?? [])}}
+              hidden={{!isFieldVisible(field, stored)}}
+            >
+              <label class="hx-field__label" for={{`f-${{field.name}}`}}>
+                <span>
+                  {{field.label}}
+                  {{field.required && <em class="hx-req" title="Required">*</em>}}
+                </span>
+                <code>{{field.type.toLowerCase().replace(/_/g, ' ')}}</code>
+              </label>
+
+              {{field.type === 'SWITCH' ? (
+                <label class="hx-switch">
+                  <input
+                    id={{`f-${{field.name}}`}}
+                    type="checkbox"
+                    name={{`f.${{field.name}}`}}
+                    checked={{Boolean(stored[field.name])}}
+                    value="true"
+                  />
+                  <span class="hx-switch__track"><span class="hx-switch__thumb"></span></span>
+                  <span class="hx-switch__state">{{stored[field.name] ? 'On' : 'Off'}}</span>
+                </label>
+              ) : field.type === 'MULTI_LINE' ? (
+                <textarea id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}} rows="4">{{String(stored[field.name] ?? '')}}</textarea>
+{_harness_file_field_markup()}              ) : field.type === 'FORM_SINGLE_SELECT' ? (
+                <select id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}}>
+                  <option value="">Select a form</option>
+                  {{forms.map((form) => (
+                    <option
+                      value={{form.uuid}}
+                      selected={{stored[field.name] === form.uuid || stored[field.name] === form.name}}
+                    >{{form.label || form.name || form.uuid}}</option>
+                  ))}}
+                  {{stored[field.name] && !forms.some((form) => form.uuid === stored[field.name] || form.name === stored[field.name]) && (
+                    <option value={{stored[field.name]}} selected>{{String(stored[field.name])}}</option>
+                  )}}
+                </select>
+              ) : field.options ? (
+                <select id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}}>
+                  {{field.options.map((o) => (
+                    <option value={{o.name}} selected={{stored[field.name] === o.name}}>{{o.label}}</option>
+                  ))}}
+                </select>
+              ) : (
+                <input
+                  id={{`f-${{field.name}}`}}
+                  name={{`f.${{field.name}}`}}
+                  value={{String(stored[field.name] ?? '')}}
+                  placeholder={{field.helpText ?? ''}}
+                />
+              )}}
+
+              {{field.helpText && <small class="hx-help">{{field.helpText}}</small>}}
+            </div>
+          ))}}
+"""
+
+
+def _harness_file_field_script() -> str:
+    """Uploads picked files to /api/upload and writes the returned URLs."""
+    return """
+    <script is:inline>
+      // FILE / MULTI_FILE: pick from disk, store a local URL. Query strings
+      // cannot carry the bytes, so the file is posted first and the returned
+      // /uploads/... path is what the module receives.
+      const fileUrls = (value) =>
+        String(value || '')
+          .split(/[\\n,]+/)
+          .map((part) => part.trim())
+          .filter(Boolean);
+
+      const fileKind = (url) => {
+        if (/\\.(avif|gif|jpe?g|png|svg|webp)(\\?|#|$)/i.test(url) || url.startsWith('data:image/')) {
+          return 'image';
+        }
+        if (/\\.(mp4|webm|ogg|mov)(\\?|#|$)/i.test(url) || url.startsWith('data:video/')) {
+          return 'video';
+        }
+        return 'file';
+      };
+
+      const fileLabel = (url) => {
+        try {
+          return decodeURIComponent((url.split('/').pop() || url).replace(/^[a-f0-9]{12}-/, ''));
+        } catch {
+          return url;
+        }
+      };
+
+      const uploadFiles = async (files) => {
+        const urls = [];
+        for (const file of files) {
+          const body = new FormData();
+          body.append('file', file);
+          const response = await fetch('/api/upload', { method: 'POST', body });
+          if (!response.ok) {
+            throw new Error(await response.text());
+          }
+          const payload = await response.json();
+          urls.push(...(payload.urls || []));
+        }
+        return urls;
+      };
+
+      const renderFileField = (root) => {
+        const hidden = root.querySelector('input[type="hidden"]');
+        const list = root.querySelector('.hx-file__list');
+        const pick = root.querySelector('.hx-file__pick');
+        const multiple = root.hasAttribute('data-multiple');
+        const urls = fileUrls(hidden?.value);
+        list.replaceChildren(
+          ...urls.map((url, index) => {
+            const item = document.createElement('div');
+            item.className = 'hx-file__item';
+            if (fileKind(url) === 'image') {
+              const img = document.createElement('img');
+              img.src = url;
+              img.alt = '';
+              item.append(img);
+            } else {
+              const mark = document.createElement('span');
+              mark.className = 'hx-file__name';
+              mark.textContent = fileLabel(url);
+              item.append(mark);
+            }
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'hx-file__remove';
+            remove.setAttribute('aria-label', 'Remove file');
+            remove.textContent = '×';
+            remove.addEventListener('click', () => {
+              hidden.value = urls.filter((_, i) => i !== index).join('\\n');
+              hidden.dispatchEvent(new Event('input', { bubbles: true }));
+              renderFileField(root);
+            });
+            item.append(remove);
+            return item;
+          }),
+        );
+        if (pick) {
+          pick.textContent = multiple
+            ? 'Add files'
+            : urls.length
+              ? 'Replace file'
+              : 'Upload file';
+        }
+      };
+
+      const addFilesToField = async (root, files) => {
+        const hidden = root.querySelector('input[type="hidden"]');
+        if (!hidden || files.length === 0) return;
+        root.dataset.busy = '';
+        try {
+          const uploaded = await uploadFiles(files);
+          hidden.value = root.hasAttribute('data-multiple')
+            ? [...fileUrls(hidden.value), ...uploaded].join('\\n')
+            : uploaded[0] ?? '';
+          hidden.dispatchEvent(new Event('input', { bubbles: true }));
+          renderFileField(root);
+        } catch (error) {
+          console.error(error);
+        } finally {
+          delete root.dataset.busy;
+        }
+      };
+
+      document.querySelectorAll('.hx-file').forEach((root) => {
+        const picker = root.querySelector('input[type="file"]');
+        const pick = root.querySelector('.hx-file__pick');
+        renderFileField(root);
+        pick?.addEventListener('click', () => picker?.click());
+        picker?.addEventListener('change', () => {
+          const files = Array.from(picker.files || []);
+          picker.value = '';
+          addFilesToField(root, files);
+        });
+        root.addEventListener('dragover', (event) => {
+          event.preventDefault();
+          root.dataset.drop = '';
+        });
+        root.addEventListener('dragleave', () => delete root.dataset.drop);
+        root.addEventListener('drop', (event) => {
+          event.preventDefault();
+          delete root.dataset.drop;
+          addFilesToField(root, Array.from(event.dataTransfer?.files || []));
+        });
+      });
+    </script>
+"""
+
+
+def _harness_repeatable_script() -> str:
+    """Pages through REPEATABLE items so the sidebar does not grow a long list."""
+    return r"""
+    <script is:inline>
+      const emptyRepeatItem = (fields) => {
+        const row = {};
+        for (const field of fields) {
+          if (field.defaultValue !== undefined && field.defaultValue !== null) {
+            row[field.name] = field.defaultValue;
+            continue;
+          }
+          if (field.type === 'SWITCH') row[field.name] = false;
+          else if (field.type === 'MULTI_FILE' || field.type === 'MULTI_SELECT') row[field.name] = [];
+          else row[field.name] = '';
+        }
+        return row;
+      };
+
+      const readRepeatItems = (input) => {
+        try {
+          const parsed = JSON.parse(input.value || '[]');
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      };
+
+      const bindRepeatable = (root) => {
+        const input = root.querySelector('input[type="hidden"]');
+        const body = root.querySelector('.hx-repeat__body');
+        const status = root.querySelector('.hx-repeat__status');
+        const prev = root.querySelector('.hx-repeat__prev');
+        const next = root.querySelector('.hx-repeat__next');
+        const add = root.querySelector('.hx-repeat__add');
+        const remove = root.querySelector('.hx-repeat__remove');
+        if (!(input instanceof HTMLInputElement) || !body || !status) return;
+
+        const min = Math.max(0, Number(root.dataset.min || '0') || 0);
+        const max = Math.max(min || 1, Number(root.dataset.max || '20') || 20);
+        const itemLabel = root.dataset.itemLabel || 'Item';
+        let fields = [];
+        try {
+          fields = JSON.parse(root.dataset.itemFields || '[]');
+        } catch {
+          fields = [];
+        }
+        if (!Array.isArray(fields)) fields = [];
+
+        let items = readRepeatItems(input);
+        if (items.length < min) {
+          while (items.length < min) items.push(emptyRepeatItem(fields));
+        }
+        let index = 0;
+        const visibilityKeys = [...new Set(
+          fields.flatMap((field) => (Array.isArray(field.visibleWhen) ? field.visibleWhen : [])
+            .map((rule) => rule && rule.field)
+            .filter(Boolean)),
+        )];
+
+        const readParentValues = () => {
+          const values = {};
+          const form = root.closest('form');
+          if (!(form instanceof HTMLFormElement)) return values;
+          new FormData(form).forEach((value, key) => {
+            if (key.startsWith('f.')) values[key.slice(2)] = String(value);
+          });
+          return values;
+        };
+
+        const itemConditionHolds = (condition, values) => {
+          const actual = values[condition.field];
+          const set = actual !== undefined && actual !== null && actual !== '';
+          switch (condition.operator) {
+            case 'IS_SET':
+              return set;
+            case 'IS_NOT_SET':
+              return !set;
+            case 'EQUALS':
+              return actual === condition.value;
+            case 'NOT_EQUALS':
+              return actual !== condition.value;
+            case 'IN':
+              return Array.isArray(condition.value) && condition.value.includes(actual);
+            case 'NOT_IN':
+              return !(Array.isArray(condition.value) && condition.value.includes(actual));
+            default:
+              return true;
+          }
+        };
+
+        const visibilitySnapshot = () => {
+          const values = readParentValues();
+          return JSON.stringify(Object.fromEntries(visibilityKeys.map((key) => [key, values[key]])));
+        };
+
+        const commit = () => {
+          input.value = JSON.stringify(items);
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+
+        const fieldControl = (field, value, onValue) => {
+          const wrap = document.createElement('label');
+          wrap.className = 'hx-repeat__field';
+          const caption = document.createElement('span');
+          caption.textContent = field.label || field.name;
+          wrap.append(caption);
+
+          if (field.type === 'MULTI_LINE') {
+            const box = document.createElement('textarea');
+            box.rows = 4;
+            box.value = String(value ?? '');
+            box.addEventListener('input', () => onValue(box.value));
+            wrap.append(box);
+            return wrap;
+          }
+          if (field.type === 'SWITCH') {
+            const box = document.createElement('input');
+            box.type = 'checkbox';
+            box.checked = value === true || value === 'true';
+            box.addEventListener('change', () => onValue(box.checked));
+            wrap.append(box);
+            return wrap;
+          }
+          if (field.type === 'SINGLE_SELECT' && Array.isArray(field.options)) {
+            const select = document.createElement('select');
+            for (const option of field.options) {
+              const node = document.createElement('option');
+              node.value = option.name;
+              node.textContent = option.label || option.name;
+              if (String(value ?? '') === String(option.name)) node.selected = true;
+              select.append(node);
+            }
+            select.addEventListener('change', () => onValue(select.value));
+            wrap.append(select);
+            return wrap;
+          }
+          if (field.type === 'FILE' || field.type === 'MULTI_FILE') {
+            const pick = document.createElement('button');
+            pick.type = 'button';
+            pick.className = 'hx-file__pick';
+            pick.textContent = field.type === 'MULTI_FILE' ? 'Add files' : (value ? 'Replace file' : 'Upload file');
+            const hint = document.createElement('small');
+            hint.className = 'hx-help';
+            hint.textContent = typeof value === 'string' && value ? value : (Array.isArray(value) ? value.join(', ') : '');
+            pick.addEventListener('click', async () => {
+              const picker = document.createElement('input');
+              picker.type = 'file';
+              picker.accept = 'image/*,video/*';
+              picker.multiple = field.type === 'MULTI_FILE';
+              picker.addEventListener('change', async () => {
+                const files = Array.from(picker.files || []);
+                if (!files.length || typeof uploadFiles !== 'function') return;
+                const urls = await uploadFiles(files);
+                if (field.type === 'MULTI_FILE') {
+                  const next = Array.isArray(value) ? [...value, ...urls] : urls;
+                  onValue(next);
+                } else {
+                  onValue(urls[0] || '');
+                }
+              });
+              picker.click();
+            });
+            wrap.append(pick, hint);
+            return wrap;
+          }
+
+          const box = document.createElement('input');
+          box.type = 'text';
+          box.value = String(value ?? '');
+          box.addEventListener('input', () => onValue(box.value));
+          wrap.append(box);
+          return wrap;
+        };
+
+        const paint = () => {
+          if (items.length === 0) {
+            status.textContent = `No ${itemLabel.toLowerCase()}s`;
+            body.replaceChildren();
+            prev.disabled = true;
+            next.disabled = true;
+            add.disabled = items.length >= max;
+            remove.disabled = true;
+            const empty = document.createElement('p');
+            empty.className = 'hx-empty';
+            empty.textContent = `Add a ${itemLabel.toLowerCase()} to start.`;
+            body.append(empty);
+            return;
+          }
+          index = Math.min(Math.max(0, index), items.length - 1);
+          status.textContent = `${itemLabel} ${index + 1} of ${items.length}`;
+          prev.disabled = index <= 0;
+          next.disabled = index >= items.length - 1;
+          add.disabled = items.length >= max;
+          add.textContent = `Add ${itemLabel.toLowerCase()}`;
+          remove.disabled = items.length <= min;
+          const current = items[index] && typeof items[index] === 'object' ? items[index] : {};
+          const context = { ...readParentValues(), ...current };
+          body.replaceChildren();
+          for (const field of fields) {
+            const rules = Array.isArray(field.visibleWhen) ? field.visibleWhen : [];
+            if (rules.length && !rules.every((rule) => itemConditionHolds(rule, context))) {
+              continue;
+            }
+            body.append(
+              fieldControl(field, current[field.name], (nextValue) => {
+                items[index] = { ...items[index], [field.name]: nextValue };
+                commit();
+              }),
+            );
+          }
+        };
+
+        prev.addEventListener('click', () => {
+          index -= 1;
+          paint();
+        });
+        next.addEventListener('click', () => {
+          index += 1;
+          paint();
+        });
+        add.addEventListener('click', () => {
+          if (items.length >= max) return;
+          items.push(emptyRepeatItem(fields));
+          index = items.length - 1;
+          commit();
+          paint();
+        });
+        remove.addEventListener('click', () => {
+          if (items.length <= min) return;
+          items.splice(index, 1);
+          index = Math.max(0, index - 1);
+          commit();
+          paint();
+        });
+
+        commit();
+        paint();
+
+        const form = root.closest('form');
+        if (form instanceof HTMLFormElement && visibilityKeys.length) {
+          let lastVisibility = visibilitySnapshot();
+          const refreshIfParentChanged = () => {
+            const next = visibilitySnapshot();
+            if (next === lastVisibility) return;
+            lastVisibility = next;
+            paint();
+          };
+          form.addEventListener('change', refreshIfParentChanged);
+          form.addEventListener('input', refreshIfParentChanged);
+        }
+      };
+
+      document.querySelectorAll('.hx-repeat').forEach(bindRepeatable);
+    </script>
+"""
+
+
+def _harness_file_field_styles() -> str:
+    return """
+      .hx-file { display: grid; gap: 0.4rem; }
+      .hx-file[data-drop] { outline: 1px dashed var(--hx-accent); outline-offset: 2px; }
+      .hx-file[data-busy] .hx-file__pick { opacity: 0.6; pointer-events: none; }
+      .hx-file__list { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+      .hx-file__list:empty { display: none; }
+      .hx-file__item {
+        position: relative;
+        width: 72px; height: 72px;
+        border-radius: 8px; overflow: hidden;
+        background: var(--hx-panel-2);
+        border: 1px solid var(--hx-line);
+      }
+      .hx-file__item img {
+        display: block; width: 100%; height: 100%; object-fit: cover;
+      }
+      .hx-file__name {
+        display: grid; place-items: center;
+        width: 100%; height: 100%;
+        padding: 0.35rem;
+        font-size: 0.5625rem; color: var(--hx-muted);
+        text-align: center; overflow: hidden; word-break: break-all;
+      }
+      .hx-file__remove {
+        position: absolute; top: 2px; right: 2px;
+        width: 18px; height: 18px;
+        border: 0; border-radius: 50%;
+        background: rgba(15, 17, 21, 0.75); color: #fff;
+        font: inherit; font-size: 0.75rem; line-height: 1;
+        cursor: pointer;
+      }
+      .hx-file__pick {
+        width: 100%;
+        padding: 0.45rem 0.55rem;
+        border: 1px dashed var(--hx-line); border-radius: 7px;
+        background: var(--hx-panel-2); color: var(--hx-muted);
+        font: inherit; font-size: 0.75rem;
+        cursor: pointer;
+      }
+      .hx-file__pick:hover { color: var(--hx-text); border-color: var(--hx-accent); }
+
+      .hx-repeat { display: grid; gap: 0.65rem; }
+      .hx-repeat__bar {
+        display: flex; align-items: center; gap: 0.4rem;
+      }
+      .hx-repeat__status {
+        flex: 1; text-align: center;
+        font-size: 0.75rem; color: var(--hx-muted);
+      }
+      .hx-repeat__prev, .hx-repeat__next, .hx-repeat__add, .hx-repeat__remove {
+        border: 1px solid var(--hx-line); border-radius: 7px;
+        background: var(--hx-panel-2); color: var(--hx-text);
+        font: inherit; font-size: 0.75rem;
+        padding: 0.3rem 0.55rem; cursor: pointer;
+      }
+      .hx-repeat__prev:disabled, .hx-repeat__next:disabled,
+      .hx-repeat__add:disabled, .hx-repeat__remove:disabled {
+        opacity: 0.4; cursor: default;
+      }
+      .hx-repeat__body { display: grid; gap: 0.65rem; }
+      .hx-repeat__field { display: grid; gap: 0.3rem; font-size: 0.75rem; }
+      .hx-repeat__field span { color: var(--hx-muted); }
+      .hx-repeat__actions { display: flex; gap: 0.4rem; }
 """
 
 
@@ -558,7 +1393,7 @@ def _harness_page(modules: list[LocalModule], app_label: str) -> str:
     return f"""---
 // GENERATED by `caraer apps local dev --cms` - do not edit.
 import {{ DEFAULT_TOKENS, toCustomProperties, toStyleAttribute }} from '@caraer/cms-tokens';
-import {{ resolveFieldValues, renderModuleErrorHtml, withModuleBoundary }} from '@caraer/cms-runtime';
+import {{ isFieldVisible, resolveFieldValues, renderModuleErrorHtml, withModuleBoundary }} from '@caraer/cms-runtime';
 
 import samples from '../../samples.json';
 
@@ -571,6 +1406,8 @@ const loaders = {{
 const active = Astro.url.searchParams.get('module') ?? modules[0]?.name;
 const selected = modules.find((m) => m.name === active) ?? modules[0];
 const manifestFields = selected?.fields ?? [];
+const normalFields = manifestFields.filter((field) => field.advanced !== true);
+const advancedFields = manifestFields.filter((field) => field.advanced === true);
 
 /*
  * Query strings carry everything as text, but a field's declared type is what
@@ -590,7 +1427,14 @@ function coerce(name: string, raw: string): unknown {{
     case 'PROPERTY_MULTI_SELECT':
     case 'RECORD_MULTI_SELECT':
     case 'OBJECT_MULTI_SELECT':
-      return raw.split(',').map((part) => part.trim()).filter(Boolean);
+      return raw.split(/[\\n,]+/).map((part) => part.trim()).filter(Boolean);
+    case 'REPEATABLE':
+      try {{
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      }} catch {{
+        return [];
+      }}
     default:
       return raw;
   }}
@@ -644,6 +1488,7 @@ const style = toStyleAttribute(toCustomProperties(Astro.locals.tokens ?? DEFAULT
 const live = Astro.locals.harness?.live ?? false;
 const subdomain = Astro.locals.harness?.subdomain ?? '';
 const companies = Astro.locals.harness?.companies ?? [];
+const forms = Astro.locals.harness?.forms ?? [];
 
 // Carry the exact choice across module links, including the empty value that
 // means "sample data even though --company is set". Dropping the parameter
@@ -673,6 +1518,19 @@ const tokenGroups = [
     tokens: Object.entries(tokenValues).filter(([name]) => group.match(name)),
   }}))
   .filter((group) => group.tokens.length > 0);
+
+/*
+ * Media queries evaluate against the viewport, not a parent max-width. The
+ * production builder already renders the page in an iframe for that reason.
+ * This embed document is the same idea: Mobile/Tablet resize the iframe, so
+ * `@media (max-width: 640px)` in a module actually fires.
+ */
+const embed = Astro.url.searchParams.get('embed') === '1';
+const embedSrc = (() => {{
+  const params = new URLSearchParams(Astro.url.search);
+  params.set('embed', '1');
+  return `?${{params}}`;
+}})();
 ---
 
 <html lang="nl" style={{style}}>
@@ -681,7 +1539,16 @@ const tokenGroups = [
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{selected?.label ?? 'Modules'}} - Caraer module preview</title>
   </head>
-  <body>
+  <body class={{embed ? 'is-embed' : undefined}}>
+    {{embed ? (
+      <div class="harness__preview" id="harness-preview">
+        {{loadError ? (
+          <Fragment set:html={{renderModuleErrorHtml({{ moduleRef: `local/${{selected?.name}}`, detail: true }}, loadError)}} />
+        ) : (
+          Selected && props && <Selected {{...props}} />
+        )}}
+      </div>
+    ) : (
     <div class="hx">
       <header class="hx-bar">
         <div class="hx-brand">
@@ -726,13 +1593,12 @@ const tokenGroups = [
 
       <main class="hx-canvas">
         <div class="hx-frame" id="harness-frame">
-          <div class="harness__preview" id="harness-preview">
-            {{loadError ? (
-              <Fragment set:html={{renderModuleErrorHtml({{ moduleRef: `local/${{selected?.name}}`, detail: true }}, loadError)}} />
-            ) : (
-              Selected && props && <Selected {{...props}} />
-            )}}
-          </div>
+          <iframe
+            id="harness-preview"
+            class="hx-frame__doc"
+            title="Module preview"
+            src={{embedSrc}}
+          ></iframe>
         </div>
       </main>
 
@@ -758,48 +1624,13 @@ const tokenGroups = [
           )}}
 
           {{/* Note: a textarea's tag content is its value, so it stays on one line. */}}
-          {{manifestFields.map((field) => (
-            <div class="hx-field" data-type={{field.type}}>
-              <label class="hx-field__label" for={{`f-${{field.name}}`}}>
-                <span>
-                  {{field.label}}
-                  {{field.required && <em class="hx-req" title="Required">*</em>}}
-                </span>
-                <code>{{field.type.toLowerCase().replace(/_/g, ' ')}}</code>
-              </label>
-
-              {{field.type === 'SWITCH' ? (
-                <label class="hx-switch">
-                  <input
-                    id={{`f-${{field.name}}`}}
-                    type="checkbox"
-                    name={{`f.${{field.name}}`}}
-                    checked={{Boolean(stored[field.name])}}
-                    value="true"
-                  />
-                  <span class="hx-switch__track"><span class="hx-switch__thumb"></span></span>
-                  <span class="hx-switch__state">{{stored[field.name] ? 'On' : 'Off'}}</span>
-                </label>
-              ) : field.type === 'MULTI_LINE' ? (
-                <textarea id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}} rows="4">{{String(stored[field.name] ?? '')}}</textarea>
-              ) : field.options ? (
-                <select id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}}>
-                  {{field.options.map((o) => (
-                    <option value={{o.name}} selected={{stored[field.name] === o.name}}>{{o.label}}</option>
-                  ))}}
-                </select>
-              ) : (
-                <input
-                  id={{`f-${{field.name}}`}}
-                  name={{`f.${{field.name}}`}}
-                  value={{String(stored[field.name] ?? '')}}
-                  placeholder={{field.helpText ?? ''}}
-                />
-              )}}
-
-              {{field.helpText && <small class="hx-help">{{field.helpText}}</small>}}
-            </div>
-          ))}}
+{_harness_field_rows("normalFields")}
+          {{advancedFields.length > 0 && (
+            <details class="hx-advanced">
+              <summary>Advanced settings</summary>
+{_harness_field_rows("advancedFields")}
+            </details>
+          )}}
 
           <button type="submit" class="hx-apply">Apply</button>
         </form>
@@ -838,6 +1669,7 @@ const tokenGroups = [
         </div>
       </aside>
     </div>
+    )}}
 
     <script>
       // Live preview: re-render as you type instead of on Apply. Only the
@@ -846,7 +1678,7 @@ const tokenGroups = [
       const form = document.querySelector('.harness__fields');
       const preview = document.getElementById('harness-preview');
 
-      if (form instanceof HTMLFormElement && preview) {{
+      if (form instanceof HTMLFormElement && preview instanceof HTMLIFrameElement) {{
         let timer;
         let inFlight;
 
@@ -859,8 +1691,11 @@ const tokenGroups = [
             if (!box.checked) params.set(box.name, 'false');
           }});
 
+          const chrome = params.toString();
+          history.replaceState(null, '', '?' + chrome);
+
+          params.set('embed', '1');
           const query = params.toString();
-          history.replaceState(null, '', '?' + query);
 
           inFlight?.abort();
           inFlight = new AbortController();
@@ -874,10 +1709,16 @@ const tokenGroups = [
             // browser upgrade Astro's island elements so they rehydrate.
             const parsed = new DOMParser().parseFromString(await response.text(), 'text/html');
             const next = parsed.getElementById('harness-preview');
+            const doc = preview.contentDocument;
+            const current = doc?.getElementById('harness-preview');
             if (!next) return;
+            if (!current) {{
+              preview.src = '/?' + query;
+              return;
+            }}
 
-            preview.replaceChildren(
-              ...Array.from(next.childNodes).map((node) => document.adoptNode(node)),
+            current.replaceChildren(
+              ...Array.from(next.childNodes).map((node) => doc.adoptNode(node)),
             );
           }} catch (error) {{
             if (error.name !== 'AbortError') console.error(error);
@@ -897,6 +1738,70 @@ const tokenGroups = [
         }});
       }}
     </script>
+
+    <script is:inline>
+      // Honour visibleWhen the same way the builder does, so a count of 5
+      // only offers five item slots and a colour field hides when unused.
+      const fieldsForm = document.querySelector('.harness__fields');
+
+      const fieldValues = (form) => {{
+        const values = {{}};
+        new FormData(form).forEach((value, key) => {{
+          if (key.startsWith('f.')) values[key.slice(2)] = String(value);
+        }});
+        form.querySelectorAll('input[type="checkbox"]').forEach((box) => {{
+          if (box.name.startsWith('f.')) {{
+            values[box.name.slice(2)] = box.checked ? 'true' : 'false';
+          }}
+        }});
+        return values;
+      }};
+
+      const conditionHolds = (condition, values) => {{
+        const actual = values[condition.field];
+        const set = actual !== undefined && actual !== null && actual !== '';
+        switch (condition.operator) {{
+          case 'IS_SET':
+            return set;
+          case 'IS_NOT_SET':
+            return !set;
+          case 'EQUALS':
+            return actual === condition.value;
+          case 'NOT_EQUALS':
+            return actual !== condition.value;
+          case 'IN':
+            return Array.isArray(condition.value) && condition.value.includes(actual);
+          case 'NOT_IN':
+            return !(Array.isArray(condition.value) && condition.value.includes(actual));
+          default:
+            return true;
+        }}
+      }};
+
+      const applyFieldVisibility = (form) => {{
+        const values = fieldValues(form);
+        form.querySelectorAll('.hx-field').forEach((row) => {{
+          let rules = [];
+          try {{
+            rules = JSON.parse(row.dataset.visibleWhen || '[]');
+          }} catch {{
+            rules = [];
+          }}
+          row.hidden = !(Array.isArray(rules) && rules.every((rule) => conditionHolds(rule, values)));
+        }});
+        form.querySelectorAll('.hx-advanced').forEach((section) => {{
+          section.hidden = ![...section.querySelectorAll('.hx-field')].some((row) => !row.hidden);
+        }});
+      }};
+
+      if (fieldsForm instanceof HTMLFormElement) {{
+        applyFieldVisibility(fieldsForm);
+        fieldsForm.addEventListener('input', () => applyFieldVisibility(fieldsForm));
+        fieldsForm.addEventListener('change', () => applyFieldVisibility(fieldsForm));
+      }}
+    </script>
+{_harness_file_field_script()}
+{_harness_repeatable_script()}
 
     <script is:inline>
       // Company switch. A reload rather than a partial swap: the whole document
@@ -966,9 +1871,11 @@ const tokenGroups = [
       // Viewport width toggle. Chrome-only, so it lives here rather than in the
       // live-update script that talks to the server.
       const frame = document.getElementById('harness-frame');
-      document.querySelectorAll('.hx-seg button').forEach((button) => {{
+      document.querySelectorAll('.hx-bar .hx-seg button').forEach((button) => {{
         button.addEventListener('click', () => {{
-          document.querySelectorAll('.hx-seg button').forEach((b) => b.classList.remove('is-on'));
+          document.querySelectorAll('.hx-bar .hx-seg button').forEach((b) => {{
+            b.classList.remove('is-on');
+          }});
           button.classList.add('is-on');
           const width = Number(button.dataset.width);
           frame.style.maxWidth = width ? width + 'px' : '';
@@ -999,6 +1906,28 @@ const tokenGroups = [
         background: var(--hx-bg);
         font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
         color: var(--hx-text);
+      }}
+      /*
+       * Embed document: chrome styles stay namespaced under .hx, so they do
+       * not leak in. These reset the iframe document to a live page shell.
+       */
+      body.is-embed {{
+        height: auto;
+        min-height: 100%;
+        background: var(--caraer-color-background);
+        color: var(--caraer-color-font);
+        font-family: var(--caraer-font-body);
+        font-size: var(--caraer-size-body);
+        line-height: var(--caraer-leading-body);
+      }}
+      body.is-embed .harness__preview {{
+        display: block;
+        width: 100%;
+        background: var(--caraer-color-background);
+        color: var(--caraer-color-font);
+        font-family: var(--caraer-font-body);
+        font-size: var(--caraer-size-body);
+        line-height: var(--caraer-leading-body);
       }}
 
       .hx {{
@@ -1177,7 +2106,10 @@ const tokenGroups = [
       /* Preview canvas */
       .hx-canvas {{
         padding: 1.25rem;
-        overflow: auto;
+        overflow: hidden;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
         background:
           linear-gradient(45deg, #14171d 25%, transparent 25%) -8px 0/16px 16px,
           linear-gradient(-45deg, #14171d 25%, transparent 25%) -8px 0/16px 16px,
@@ -1185,14 +2117,19 @@ const tokenGroups = [
       }}
       /*
        * Full width is deliberately unstyled: no radius and no clipping, because
-       * both are chrome a real page does not have. `overflow: hidden` in
-       * particular would silently break `position: sticky` in a header module.
+       * both are chrome a real page does not have. Sticky positioning lives
+       * inside the iframe document, so it sticks to that viewport the way it
+       * does on a live page.
        *
        * A constrained width is different - there the rounding reads as a device
        * frame, which is the whole point of the mobile and tablet views.
        */
       .hx-frame {{
+        position: relative;
         margin: 0 auto;
+        width: 100%;
+        flex: 1 1 auto;
+        min-height: 0;
         background: var(--caraer-color-background, #fff);
         box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
         transition: max-width 180ms ease;
@@ -1201,23 +2138,13 @@ const tokenGroups = [
         border-radius: 14px;
         overflow: hidden;
       }}
-      /*
-       * Reset the chrome's dark text inside the frame and apply the same body
-       * styles caraer-web's page shell uses, so the preview matches production
-       * instead of inheriting the harness's own theme.
-       */
-      .harness__preview {{
-        /*
-         * No overflow clipping. `overflow-x: hidden` forces overflow-y to auto,
-         * which makes this an extra scroll container and breaks `position:
-         * sticky` in a header module. It also hid horizontal overflow, which is
-         * a module bug worth seeing rather than concealing; the canvas scrolls.
-         */
-        background: var(--caraer-color-background);
-        color: var(--caraer-color-font);
-        font-family: var(--caraer-font-body);
-        font-size: var(--caraer-size-body);
-        line-height: var(--caraer-leading-body);
+      .hx-frame__doc {{
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: var(--caraer-color-background, #fff);
       }}
 
       /* Field panel */
@@ -1240,6 +2167,26 @@ const tokenGroups = [
 
       .harness__fields {{ display: grid; gap: 0.875rem; }}
       .hx-field {{ display: grid; gap: 0.3rem; }}
+      .hx-field[hidden] {{ display: none; }}
+      .hx-advanced {{
+        display: grid; gap: 0.875rem;
+        border-top: 1px solid var(--hx-line);
+        padding-top: 0.25rem;
+      }}
+      .hx-advanced[hidden] {{ display: none; }}
+      .hx-advanced summary {{
+        cursor: pointer;
+        font-size: 0.75rem; font-weight: 600;
+        color: var(--hx-text);
+        list-style: none;
+        display: flex; align-items: center; justify-content: space-between;
+      }}
+      .hx-advanced summary::-webkit-details-marker {{ display: none; }}
+      .hx-advanced summary::after {{
+        content: '▸';
+        font-size: 0.7rem; color: var(--hx-muted);
+      }}
+      .hx-advanced[open] summary::after {{ content: '▾'; }}
       .hx-field__label {{
         display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
         font-size: 0.75rem; font-weight: 600;
@@ -1267,6 +2214,7 @@ const tokenGroups = [
         box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.18);
       }}
 
+{_harness_file_field_styles()}
       /* Switch */
       .hx-switch {{ display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }}
       .hx-switch input {{ position: absolute; opacity: 0; width: 0; height: 0; }}
@@ -1367,11 +2315,32 @@ def write_harness(
         encoding="utf-8",
     )
     (harness / "src" / "pages" / "index.astro").write_text(_harness_page(modules, app_name), encoding="utf-8")
+    (harness / "src" / "pages" / "api").mkdir(parents=True, exist_ok=True)
+    (harness / "public" / "uploads").mkdir(parents=True, exist_ok=True)
+    (harness / "src" / "pages" / "api" / "upload.ts").write_text(_harness_upload_api(), encoding="utf-8")
     (harness / "src" / "middleware.ts").write_text(_harness_middleware(), encoding="utf-8")
-    (harness / "samples.json").write_text(
-        json.dumps({m.name: sample_fields(m) for m in modules}, indent=2) + "\n", encoding="utf-8"
-    )
+    samples_path = harness / "samples.json"
+    existing_samples: dict[str, Any] = {}
+    if samples_path.is_file():
+        try:
+            loaded = json.loads(samples_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                existing_samples = loaded
+        except json.JSONDecodeError:
+            existing_samples = {}
+    samples = {}
+    for module in modules:
+        generated = sample_fields(module)
+        stored = existing_samples.get(module.name)
+        samples[module.name] = (
+            {**generated, **stored} if isinstance(stored, dict) else generated
+        )
+    samples_path.write_text(json.dumps(samples, indent=2) + "\n", encoding="utf-8")
     (harness / ".gitignore").write_text("*\n", encoding="utf-8")
+    # The app root now has its own package.json. Without this, `pnpm install`
+    # in the harness walks up, treats the app as the project, and skips
+    # @astrojs/node. Vite then loads from the app and the preview dies.
+    (harness / ".npmrc").write_text("ignore-workspace=true\n", encoding="utf-8")
 
     return harness, modules
 
@@ -1380,13 +2349,24 @@ def _package_manager() -> str:
     return "pnpm" if shutil.which("pnpm") else "npm"
 
 
+def _harness_install_command() -> list[str]:
+    manager = _package_manager()
+    if manager == "pnpm":
+        return ["pnpm", "install", "--ignore-workspace"]
+    return ["npm", "install"]
+
+
+def _harness_ready(harness: Path) -> bool:
+    return (harness / "node_modules" / "@astrojs" / "node").is_dir()
+
+
 def install_harness(harness: Path, *, force: bool = False) -> int:
     """Install the harness dependencies. Returns the exit code."""
-    if not force and (harness / "node_modules").is_dir():
+    if not force and _harness_ready(harness):
         return 0
 
     return subprocess.run(
-        [_package_manager(), "install"], cwd=harness, env={**os.environ}, check=False
+        _harness_install_command(), cwd=harness, env={**os.environ}, check=False
     ).returncode
 
 
@@ -1402,8 +2382,19 @@ def start_harness(
     Non-blocking so the caller can run the function server in the foreground at
     the same time; the two together are what "run my app locally" means.
     """
-    return subprocess.Popen(
+    astro = harness / "node_modules" / ".bin" / "astro"
+    command = (
         [
+            str(astro),
+            "dev",
+            "--port",
+            str(port),
+            "--host",
+            host,
+            "--ignore-lock",
+        ]
+        if astro.is_file()
+        else [
             _package_manager(),
             "exec",
             "astro",
@@ -1415,7 +2406,10 @@ def start_harness(
             # A crashed previous run leaves a lock behind and Astro then refuses
             # to start, which would look like the harness is simply broken.
             "--ignore-lock",
-        ],
+        ]
+    )
+    return subprocess.Popen(
+        command,
         cwd=harness,
         env={**os.environ, **(env or {})},
     )

@@ -2,11 +2,39 @@
 
 ## Unreleased
 
+- CMS module preview (`.harness__preview`) uses block flow like live
+  `#main`, so section modules fill the frame instead of shrink-wrapping
+  in a centered flex row.
+
+- CMS module manifests can import shared field objects (for example
+  `widthField` from `src/app/modules/settings.ts`) instead of repeating
+  options in every module. Field groups can be spread (`...backgroundFields`).
+  Shared files at the modules root, and `_`-prefixed folders, are included
+  in the published package. Nested settings files may reuse exported arrays
+  such as `COLORS`.
+
+- `caraer apps push` is the one command for private and public apps: it
+  deploys by default, publishes CMS modules, and installs on the selected
+  company. `--no-deploy` syncs without a build. `--wait` blocks on function
+  runtime provisioning; the default skips that wait.
+
+- App `package.json` `dev` is `caraer apps local dev`, so `npm run dev` /
+  `pnpm dev` starts functions and the CMS preview. A missing `dev` script
+  is filled in; an existing one is left alone.
+
+- `apps local dev --cms` isolates the preview harness from the app
+  `package.json`, so pnpm does not skip `@astrojs/node`.
+
+- `apps init` scaffolds `src/app/modules/hello_world` (entry + `fields.d.ts`),
+  the same starter CMS module `apps add module` would create.
+
 - `apps init` writes a root `tsconfig.json` (same options as `caraer-core`) so
-  module scripts can resolve npm libraries such as `three`. Node `package.json`
-  scaffolds set `"type": "module"` and include `three` + `@types/three` (r185
-  has no bundled types). `apps add module` and `apps validate` write the
-  tsconfig and backfill those packages when they are missing.
+  module scripts can resolve npm libraries from `package.json`. Node
+  `package.json` scaffolds set `"type": "module"`, `@caraer/client`, and the
+  published CMS contract packages (`@caraer/cms-runtime`, `@caraer/cms-tokens`)
+  and runs `npm install` so the default `hello_world` module resolves. They no
+  longer add `three` / `@types/three`. Add those only when a module imports
+  them.
 
 ## 0.1.3
 

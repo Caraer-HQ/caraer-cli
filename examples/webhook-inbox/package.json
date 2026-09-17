@@ -5,7 +5,7 @@
     "dev": "caraer apps local dev",
     "validate": "caraer apps validate",
     "push": "caraer apps push",
-    "deploy": "caraer apps push --deploy",
+    "deploy": "caraer apps push",
     "logs": "caraer apps local logs --all"
   },
   "devDependencies": {

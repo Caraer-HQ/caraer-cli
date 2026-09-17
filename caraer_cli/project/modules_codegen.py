@@ -30,6 +30,7 @@ _FIELD_TS_TYPES: dict[str, str] = {
     "MULTI_SELECT": "string[]",
     "RECORD_SINGLE_SELECT": "string",
     "RECORD_MULTI_SELECT": "string[]",
+    "FORM_SINGLE_SELECT": "string",
     "OBJECT_SINGLE_SELECT": "string",
     "OBJECT_MULTI_SELECT": "string[]",
     # Resolved to the record's value, whose type depends on the property.
@@ -41,7 +42,7 @@ _FIELD_TS_TYPES: dict[str, str] = {
     "MULTI_FILE": "string[]",
 }
 
-_ALWAYS_PRESENT = {"SWITCH", "MULTI_SELECT", "MULTI_FILE", "RECORD_MULTI_SELECT", "OBJECT_MULTI_SELECT"}
+_ALWAYS_PRESENT = {"SWITCH", "MULTI_SELECT", "MULTI_FILE", "RECORD_MULTI_SELECT", "OBJECT_MULTI_SELECT", "REPEATABLE"}
 
 
 def _pascal_case(value: str) -> str:
@@ -69,6 +70,29 @@ def _field_type(item: dict[str, Any]) -> str:
         union = _literal_union(options)
         if union:
             return f"Array<{union}>"
+
+    if field_type == "REPEATABLE":
+        nested = item.get("itemFields")
+        if isinstance(nested, list) and nested:
+            parts: list[str] = []
+            for child in nested:
+                if not isinstance(child, dict):
+                    continue
+                child_name = str(child.get("name") or "").strip()
+                if not child_name:
+                    continue
+                child_type = _field_type(child)
+                child_kind = str(child.get("type") or "").upper()
+                child_nullable = (
+                    not child.get("required")
+                    or bool(child.get("visibleWhen"))
+                ) and child_kind not in _ALWAYS_PRESENT
+                parts.append(
+                    f"{child_name}: {child_type}{' | null' if child_nullable else ''}"
+                )
+            if parts:
+                return f"Array<{{ {'; '.join(parts)} }}>"
+        return "Array<Record<string, unknown>>"
 
     return _FIELD_TS_TYPES.get(field_type, "unknown")
 

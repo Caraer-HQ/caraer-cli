@@ -111,6 +111,36 @@ def test_published_package_includes_app_dependencies(tmp_path: Path) -> None:
     assert payload["peerDependencies"]["astro"] == "^7.0.0"
 
 
+def test_published_package_includes_shared_settings(tmp_path: Path) -> None:
+    root = tmp_path / "app"
+    modules = root / "src" / "app" / "modules"
+    hero = modules / "hero"
+    hero.mkdir(parents=True)
+    (modules / "settings.ts").write_text(
+        "export const widthField = { name: 'width', type: 'SINGLE_SELECT' };\n",
+        encoding="utf-8",
+    )
+    (modules / "_theme" / "colors.ts").parent.mkdir()
+    (modules / "_theme" / "colors.ts").write_text("export const brand = '#111';\n", encoding="utf-8")
+    (hero / "index.astro").write_text(
+        "---\nexport const manifest = { name: 'hero', kind: 'section', "
+        "label: 'Hero', category: 'content' };\n---\n<div></div>\n",
+        encoding="utf-8",
+    )
+
+    config = ProjectConfig(platformVersion="2026.2", name="demo", srcDir="src")
+    staging, _ = stage_package(
+        root,
+        config,
+        app_name="demo",
+        version="0.1.0",
+        destination=tmp_path / "staged",
+    )
+
+    assert (staging / "modules" / "settings.ts").is_file()
+    assert (staging / "modules" / "_theme" / "colors.ts").is_file()
+
+
 def test_read_app_dependencies_skips_missing_package_json(tmp_path: Path) -> None:
     assert read_app_dependencies(tmp_path) == {}
 

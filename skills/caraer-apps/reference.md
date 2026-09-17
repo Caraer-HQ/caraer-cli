@@ -201,7 +201,7 @@ caraer apps add options-function list-calendars
 ```
 
 Request action is `loadSettingOptions`. Response must be
-`{ "options": [{ "name", "label", "helpText?" }, ...] }`.
+`{ "options": [{ "name", "label", "helpText?", "preview?" }, ...] }`.
 
 Sibling values are available as:
 - `settingsValues` — flat `{ [fieldName]: value }` (preferred)
@@ -404,7 +404,7 @@ record scopes. Setting and trait scopes update when the installer saves.
 caraer apps current
 caraer apps validate
 caraer apps push --dry-run
-caraer apps push --deploy
+caraer apps push
 caraer apps status
 caraer apps local logs --follow
 caraer apps state get

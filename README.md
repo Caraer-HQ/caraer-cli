@@ -73,7 +73,7 @@ caraer apps init --label "My App"
 caraer apps init --private --label "Internal Tool" --auth-method API_KEY
 cd my_app
 # edit src/app/app.caraer.yaml, src/app/functions/, src/app/webhooks/
-caraer apps push --deploy       # prompts for version (> previous) + release notes
+caraer apps push                # deploy + install (add --wait to block on runtime)
 caraer apps release version     # live semver + recent builds
 caraer apps status
 caraer apps local logs          # uses the only local function (or prompts)
@@ -89,13 +89,14 @@ New apps default to workspace `platformVersion: 2026.2` (App platform V2: one as
 container runtime per app). Use `caraer apps init --platform 2026.1` only for the
 legacy per-function Cloud Functions model. See [docs/platform_versioning.md](docs/platform_versioning.md).
 
-`apps push` syncs the full app: marketplace or private-app manifest (including
-settings), functions, webhooks, schedules, inbound routes, and external OAuth
-providers. There is no separate upload command. Use `--private` on `apps init`
-(or `caraer.json` `privateApp: true`) so create/update go to
-`/api/v2/apps/private*`. Public apps still use `/api/v2/apps/public*`.
-Private apps are auto-installed for the creating company and cannot be
-submitted with `caraer publish`.
+`apps push` is the same for private and public apps: it syncs the manifest,
+functions, webhooks, schedules, inbound routes, and OAuth providers, deploys
+the function build, publishes CMS modules, and installs on the selected
+company. Use `--private` on `apps init` (or `caraer.json` `privateApp: true`)
+so create/update go to `/api/v2/apps/private*`. Public apps use
+`/api/v2/apps/public*`. `--no-deploy` syncs without a build. `--wait` blocks
+until function runtime READY/FAILED. Private apps cannot be submitted with
+`caraer publish`.
 
 Add local scaffolds inside an app folder:
 
@@ -183,7 +184,10 @@ import type { LifecyclePayload, WebhookPayload } from "@caraer/client";
 from caraer_client import LifecyclePayload, WebhookPayload
 ```
 
-Node scaffolds add `@caraer/client` as a `devDependency`.
+Node scaffolds add `@caraer/client` as a `devDependency` and
+`@caraer/cms-runtime` / `@caraer/cms-tokens` as dependencies, then run
+`npm install` so the starter module resolves. `npm run dev` / `pnpm dev`
+is `caraer apps local dev` (functions + CMS preview).
 
 Only the **app creator company** (or super-admin) can push builds for an app.
 
@@ -217,6 +221,7 @@ my_app/
     app.caraer.yaml           # identity, auth, OAuth, settings, app bars
     lifecycle/*.json          # install|uninstall|rotate|update hooks
     functions/<name>/         # function.caraer.json + entry source
+    modules/<name>/           # CMS module (index.astro + fields.d.ts)
     webhooks/*.json           # one webhook definition per file
     schedules/*.json          # cron → function (integration runtime)
     inbound/*.json            # public inbound routes → function
@@ -225,7 +230,8 @@ my_app/
 `add setting` appends to `app.caraer.yaml` by default.
 Optional modular JSON files (`settings/`) still merge on push when
 present (`--modular`). `apps init` always creates all four lifecycle hooks +
-`on-*` functions. See [docs/app_lifecycle.md](docs/app_lifecycle.md).
+`on-*` functions, plus a starter `modules/hello_world`. See
+[docs/app_lifecycle.md](docs/app_lifecycle.md).
 
 See [`examples/webhook-inbox`](examples/webhook-inbox) for a minimal sample
 (inbound route, settings, lifecycle, app bar).

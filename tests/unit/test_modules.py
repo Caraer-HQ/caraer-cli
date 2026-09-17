@@ -224,6 +224,57 @@ def test_codegen_narrows_selects_and_nulls_optional_fields(tmp_path: Path) -> No
     assert "enabled: boolean;" in types
 
 
+def test_codegen_maps_form_single_select_to_string(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _write_module(
+        root,
+        "cta",
+        {
+            "name": "cta",
+            "label": "CTA",
+            "kind": "section",
+            "fields": [
+                {"name": "form", "label": "Form", "type": "FORM_SINGLE_SELECT", "required": True},
+            ],
+        },
+    )
+    module = discover_local_modules(root, load_workspace(root))[0]
+    types = render_module_types(module)
+
+    assert "form: string;" in types
+
+
+def test_codegen_maps_repeatable_to_array_of_items(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _write_module(
+        root,
+        "steps",
+        {
+            "name": "steps",
+            "label": "Steps",
+            "kind": "section",
+            "fields": [
+                {
+                    "name": "steps",
+                    "label": "Steps",
+                    "type": "REPEATABLE",
+                    "min": 1,
+                    "max": 6,
+                    "itemLabel": "Step",
+                    "itemFields": [
+                        {"name": "title", "label": "Title", "type": "SINGLE_LINE", "required": True},
+                        {"name": "text", "label": "Text", "type": "MULTI_LINE"},
+                    ],
+                },
+            ],
+        },
+    )
+    module = discover_local_modules(root, load_workspace(root))[0]
+    types = render_module_types(module)
+
+    assert "steps: Array<{ title: string; text: string | null }>;" in types
+
+
 def test_codegen_runs_during_validation(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     _write_module(
@@ -306,6 +357,252 @@ def test_a_manifest_that_is_not_a_literal_is_rejected(tmp_path: Path) -> None:
     )
 
     assert any("plain literal" in error for error in _errors(root))
+
+
+def test_manifest_can_import_a_shared_field(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    modules = root / "src" / "app" / "modules"
+    modules.mkdir(parents=True, exist_ok=True)
+    (modules / "settings.ts").write_text(
+        """
+import type { ModuleField } from '@caraer/cms-runtime';
+
+export const widthField = {
+  name: 'width',
+  label: 'Width',
+  type: 'SINGLE_SELECT',
+  required: true,
+  defaultValue: 'max',
+  options: [
+    { name: 'max', label: 'Max width' },
+    { name: '1100px', label: '1100px' },
+  ],
+} satisfies ModuleField;
+
+export function containerMaxWidth(width: string | null | undefined): string {
+  return width === '1100px' ? '1100px' : 'var(--caraer-container-max-width)';
+}
+""",
+        encoding="utf-8",
+    )
+    (modules / "hero").mkdir()
+    (modules / "hero" / "index.astro").write_text(
+        """---
+import type { ModuleManifest } from '@caraer/cms-runtime';
+import { widthField, containerMaxWidth } from '../settings';
+
+export const manifest = {
+  name: 'hero',
+  label: 'Hero',
+  kind: 'section',
+  category: 'hero',
+  fields: [widthField],
+} satisfies ModuleManifest;
+---
+<div style={`max-width: ${containerMaxWidth('max')}`} />
+""",
+        encoding="utf-8",
+    )
+
+    module = discover_local_modules(root, load_workspace(root))[0]
+    assert module.fields == [
+        {
+            "name": "width",
+            "label": "Width",
+            "type": "SINGLE_SELECT",
+            "required": True,
+            "defaultValue": "max",
+            "options": [
+                {"name": "max", "label": "Max width"},
+                {"name": "1100px", "label": "1100px"},
+            ],
+        }
+    ]
+    assert _errors(root) == []
+
+
+def test_manifest_can_reuse_string_consts_from_a_fields_file(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    modules = root / "src" / "app" / "modules"
+    directory = modules / "steps"
+    directory.mkdir(parents=True)
+    (directory / "fields.ts").write_text(
+        """
+import type { ModuleField } from '@caraer/cms-runtime';
+
+export const CARD_STYLE_PROCESS = "process";
+export const CARD_STYLE_STATUS = "status";
+
+export const cardStyleField = {
+  name: "card_style",
+  label: "Card style",
+  type: "SINGLE_SELECT",
+  required: true,
+  defaultValue: CARD_STYLE_PROCESS,
+  options: [
+    { name: CARD_STYLE_PROCESS, label: "Process", helpText: "Plain cards." },
+    { name: CARD_STYLE_STATUS, label: "Status", helpText: "Badges." },
+  ],
+} satisfies ModuleField;
+""",
+        encoding="utf-8",
+    )
+    (directory / "index.astro").write_text(
+        """---
+import type { ModuleManifest } from '@caraer/cms-runtime';
+import { CARD_STYLE_PROCESS, cardStyleField } from './fields';
+
+export const manifest = {
+  name: 'steps',
+  label: 'Steps',
+  kind: 'section',
+  category: 'content',
+  fields: [
+    cardStyleField,
+    {
+      name: 'body',
+      label: 'Text',
+      type: 'MULTI_LINE',
+      visibleWhen: [
+        { field: 'card_style', operator: 'EQUALS', value: CARD_STYLE_PROCESS },
+      ],
+    },
+  ],
+} satisfies ModuleManifest;
+---
+<div />
+""",
+        encoding="utf-8",
+    )
+
+    module = discover_local_modules(root, load_workspace(root))[0]
+    assert module.fields[0]["defaultValue"] == "process"
+    assert module.fields[0]["options"][0]["name"] == "process"
+    assert module.fields[1]["visibleWhen"][0]["value"] == "process"
+    assert _errors(root) == []
+
+
+def test_manifest_can_spread_imported_field_groups(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    modules = root / "src" / "app" / "modules"
+    modules.mkdir(parents=True, exist_ok=True)
+    (modules / "settings.ts").write_text(
+        """
+export const backgroundTypeField = {
+  name: 'background_type',
+  label: 'Background',
+  type: 'SINGLE_SELECT',
+  required: true,
+  defaultValue: 'color',
+  options: [
+    { name: 'color', label: 'Color' },
+    { name: 'image', label: 'Image' },
+  ],
+};
+
+export const backgroundColorField = {
+  name: 'background_color',
+  label: 'Background color',
+  type: 'SINGLE_SELECT',
+  options: [{ name: 'primary', label: 'Primary' }],
+  visibleWhen: [{ field: 'background_type', operator: 'EQUALS', value: 'color' }],
+};
+
+export const backgroundFields = [backgroundTypeField, backgroundColorField];
+""",
+        encoding="utf-8",
+    )
+    (modules / "hero").mkdir()
+    (modules / "hero" / "index.astro").write_text(
+        """---
+import type { ModuleManifest } from '@caraer/cms-runtime';
+import { backgroundFields } from '../settings';
+
+export const manifest = {
+  name: 'hero',
+  label: 'Hero',
+  kind: 'section',
+  category: 'hero',
+  fields: [...backgroundFields],
+} satisfies ModuleManifest;
+---
+<div />
+""",
+        encoding="utf-8",
+    )
+
+    module = discover_local_modules(root, load_workspace(root))[0]
+    assert [field["name"] for field in module.fields] == [
+        "background_type",
+        "background_color",
+    ]
+    assert _errors(root) == []
+
+
+def test_manifest_can_import_fields_that_reuse_colors_from_settings(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    modules = root / "src" / "app" / "modules"
+    modules.mkdir(parents=True, exist_ok=True)
+    (modules / "settings.ts").write_text(
+        """
+export const COLORS = [
+  { name: 'primary', label: 'Primary' },
+  { name: 'font', label: 'Font' },
+];
+""",
+        encoding="utf-8",
+    )
+    text = modules / "_text"
+    text.mkdir()
+    (text / "fields.ts").write_text(
+        """
+import { COLORS } from '../settings';
+
+export const headingColorField = {
+  name: 'heading_color',
+  label: 'Heading color',
+  type: 'SINGLE_SELECT',
+  defaultValue: 'font',
+  options: COLORS,
+};
+
+export const headingTextFields = [headingColorField];
+""",
+        encoding="utf-8",
+    )
+    (modules / "hero").mkdir()
+    (modules / "hero" / "index.astro").write_text(
+        """---
+import type { ModuleManifest } from '@caraer/cms-runtime';
+import { headingTextFields } from '../_text/fields';
+
+export const manifest = {
+  name: 'hero',
+  label: 'Hero',
+  kind: 'section',
+  category: 'hero',
+  fields: [...headingTextFields],
+} satisfies ModuleManifest;
+---
+<div />
+""",
+        encoding="utf-8",
+    )
+
+    module = discover_local_modules(root, load_workspace(root))[0]
+    assert module.fields == [
+        {
+            "name": "heading_color",
+            "label": "Heading color",
+            "type": "SINGLE_SELECT",
+            "defaultValue": "font",
+            "options": [
+                {"name": "primary", "label": "Primary"},
+                {"name": "font", "label": "Font"},
+            ],
+        }
+    ]
+    assert _errors(root) == []
 
 
 def test_a_module_without_a_manifest_says_what_is_missing(tmp_path: Path) -> None:

@@ -1591,6 +1591,9 @@ def _validate_module_fields(
                 "Use static 'options' instead.",
             )
 
+        if field_type == "REPEATABLE":
+            _validate_repeatable_field(item, name, rel_config, issues)
+
     for item in module.fields:
         for condition in item.get("visibleWhen") or []:
             if not isinstance(condition, dict):
@@ -1622,6 +1625,185 @@ def _validate_module_fields(
                     rel_config,
                     f"field '{name}' uses {operator}, which needs a list 'value'.",
                 )
+
+        if str(item.get("type") or "").strip().upper() != "REPEATABLE":
+            continue
+        nested = item.get("itemFields")
+        if not isinstance(nested, list):
+            continue
+        nested_names = set(field_names)
+        for child in nested:
+            if isinstance(child, dict):
+                child_name = str(child.get("name") or "").strip()
+                if child_name:
+                    nested_names.add(child_name)
+        parent_name = str(item.get("name") or "?")
+        for child in nested:
+            if not isinstance(child, dict):
+                continue
+            child_name = str(child.get("name") or "").strip() or "?"
+            for condition in child.get("visibleWhen") or []:
+                if not isinstance(condition, dict):
+                    continue
+                target = str(condition.get("field") or "").strip()
+                operator = str(condition.get("operator") or "").strip().upper()
+                scoped = f"{parent_name}.{child_name}"
+                if target and target not in nested_names:
+                    _issue(
+                        issues,
+                        "error",
+                        rel_config,
+                        f"field '{scoped}' has a visibleWhen on unknown field '{target}'.",
+                    )
+                if operator and operator not in CONDITION_OPERATORS:
+                    _issue(
+                        issues,
+                        "error",
+                        rel_config,
+                        f"field '{scoped}' has unknown visibleWhen operator '{operator}'.",
+                    )
+                if operator in LIST_CONDITION_OPERATORS and not isinstance(
+                    condition.get("value"), list
+                ):
+                    _issue(
+                        issues,
+                        "error",
+                        rel_config,
+                        f"field '{scoped}' uses {operator}, which needs a list 'value'.",
+                    )
+
+
+def _validate_repeatable_field(
+    item: dict,
+    name: str,
+    rel_config: str,
+    issues: list[ValidationIssue],
+) -> None:
+    """A REPEATABLE field is a paged list; authors set min/max and itemFields."""
+    nested = item.get("itemFields")
+    if not isinstance(nested, list) or not nested:
+        _issue(
+            issues,
+            "error",
+            rel_config,
+            f"field '{name}' is REPEATABLE and needs 'itemFields' — the schema "
+            "for one item. Set 'min' and 'max' so editors can add items without "
+            "a count dropdown.",
+        )
+        return
+
+    minimum = item.get("min", 0)
+    maximum = item.get("max", 20)
+    if not isinstance(minimum, int) or minimum < 0:
+        _issue(
+            issues,
+            "error",
+            rel_config,
+            f"field '{name}' min must be an integer of 0 or more.",
+        )
+        minimum = 0
+    if not isinstance(maximum, int) or maximum < 1:
+        _issue(
+            issues,
+            "error",
+            rel_config,
+            f"field '{name}' max must be an integer of 1 or more.",
+        )
+        maximum = 20
+    if maximum > 50:
+        _issue(
+            issues,
+            "error",
+            rel_config,
+            f"field '{name}' max cannot be more than 50.",
+        )
+    if maximum < minimum:
+        _issue(
+            issues,
+            "error",
+            rel_config,
+            f"field '{name}' max ({maximum}) is less than min ({minimum}).",
+        )
+
+    child_names: set[str] = set()
+    for child in nested:
+        if not isinstance(child, dict):
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}' has an itemFields entry that is not a field object.",
+            )
+            continue
+        child_name = str(child.get("name") or "").strip()
+        if not child_name:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}' has an itemFields entry missing 'name'.",
+            )
+            continue
+        if not SETTING_FIELD_NAME_RE.match(child_name):
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}.{child_name}' must be snake_case (a-z, 0-9, underscore).",
+            )
+        if child_name in child_names:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}' has duplicate itemFields name '{child_name}'.",
+            )
+        child_names.add(child_name)
+        if not str(child.get("label") or "").strip():
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}.{child_name}' is missing 'label'.",
+            )
+        child_type = str(child.get("type") or "").strip()
+        if not child_type:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}.{child_name}' is missing 'type'.",
+            )
+        elif child_type == "REPEATABLE":
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}.{child_name}' cannot be REPEATABLE. Nesting lists "
+                "is not supported; keep one itemFields level.",
+            )
+        elif child_type in DISALLOWED_MODULE_FIELD_TYPES:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}.{child_name}' uses {child_type}, which is not "
+                "available on modules.",
+            )
+        elif child_type not in MODULE_FIELD_TYPES:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}.{child_name}' has unknown type '{child_type}'.",
+            )
+        elif child_type in SELECT_FIELD_TYPES and not child.get("options"):
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}.{child_name}' is {child_type} and needs 'options'.",
+            )
 
 
 def _validate_module_frameworks(

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +14,7 @@ from caraer_cli.project.paths import (
     WORKSPACE_FILE,
     functions_dir,
     lifecycle_dir,
+    modules_dir,
     settings_dir,
     webhooks_dir,
     workspace_file,
@@ -319,8 +322,8 @@ node_modules/
 """
 
 #: Same compiler options as ``caraer-core``. Module scripts import npm
-#: packages (``three``, …); without this file the editor reports
-#: ``Cannot find module`` even after ``npm install``.
+#: packages listed in ``package.json``; without this file the editor
+#: reports ``Cannot find module`` even after ``npm install``.
 TSCONFIG_CONTENTS = """\
 {
   "compilerOptions": {
@@ -376,66 +379,93 @@ def ensure_gitignore(root: Path) -> Path | None:
     return path
 
 
-#: Same versions as ``caraer-core``. r185 ships no bundled types, so the
-#: editor reports ``Cannot find module 'three'`` unless both are present.
-THREE_DEPENDENCY = "^0.185.1"
-THREE_TYPES_DEPENDENCY = "^0.185.4"
+APP_DEV_SCRIPT = "caraer apps local dev"
 
 
-def ensure_package_json(root: Path, name: str) -> Path | None:
-    """Scaffold or backfill a root package.json for Node app projects.
+def ensure_dev_script(root: Path) -> bool:
+    """Make ``npm run dev`` / ``pnpm dev`` start functions and the CMS preview.
 
-    New files get scripts, ``@caraer/client``, and the ``three`` / ``@types/three``
-    pair caraer-core uses (r185 has no bundled types). Existing files only
-    receive the missing Three.js packages so older scaffolds type-check.
+    Existing ``scripts.dev`` values are left alone.
     """
     path = root / "package.json"
-    if not path.exists():
-        payload = {
-            "name": name,
-            "private": True,
-            "type": "module",
-            "scripts": {
-                "dev": "caraer apps local dev",
-                "validate": "caraer apps validate",
-                "push": "caraer apps push",
-                "deploy": "caraer apps push --deploy",
-                "logs": "caraer apps local logs --all",
-            },
-            "dependencies": {
-                "three": THREE_DEPENDENCY,
-            },
-            "devDependencies": {
-                "@caraer/client": "^2.0.366",
-                "@types/three": THREE_TYPES_DEPENDENCY,
-            },
-        }
-        path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-        return path
-    return path if _backfill_three_types(path) else None
-
-
-def _backfill_three_types(path: Path) -> bool:
+    if not path.is_file():
+        return False
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return False
     if not isinstance(payload, dict):
         return False
-    dependencies = payload.setdefault("dependencies", {})
-    dev_dependencies = payload.setdefault("devDependencies", {})
-    if not isinstance(dependencies, dict) or not isinstance(dev_dependencies, dict):
+    scripts = payload.setdefault("scripts", {})
+    if not isinstance(scripts, dict) or scripts.get("dev"):
         return False
-    changed = False
-    if "three" not in dependencies:
-        dependencies["three"] = THREE_DEPENDENCY
-        changed = True
-    if "@types/three" not in dev_dependencies:
-        dev_dependencies["@types/three"] = THREE_TYPES_DEPENDENCY
-        changed = True
-    if not changed:
-        return False
+    scripts["dev"] = APP_DEV_SCRIPT
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return True
+
+
+def ensure_package_json(root: Path, name: str) -> Path | None:
+    """Scaffold a root package.json for Node app projects.
+
+    New files get scripts, ``@caraer/client``, and the CMS module contract
+    packages. Existing files keep their dependencies; a missing ``dev``
+    script is filled in so ``npm run dev`` matches ``caraer apps local dev``.
+    """
+    path = root / "package.json"
+    if path.exists():
+        ensure_dev_script(root)
+        return None
+    payload = {
+        "name": name,
+        "private": True,
+        "type": "module",
+        "scripts": {
+            "dev": APP_DEV_SCRIPT,
+            "validate": "caraer apps validate",
+            "push": "caraer apps push",
+            "deploy": "caraer apps push",
+            "logs": "caraer apps local logs --all",
+        },
+        "dependencies": {
+            "@caraer/cms-runtime": "github:Caraer-HQ/caraer-cms-runtime#v0.1.1",
+            "@caraer/cms-tokens": "github:Caraer-HQ/caraer-cms-tokens#v0.1.1",
+        },
+        "devDependencies": {
+            "@caraer/client": "^2.0.366",
+        },
+    }
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+CMS_PACKAGES_INSTALLED = "Installed @caraer/cms-runtime and @caraer/cms-tokens"
+
+
+def install_npm_dependencies(root: Path) -> bool:
+    """Install the app's ``package.json`` so module imports resolve after init.
+
+    Returns True when ``npm install`` ran. ``apps init`` writes
+    ``@caraer/cms-runtime`` and ``@caraer/cms-tokens`` with the default CMS
+    module; the editor still reports missing packages until this has run.
+    """
+    if not (root / "package.json").is_file():
+        return False
+    npm = shutil.which("npm")
+    if not npm:
+        raise RuntimeError(
+            "npm is required to install @caraer/cms-runtime after apps init. "
+            "Install Node.js, then run `npm install` in the app directory."
+        )
+    result = subprocess.run(
+        [npm, "install"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "npm install failed").strip()
+        raise RuntimeError(detail[-2000:])
     return True
 
 
@@ -443,8 +473,8 @@ def ensure_tsconfig(root: Path) -> Path | None:
     """Write the CMS-module TypeScript project file used by caraer-core.
 
     Module entries import browser libraries from ``package.json``. The editor
-    only resolves those (and ``@types/*``) when a tsconfig sits at the app
-    root. Existing files are left alone.
+    only resolves those when a tsconfig sits at the app root. Existing files
+    are left alone.
     """
     path = root / "tsconfig.json"
     if path.exists():
@@ -462,6 +492,7 @@ def scaffold_app_project(
     project_uuid: str | None = None,
     src_dir: str = "src",
     sample_function: str | None = "hello-world",
+    sample_module: str | None = "hello_world",
     runtime: str = "nodejs22",
     platform_version: str = PLATFORM_VERSION,
     private_app: bool = False,
@@ -478,6 +509,7 @@ def scaffold_app_project(
             lifecycle/{install,uninstall,rotate,update}.json
             functions/on-{install,uninstall,rotate,update}/
             functions/<sample>/   (optional)
+            modules/<sample>/     (optional; default hello_world)
             webhooks/
     """
     project_root = resolve_project_root(root, create=True)
@@ -518,7 +550,7 @@ def scaffold_app_project(
     app_file = write_app_manifest(project_root, manifest_payload, src_dir=src_dir)
     ensure_gitignore(project_root)
     ensure_tsconfig(project_root)
-    if not str(runtime or "").startswith("python"):
+    if sample_module or not str(runtime or "").startswith("python"):
         ensure_package_json(project_root, name)
 
     lifecycle_hooks = scaffold_all_lifecycle_hooks(
@@ -545,15 +577,51 @@ def scaffold_app_project(
             force=force,
         )
 
+    module_folder = _scaffold_sample_module(
+        project_root, config, name=sample_module, force=force
+    )
+
     return {
         "root": project_root,
         "project_file": config_path,
         "app_file": app_file,
         "functions_dir": functions_dir(project_root, src_dir),
         "webhooks_dir": webhooks_dir(project_root, src_dir),
+        "modules_dir": modules_dir(project_root, src_dir),
         "lifecycle_dir": lifecycle_dir(project_root, src_dir),
         "lifecycle_hooks": lifecycle_hooks,
         "sample_function": function_folder,
         "sample_webhook": webhook_file,
+        "sample_module": module_folder,
         "config": config,
     }
+
+
+def _scaffold_sample_module(
+    root: Path,
+    config: ProjectConfig,
+    *,
+    name: str | None,
+    force: bool,
+) -> Path | None:
+    """Write the starter CMS module that ``apps add module`` would create."""
+    if not name:
+        return None
+
+    from caraer_cli.project.modules_codegen import write_module_types
+    from caraer_cli.project.modules_scaffold import scaffold_module
+    from caraer_cli.project.modules_sync import discover_local_modules
+
+    directory = scaffold_module(
+        root,
+        config,
+        name=name,
+        label="Hello world",
+        kind="section",
+        force=force,
+    )
+    for module in discover_local_modules(root, config):
+        if module.name == name:
+            write_module_types(module)
+            break
+    return directory
