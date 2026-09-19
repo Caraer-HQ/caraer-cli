@@ -20,6 +20,7 @@ def test_public_package_name() -> None:
 
 def test_private_package_adds_company_prefix() -> None:
     assert package_name("notice", private=True, company="sem") == "@caraer/sem_notice"
+    assert package_name("library_test", private=True, company="fcg") == "@caraer/fcg_library_test"
 
 
 def test_private_package_skips_existing_prefix() -> None:

@@ -8,6 +8,48 @@ from caraer_cli.commands.apps import build_public_app_placeholder
 from caraer_cli.project.scaffold import scaffold_app_project
 
 
+def test_selected_company_subdomain_from_name_when_settings_missing() -> None:
+    from caraer_cli.app_sync import _selected_company_subdomain
+    from caraer_cli.api.client import RequestContext
+
+    client = MagicMock()
+    client.context = RequestContext(
+        base_url="https://v2.api.caraer.com",
+        token="t",
+        company_uuid="2fd47cff-fed8-4ca3-a136-b651e79b8519",
+    )
+    client.request.side_effect = Exception("no website settings")
+    with patch(
+        "caraer_cli.api.auth.companies",
+        return_value={
+            "data": [
+                {
+                    "uuid": "2fd47cff-fed8-4ca3-a136-b651e79b8519",
+                    "name": "FCG",
+                }
+            ]
+        },
+    ):
+        assert _selected_company_subdomain(client) == "fcg"
+
+
+def test_selected_company_subdomain_prefers_explicit_field() -> None:
+    from caraer_cli.app_sync import _selected_company_subdomain
+    from caraer_cli.api.client import RequestContext
+
+    client = MagicMock()
+    client.context = RequestContext(
+        base_url="https://v2.api.caraer.com",
+        token="t",
+        company_uuid="company-1",
+    )
+    with patch(
+        "caraer_cli.api.auth.companies",
+        return_value={"data": [{"uuid": "company-1", "name": "Caraer Development", "subdomain": "caraer-development"}]},
+    ):
+        assert _selected_company_subdomain(client) == "caraer-development"
+
+
 def test_canonicalize_app_uuid_resolves_name() -> None:
     client = MagicMock()
     client_response = {"data": {"uuid": "f66e0650-26ab-4bd0-942f-10e0c52a6ff8", "name": "demo"}}

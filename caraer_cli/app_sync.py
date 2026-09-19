@@ -785,28 +785,72 @@ def push_cms_modules(
     return summary
 
 
+def _slug_company_subdomain(name: str | None) -> str | None:
+    """Turn a company display name into the subdomain slug used in package names."""
+    if not isinstance(name, str) or not name.strip():
+        return None
+    slug = "".join(
+        ch if ch.isalnum() or ch == "-" else ""
+        for ch in name.strip().lower().replace(" ", "-")
+    )
+    return slug or None
+
+
+def _explicit_company_subdomain(company: dict[str, Any]) -> str | None:
+    settings = company.get("websiteSettings")
+    settings = settings if isinstance(settings, dict) else {}
+    for value in (
+        company.get("subdomain"),
+        company.get("subdomainName"),
+        settings.get("subdomain"),
+    ):
+        if isinstance(value, str) and value.strip():
+            return value.strip().lower()
+    return None
+
+
 def _selected_company_subdomain(client) -> str | None:
-    """Subdomain of the company selected on the CLI profile, if any."""
+    """Subdomain of the company selected on the CLI profile, if any.
+
+    ``/auth/companies`` often omits ``websiteSettings``. Fall back to
+    ``GET /company`` and finally the company name (``FCG`` → ``fcg``) so
+    private module packages still publish as ``@caraer/<subdomain>_<app>``.
+    """
     from caraer_cli.api import auth as auth_api
 
     company_uuid = getattr(getattr(client, "context", None), "company_uuid", None)
     if not company_uuid:
         return None
+
+    company: dict[str, Any] | None = None
     try:
         response = auth_api.companies(client)
     except Exception:  # noqa: BLE001
-        return None
+        response = {}
     companies = response.get("data")
-    if not isinstance(companies, list):
-        return None
-    for company in companies:
-        if not isinstance(company, dict) or company.get("uuid") != company_uuid:
+    if isinstance(companies, list):
+        for item in companies:
+            if isinstance(item, dict) and item.get("uuid") == company_uuid:
+                company = item
+                break
+    found = _explicit_company_subdomain(company) if company else None
+    if found:
+        return found
+
+    for path in ("/api/v2/company/", f"/api/v2/company/{company_uuid}"):
+        try:
+            payload = client.request("GET", path).get("data")
+        except Exception:  # noqa: BLE001
             continue
-        settings = company.get("websiteSettings") or {}
-        subdomain = settings.get("subdomain")
-        if isinstance(subdomain, str) and subdomain.strip():
-            return subdomain.strip().lower()
-    return None
+        if not isinstance(payload, dict):
+            continue
+        if company is None:
+            company = payload
+        found = _explicit_company_subdomain(payload)
+        if found:
+            return found
+
+    return _slug_company_subdomain(company.get("name") if company else None)
 
 
 def _resolved_build_version(

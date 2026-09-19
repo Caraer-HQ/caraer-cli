@@ -731,12 +731,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return SAMPLE_FORM(form);
   };
 
-  context.locals.listRecords = async ({ object, limit = 6, offset, orderBy, filter }) =>
+  context.locals.listRecords = async (query) =>
     (await live(
       '/records',
-      { method: 'POST', body: JSON.stringify({ object, limit, offset, orderBy, filter }) },
+      { method: 'POST', body: JSON.stringify({ limit: 6, ...query }) },
       activeSubdomain,
-    )) ?? sampleRecords(object, limit);
+    )) ?? sampleRecords(query.object, query.limit ?? 6);
 
   return next();
 });
