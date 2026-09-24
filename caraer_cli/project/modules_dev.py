@@ -452,6 +452,8 @@ const toCaraerForm = (form) => {
         const property = cell.property;
         if (!property?.name || cell.settings?.hidden) continue;
         const format = property.format;
+        const formatName = typeof format === 'string' ? format : text(format?.name);
+        const normalizedFormat = (formatName ?? '').toLowerCase().replace(/_/g, '-');
         const options = (property.options ?? [])
           .map((option) => {
             const name = text(option.name);
@@ -462,8 +464,8 @@ const toCaraerForm = (form) => {
           uuid: text(property.uuid) ?? property.name,
           name: property.name,
           label: text(cell.settings?.label) ?? text(property.label) ?? property.name,
-          type: text(property.type) ?? 'string',
-          format: typeof format === 'string' ? format : text(format?.name),
+          type: normalizedFormat === 'multi-line' ? 'TEXT_AREA' : (text(property.type) ?? 'string'),
+          format: formatName,
           required: Boolean(cell.settings?.isRequired),
           placeholder: text(cell.settings?.placeholder),
           helpText: text(cell.settings?.helpText),
