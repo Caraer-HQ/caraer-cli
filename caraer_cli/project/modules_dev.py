@@ -434,6 +434,10 @@ const SAMPLE_FORM = (form) => ({
         { uuid: '1', name: 'name', label: 'Naam', type: 'STRING', required: true },
         { uuid: '2', name: 'email', label: 'E-mail', type: 'STRING', format: 'EMAIL', required: true },
       ],
+      rows: [[
+        { uuid: '1', name: 'name', label: 'Naam', type: 'STRING', required: true },
+        { uuid: '2', name: 'email', label: 'E-mail', type: 'STRING', format: 'EMAIL', required: true },
+      ]],
     },
   ],
 });
@@ -445,35 +449,41 @@ const SAMPLE_FORMS = [
 const text = (value) => (typeof value === 'string' && value.trim() ? value : null);
 
 const toCaraerForm = (form) => {
-  const fieldsOf = (step) => {
-    const fields = [];
+  const fieldOf = (cell) => {
+    const property = cell.property;
+    if (!property?.name || cell.settings?.hidden) return null;
+    const format = property.format;
+    const formatName = typeof format === 'string' ? format : text(format?.name);
+    const normalizedFormat = (formatName ?? '').toLowerCase().replace(/_/g, '-');
+    const options = (property.options ?? [])
+      .map((option) => {
+        const name = text(option.name);
+        return name ? { name, label: text(option.label) ?? name } : null;
+      })
+      .filter(Boolean);
+    return {
+      uuid: text(property.uuid) ?? property.name,
+      name: property.name,
+      label: text(cell.settings?.label) ?? text(property.label) ?? property.name,
+      type: normalizedFormat === 'multi-line' ? 'TEXT_AREA' : (text(property.type) ?? 'string'),
+      format: formatName,
+      required: Boolean(cell.settings?.isRequired),
+      placeholder: text(cell.settings?.placeholder),
+      helpText: text(cell.settings?.helpText),
+      options: options.length > 0 ? options : undefined,
+    };
+  };
+  const rowsOf = (step) => {
+    const rows = [];
     for (const row of step.grid ?? []) {
+      const fields = [];
       for (const cell of row ?? []) {
-        const property = cell.property;
-        if (!property?.name || cell.settings?.hidden) continue;
-        const format = property.format;
-        const formatName = typeof format === 'string' ? format : text(format?.name);
-        const normalizedFormat = (formatName ?? '').toLowerCase().replace(/_/g, '-');
-        const options = (property.options ?? [])
-          .map((option) => {
-            const name = text(option.name);
-            return name ? { name, label: text(option.label) ?? name } : null;
-          })
-          .filter(Boolean);
-        fields.push({
-          uuid: text(property.uuid) ?? property.name,
-          name: property.name,
-          label: text(cell.settings?.label) ?? text(property.label) ?? property.name,
-          type: normalizedFormat === 'multi-line' ? 'TEXT_AREA' : (text(property.type) ?? 'string'),
-          format: formatName,
-          required: Boolean(cell.settings?.isRequired),
-          placeholder: text(cell.settings?.placeholder),
-          helpText: text(cell.settings?.helpText),
-          options: options.length > 0 ? options : undefined,
-        });
+        const field = fieldOf(cell);
+        if (field) fields.push(field);
       }
+      if (fields.length > 0) rows.push(fields);
     }
-    return fields;
+    return rows;
   };
   let submitLabel = null;
   for (const step of form.grids ?? []) {
@@ -492,7 +502,8 @@ const toCaraerForm = (form) => {
     steps: (form.grids ?? []).map((step) => ({
       title: text(step.title),
       description: text(step.description),
-      fields: fieldsOf(step),
+      fields: rowsOf(step).flat(),
+      rows: rowsOf(step),
     })),
     submitLabel,
     thankYouMessage: text(form.thankYouMessage),
