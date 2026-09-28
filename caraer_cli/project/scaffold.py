@@ -335,7 +335,7 @@ TSCONFIG_CONTENTS = """\
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*"]
 }
 """
 
