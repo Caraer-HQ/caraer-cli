@@ -433,7 +433,11 @@ def run_public_app_wizard(
 
     Returns the path to ``src/app/app.caraer.yaml`` inside the new app folder.
     """
-    from caraer_cli.project.scaffold import scaffold_app_project
+    from caraer_cli.project.scaffold import (
+        CMS_PACKAGES_INSTALLED,
+        install_npm_dependencies,
+        scaffold_app_project,
+    )
 
     console.print(Panel.fit("Create App Wizard", border_style="magenta"))
 
@@ -533,6 +537,12 @@ def run_public_app_wizard(
         private_app=private,
         force=True,
     )
+    if result.get("sample_module"):
+        try:
+            if install_npm_dependencies(result["root"]):
+                console.print(f"[green]{CMS_PACKAGES_INSTALLED}[/green]")
+        except RuntimeError as exc:
+            console.print(f"[yellow]Could not install CMS module packages: {exc}[/yellow]")
     app_file: Path = result["app_file"]
     console.print()
     console.print(f"[green]Created app at {result['root']}[/green]")

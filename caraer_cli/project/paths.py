@@ -11,6 +11,23 @@ STATE_DIR = ".caraer"
 STATE_FILE = "state.json"
 
 
+def app_file_unless_in_workspace(pinned: str | None) -> str | None:
+    """Drop the pinned app while standing inside an app workspace.
+
+    The pin lets commands run from anywhere. It is not a preference for that
+    app over the one you are inside, so the directory wins whenever there is
+    one: scaffolding a module into a different app than the folder you are in
+    is never what you meant.
+
+    Returning ``None`` leaves the caller resolving from the current directory.
+    """
+    try:
+        find_project_root()
+    except FileNotFoundError:
+        return pinned
+    return None
+
+
 def find_project_root(start: Path | None = None) -> Path:
     """Locate the app workspace root (caraer.json or legacy caraer.project.json)."""
     current = (start or Path.cwd()).resolve()
@@ -84,6 +101,17 @@ def app_bars_dir(root: Path, src_dir: str = "src") -> Path:
 
 def lifecycle_dir(root: Path, src_dir: str = "src") -> Path:
     return app_dir(root, src_dir) / "lifecycle"
+
+
+def modules_dir(root: Path, src_dir: str = "src") -> Path:
+    """CMS v2 modules shipped by this app.
+
+    Each subdirectory is one module: ``index.astro`` plus
+    its ``export const manifest``. Unlike functions, modules are not executed by the
+    app runtime; they are published to the Caraer npm registry and compiled
+    into each installing company's website build.
+    """
+    return app_dir(root, src_dir) / "modules"
 
 
 def shared_dir(root: Path, src_dir: str = "src") -> Path:

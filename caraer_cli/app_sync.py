@@ -16,6 +16,7 @@ from caraer_cli.apps_local import (
 from caraer_cli.errors import ApiError
 from caraer_cli.local_app import load_local_app, resolve_app_file_path
 from caraer_cli.project.paths import (
+    app_file_unless_in_workspace,
     app_manifest_path,
     find_project_root,
     workspace_file,
@@ -63,6 +64,23 @@ def resolve_app_root(
         except FileNotFoundError:
             return path.parent
     return find_project_root(start)
+
+
+def resolve_local_app_root(
+    *,
+    app_file: str | Path | None = None,
+    profile_app_file: str | Path | None = None,
+) -> Path:
+    """Resolve the app root for local commands.
+
+    Precedence: an explicit ``--file``, then the workspace containing the
+    current directory, then the profile's pinned app. See
+    :func:`app_file_unless_in_workspace` for why the directory outranks the pin.
+    """
+    if app_file:
+        return resolve_app_root(app_file=app_file)
+
+    return resolve_app_root(app_file=app_file_unless_in_workspace(profile_app_file))
 
 
 def _canonicalize_app_uuid(client: CaraerApiClient, app_ref: str) -> str:
@@ -663,6 +681,15 @@ def push_app(
             config,
             delete_missing=delete_missing,
         )
+
+    modules_result = push_cms_modules(
+        client,
+        root,
+        config,
+        functions_result=functions_result,
+        version=version,
+    )
+
     return {
         "appUuid": config.appUuid,
         "manifest": {
@@ -675,8 +702,168 @@ def push_app(
         "schedules": schedules_result,
         "inbound": inbound_result,
         "externalOAuthProviders": oauth_result,
+        "cmsModules": modules_result,
         "serverReconcile": server_reconciled,
     }
+
+
+def push_cms_modules(
+    client: CaraerApiClient,
+    root: Path,
+    config: ProjectConfig,
+    *,
+    functions_result: dict[str, Any] | None = None,
+    version: str | None = None,
+) -> dict[str, Any]:
+    """Publish CMS modules to the registry and register the catalog.
+
+    Modules travel outside the build archive: the archive feeds the app
+    runtime, whereas modules are compiled into each installing company's
+    website build, which resolves them with `pnpm install`.
+    """
+    from caraer_cli.api import modules as modules_api
+    from caraer_cli.formatters.output import print_success, print_warning
+    from caraer_cli.project.modules_publish import publish_modules
+    from caraer_cli.project.modules_sync import discover_local_modules
+
+    modules = [m for m in discover_local_modules(root, config) if m.config and m.entry.is_file()]
+    if not modules:
+        return {"modules": 0}
+
+    app_name = (config.name or "").strip()
+    if not app_name:
+        return {"modules": len(modules), "published": False, "reason": "App has no name."}
+
+    # Modules version in lockstep with the app build, so a company that pins an
+    # app version gets exactly the modules that shipped with it.
+    resolved_version = version or _resolved_build_version(functions_result, root)
+    if not resolved_version:
+        return {
+            "modules": len(modules),
+            "published": False,
+            "reason": "No build version available to publish modules against.",
+        }
+
+    print_success(f"Publishing {len(modules)} CMS module(s) at v{resolved_version}…")
+    summary = publish_modules(
+        root,
+        config,
+        app_name=app_name,
+        version=resolved_version,
+        private=bool(config.privateApp),
+        company=_selected_company_subdomain(client),
+        client=client,
+    )
+
+    if not summary.get("published"):
+        print_warning(f"Modules not published: {summary.get('reason') or summary.get('error')}")
+        return summary
+
+    if summary.get("via") == "api":
+        print_success("Published CMS modules through Caraer.")
+        return summary
+
+    if config.appUuid:
+        try:
+            modules_api.publish_module_catalog(
+                client,
+                config.appUuid,
+                {
+                    "package": summary["package"],
+                    "version": resolved_version,
+                    "modules": summary["modules"],
+                },
+            )
+            print_success("Registered CMS module catalog.")
+            summary["catalog"] = True
+        except Exception as exc:  # noqa: BLE001
+            # A catalog failure must not fail the whole push: the package is
+            # already published and re-registering is idempotent.
+            print_warning(f"Could not register module catalog: {exc}")
+            summary["catalog"] = False
+
+    return summary
+
+
+def _slug_company_subdomain(name: str | None) -> str | None:
+    """Turn a company display name into the subdomain slug used in package names."""
+    if not isinstance(name, str) or not name.strip():
+        return None
+    slug = "".join(
+        ch if ch.isalnum() or ch == "-" else ""
+        for ch in name.strip().lower().replace(" ", "-")
+    )
+    return slug or None
+
+
+def _explicit_company_subdomain(company: dict[str, Any]) -> str | None:
+    settings = company.get("websiteSettings")
+    settings = settings if isinstance(settings, dict) else {}
+    for value in (
+        company.get("subdomain"),
+        company.get("subdomainName"),
+        settings.get("subdomain"),
+    ):
+        if isinstance(value, str) and value.strip():
+            return value.strip().lower()
+    return None
+
+
+def _selected_company_subdomain(client) -> str | None:
+    """Subdomain of the company selected on the CLI profile, if any.
+
+    ``/auth/companies`` often omits ``websiteSettings``. Fall back to
+    ``GET /company`` and finally the company name (``FCG`` → ``fcg``) so
+    private module packages still publish as ``@caraer/<subdomain>_<app>``.
+    """
+    from caraer_cli.api import auth as auth_api
+
+    company_uuid = getattr(getattr(client, "context", None), "company_uuid", None)
+    if not company_uuid:
+        return None
+
+    company: dict[str, Any] | None = None
+    try:
+        response = auth_api.companies(client)
+    except Exception:  # noqa: BLE001
+        response = {}
+    companies = response.get("data")
+    if isinstance(companies, list):
+        for item in companies:
+            if isinstance(item, dict) and item.get("uuid") == company_uuid:
+                company = item
+                break
+    found = _explicit_company_subdomain(company) if company else None
+    if found:
+        return found
+
+    for path in ("/api/v2/company/", f"/api/v2/company/{company_uuid}"):
+        try:
+            payload = client.request("GET", path).get("data")
+        except Exception:  # noqa: BLE001
+            continue
+        if not isinstance(payload, dict):
+            continue
+        if company is None:
+            company = payload
+        found = _explicit_company_subdomain(payload)
+        if found:
+            return found
+
+    return _slug_company_subdomain(company.get("name") if company else None)
+
+
+def _resolved_build_version(
+    functions_result: dict[str, Any] | None,
+    root: Path,
+) -> str | None:
+    if isinstance(functions_result, dict):
+        build = functions_result.get("build")
+        if isinstance(build, dict) and build.get("version"):
+            return str(build["version"])
+    state = load_state(root)
+    value = state.get("lastBuildVersion")
+    return str(value) if value else None
 
 
 def pull_app_full(

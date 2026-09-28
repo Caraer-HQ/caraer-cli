@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from caraer_cli.commands.skill import install_skill, resolve_skill_source
+from caraer_cli.commands.skill import (
+    install_all_skills,
+    install_skill,
+    resolve_skill_source,
+)
 
 
 def test_resolve_skill_source_from_repo() -> None:
@@ -15,11 +19,28 @@ def test_resolve_skill_source_from_repo() -> None:
     assert "caraer apps validate" in text
 
 
+def test_resolve_cms_skill_source_from_repo() -> None:
+    source = resolve_skill_source("caraer-cms")
+    assert source.is_dir()
+    assert (source / "SKILL.md").is_file()
+    text = (source / "SKILL.md").read_text(encoding="utf-8")
+    assert "name: caraer-cms" in text
+    assert "cmsVersion" in text
+
+
 def test_install_skill_user(tmp_path: Path) -> None:
     dest = install_skill(target_root=tmp_path / "skills", force=False)
     assert dest == tmp_path / "skills" / "caraer-apps"
     assert (dest / "SKILL.md").is_file()
     assert (dest / "reference.md").is_file()
+
+
+def test_install_all_skills(tmp_path: Path) -> None:
+    installed = install_all_skills(target_root=tmp_path / "skills", force=False)
+    names = {path.name for path in installed}
+    assert names == {"caraer-apps", "caraer-cms"}
+    for dest in installed:
+        assert (dest / "SKILL.md").is_file()
 
 
 def test_install_skill_force_replaces(tmp_path: Path) -> None:

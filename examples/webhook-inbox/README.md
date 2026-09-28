@@ -29,8 +29,7 @@ cd examples/webhook-inbox
 caraer auth login
 caraer company select <company-uuid>
 caraer apps select .
-caraer apps push --deploy
-caraer apps install
+caraer apps push
 ```
 
 Set a `sharedSecret` on the inbound route (CLI warns until you do), then:

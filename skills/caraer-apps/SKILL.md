@@ -45,8 +45,7 @@ cd my_app
 # edit src/app/app.caraer.yaml + functions
 caraer apps validate
 caraer apps push --dry-run
-caraer apps push --deploy
-caraer apps install
+caraer apps push
 caraer apps status
 caraer apps local logs --follow
 ```
@@ -62,10 +61,13 @@ caraer apps local test --function <name> --sample-only
 
 ```text
 caraer.json
-package.json                # npm-style scripts (dev/validate/push/deploy); Node adds @caraer/client
+package.json                # npm/pnpm `dev` = caraer apps local dev (functions + CMS)
+tsconfig.json               # resolves module npm imports from package.json
 src/app/
   app.caraer.yaml           # identity, auth, brandmark, logo, settings, OAuth
   functions/<name>/         # index.js|main.py (function.caraer.json optional)
+  modules/<name>/           # CMS module (index.astro + types.d.ts); init writes hello_world
+  modules/settings.ts       # optional shared module fields (import into manifests)
   shared/                   # code shared by all functions (require "../../shared/...")
   settings/*.json           # modular settingsSchema fields
   settings-sections/*.json  # optional installer cards (title, subtitle, field names)
@@ -106,7 +108,7 @@ App progress:
 - [ ] Add/edit functions (shared helpers in `src/app/shared/`)
 - [ ] Wire inbound / schedule / webhook / lifecycle
 - [ ] `caraer apps validate` → fix until 0 errors
-- [ ] `caraer apps push --dry-run` then `--deploy` when user asks
+- [ ] `caraer apps push --dry-run` then `caraer apps push` when user asks
 ```
 
 ### Clarify before coding
@@ -172,7 +174,7 @@ Installation settings are for **admins installing the app**, not developers.
 - The pushed build archive is the source of truth for V2 runtimes: the
   platform keeps function metadata only, not code. Editing function code in
   the Caraer UI is rejected for build-deployed apps — always change code
-  locally and `caraer apps push --deploy`.
+  locally and `caraer apps push`.
 
 ### Scaffolding commands
 
@@ -184,6 +186,7 @@ Installation settings are for **admins installing the app**, not developers.
 | Schedule | `caraer apps add schedule` (wizard prompts for cron presets / custom) |
 | Webhook | `caraer apps add webhook` |
 | Setting | `caraer apps add setting` (YAML by default; `--modular` → `settings/`) |
+| CMS module | `caraer apps add module` (Astro + `module.caraer.json` fields) |
 | Lifecycle | `caraer apps add lifecycle-hook` |
 
 ### Validate loop

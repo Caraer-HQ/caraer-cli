@@ -7,7 +7,12 @@ import typer
 from caraer_cli.completion_callbacks import complete_local_function
 from caraer_cli.commands.deprecation import register_deprecated_leaf_alias
 from caraer_cli.context import AppContext
-from caraer_cli.formatters.output import print_data, print_logs, print_success
+from caraer_cli.formatters.output import (
+    print_data,
+    print_logs,
+    print_success,
+    print_warning,
+)
 
 local_app = typer.Typer(help="Local development and remote diagnostics.", no_args_is_help=True)
 
@@ -65,7 +70,7 @@ def test_function_cmd(
     from caraer_cli.project.sync import resolve_local_function_name
 
     app_ctx: AppContext = ctx.obj
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
     if not config.appUuid:
         raise ValueError("App has no remote UUID. Run 'caraer apps select' or 'caraer apps push'.")
@@ -143,7 +148,7 @@ def app_logs(
     from caraer_cli.project.sync import resolve_local_function_name
 
     app_ctx: AppContext = ctx.obj
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
     if not config.appUuid:
         raise ValueError("App has no remote UUID. Run 'caraer apps select' or 'caraer apps push'.")
@@ -226,50 +231,217 @@ def app_dev(
         help="Optional: serve only this local function (default: all local functions).",
         autocompletion=complete_local_function,
     ),
-    port: int = typer.Option(8787, "--port"),
+    port: int = typer.Option(8787, "--port", help="Port for the serverless function server."),
+    cms_port: int = typer.Option(4321, "--cms-port", help="Port for the CMS module preview."),
     host: str = typer.Option("127.0.0.1", "--host"),
     invoke_schedule: str | None = typer.Option(
         None,
         "--invoke-schedule",
         help="Fire a local schedule's payloadTemplate at its function, then exit.",
     ),
+    file: str | None = typer.Option(
+        None,
+        "--file",
+        "-F",
+        help="Explicit path to app.caraer.yaml. Defaults to the app you are standing in.",
+    ),
+    functions: bool = typer.Option(
+        True,
+        "--functions/--no-functions",
+        help="Serve this app's serverless functions.",
+    ),
+    cms: bool = typer.Option(
+        True,
+        "--cms/--no-cms",
+        help="Serve this app's CMS module preview.",
+    ),
+    company: str | None = typer.Option(
+        None,
+        "--company",
+        help="Company subdomain to select on start. You can also switch companies in the preview.",
+    ),
+    record_object: str | None = typer.Option(
+        None,
+        "--record",
+        help="Object name whose first record binds PROPERTY_* fields. Needs a selected company.",
+    ),
+    install: bool = typer.Option(
+        False,
+        "--install",
+        help="Reinstall the CMS preview dependencies before starting.",
+    ),
 ) -> None:
-    """Run a local HTTP server matching the V2 container contract.
+    """Run this app locally: serverless functions and the CMS module preview.
 
-    Invoke via POST /functions/<name> (canonical), POST /<name>, header
-    X-Caraer-Function, or body.functionName. Also emulates installation
-    state/secrets/jobs and POST /inbound/<routeName>.
+    Both start when the app has both. Functions are served on a local HTTP
+    server matching the V2 container contract, invoked via POST
+    /functions/<name> (canonical), POST /<name>, header X-Caraer-Function, or
+    body.functionName, with the installation state/secrets/jobs shim and POST
+    /inbound/<routeName>.
+
+    The CMS preview renders this app's modules with an editable field sidebar,
+    so you see what a content editor gets without a company or a deployed build.
     """
-    from caraer_cli.app_sync import resolve_app_root
+    from caraer_cli.app_sync import resolve_local_app_root
     from caraer_cli.project.local_dev import serve_functions
+    from caraer_cli.project.modules_dev import start_harness
     from caraer_cli.project.schema import load_workspace
     from caraer_cli.project.sync import list_local_function_names, resolve_local_function_name
 
-    root = resolve_app_root(app_file=ctx.obj.profile.app_file)
+    root = resolve_local_app_root(
+        app_file=file,
+        profile_app_file=ctx.obj.profile.app_file,
+    )
     config = load_workspace(root)
+    print_success(f"App: {config.name or root.name} ({root})")
+
     if function:
         names = [resolve_local_function_name(root, config, function, interactive=False)]
     else:
-        names = list_local_function_names(root, config)
-        if not names:
-            raise ValueError(
-                "No local functions found under src/app/functions/. "
-                "Add a function folder first."
-            )
-    base = f"http://{host}:{port}"
+        names = list_local_function_names(root, config) if functions else []
+
+    # A one-shot schedule run is a function invocation, so there is nothing for
+    # the CMS preview to do alongside it.
     if invoke_schedule:
-        print_success(f"Invoking schedule '{invoke_schedule}'…")
-    else:
-        print_success(f"Starting local dev server on {base}")
-        for name in names:
-            print_success(f"  POST {base}/functions/{name}")
-        print_success(f"  installation shim: {base}/api/v2/apps/<uuid>/installation/…")
-        print_success(f"  inbound: POST {base}/inbound/<routeName>")
-    serve_functions(
+        cms = False
+
+    harness = _prepare_cms_harness(root, config, ctx.obj, install=install) if cms else None
+
+    if not names and harness is None:
+        raise ValueError(
+            f"Nothing to run for '{config.name or root.name}'.\n"
+            f"No functions under {root / config.srcDir / 'app' / 'functions'} "
+            f"and no modules under {root / config.srcDir / 'app' / 'modules'}.\n"
+            "Add one with 'caraer apps add function <name>' or "
+            "'caraer apps add module <name>'."
+        )
+
+    harness_process = None
+    company_api = None
+    if harness is not None:
+        from caraer_cli.project.modules_dev_api import start_company_api
+        from caraer_cli.project.modules_dev import fetch_companies, fetch_form, fetch_forms
+
+        # Served from memory for the life of the preview rather than written
+        # into the checkout: this is customer branding, not build output.
+        app_ctx = ctx.obj
+
+        def _forms_for_company(company_uuid: str) -> list:
+            if not app_ctx.token:
+                return []
+            return fetch_forms(app_ctx.api_client(), company_uuid)
+
+        def _form_for_company(company_uuid: str, form_ref: str):
+            if not app_ctx.token:
+                return None
+            return fetch_form(app_ctx.api_client(), company_uuid, form_ref)
+
+        company_api = start_company_api(
+            lambda: fetch_companies(app_ctx.api_client()) if app_ctx.token else [],
+            fetch_forms=_forms_for_company,
+            fetch_form=_form_for_company,
+        )
+
+        harness_env: dict[str, str] = {
+            "CARAER_API_BASE_URL": ctx.obj.profile.base_url,
+            "CARAER_HARNESS_API": company_api.url,
+            "CARAER_HARNESS_TOKEN": company_api.token,
+        }
+        if company:
+            harness_env["CARAER_SUBDOMAIN"] = company
+            if record_object:
+                harness_env["CARAER_RECORD_OBJECT"] = record_object
+            print_success(
+                f"Previewing against '{company}' via {ctx.obj.profile.base_url}"
+                + (f", records from '{record_object}'" if record_object else "")
+            )
+        elif record_object:
+            print_warning("--record needs --company; falling back to sample data.")
+
+        harness_process = start_harness(
+            harness, port=cms_port, host=host, env=harness_env
+        )
+        print_success(f"CMS preview:  http://{host}:{cms_port}")
+
+    try:
+        if not names:
+            # Only the preview is running, so hold the foreground on it rather
+            # than returning and killing it.
+            harness_process.wait()
+            return
+
+        base = f"http://{host}:{port}"
+        if invoke_schedule:
+            print_success(f"Invoking schedule '{invoke_schedule}'…")
+        else:
+            print_success(f"Functions:    {base}")
+            for name in names:
+                print_success(f"  POST {base}/functions/{name}")
+            print_success(f"  installation shim: {base}/api/v2/apps/<uuid>/installation/…")
+            print_success(f"  inbound: POST {base}/inbound/<routeName>")
+
+        serve_functions(
+            root,
+            config,
+            host=host,
+            port=port,
+            function_names=names,
+            invoke_schedule=invoke_schedule,
+        )
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if harness_process is not None and harness_process.poll() is None:
+            harness_process.terminate()
+            try:
+                harness_process.wait(timeout=5)
+            except Exception:  # noqa: BLE001
+                harness_process.kill()
+        if company_api is not None:
+            company_api.shutdown()
+
+
+def _prepare_cms_harness(root, config, app_ctx, *, install: bool):
+    """Generate and install the CMS preview, or return None when there are none.
+
+    A missing modules directory is not an error: most apps ship only functions,
+    and 'caraer apps local dev' should still run them.
+    """
+    from caraer_cli.project.modules_dev import (
+        install_harness,
+        resolve_runtime_specs,
+        write_harness,
+    )
+    from caraer_cli.project.modules_sync import discover_local_modules
+
+    if not [m for m in discover_local_modules(root, config) if m.config and m.entry.is_file()]:
+        return None
+
+    # Prefers a local caraer-web checkout so the runtime and the modules can be
+    # developed together, and so this works before the packages are published.
+    runtime_spec, tokens_spec = resolve_runtime_specs(root)
+    if runtime_spec.startswith("file:"):
+        print_success(f"Using local runtime from {runtime_spec[5:]}")
+
+    if not app_ctx.token:
+        print_warning(
+            "Not signed in, so the preview offers sample data only. "
+            "Run 'caraer auth login' to style modules with real branding."
+        )
+
+    harness, modules = write_harness(
         root,
         config,
-        host=host,
-        port=port,
-        function_names=names,
-        invoke_schedule=invoke_schedule,
+        app_name=config.name or "app",
+        runtime_spec=runtime_spec,
+        tokens_spec=tokens_spec,
     )
+    for module in modules:
+        print_success(f"  module: {module.name} ({module.kind})")
+
+    code = install_harness(harness, force=install)
+    if code != 0:
+        raise ValueError(f"Could not install the CMS preview dependencies in {harness}.")
+
+    return harness
+

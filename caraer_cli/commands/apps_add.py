@@ -11,7 +11,7 @@ from caraer_cli.completion_callbacks import (
 )
 from caraer_cli.commands.deprecation import register_deprecated_leaf_alias
 from caraer_cli.context import AppContext
-from caraer_cli.formatters.output import print_success
+from caraer_cli.formatters.output import print_success, print_warning
 
 add_app = typer.Typer(help="Scaffold local app resources.", no_args_is_help=True)
 
@@ -23,6 +23,7 @@ _ADD_ALIASES = (
     ("inbound", "add-inbound"),
     ("setting", "add-setting"),
     ("lifecycle-hook", "add-lifecycle-hook"),
+    ("module", "add-module"),
 )
 
 
@@ -113,7 +114,7 @@ def add_function(
 
     app_ctx: AppContext = ctx.obj
     name = require_text(name, "Function name", flag="name")
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
     normalized = normalize_function_name(name)
     if not normalized:
@@ -167,7 +168,7 @@ def add_options_function(
 
     app_ctx: AppContext = ctx.obj
     name = require_text(name, "Options function name", flag="name")
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
     normalized = normalize_function_name(name)
     if not normalized:
@@ -236,7 +237,7 @@ def add_webhook(
 
     app_ctx: AppContext = ctx.obj
     topic = require_text(topic, "Webhook topic", flag="--topic")
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
     resolved_mode = mode.strip().upper()
     function_name = normalize_function_name(function) if function else None
@@ -308,7 +309,7 @@ def add_schedule(
     from caraer_cli.wizard.prompts import WizardCancelled
 
     app_ctx: AppContext = ctx.obj
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
     try:
         answers = prompt_schedule(
@@ -373,7 +374,7 @@ def add_inbound(
     function_name = normalize_function_name(
         require_text(function, "Function name", flag="--function")
     )
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
     base = inbound_dir(root, config.srcDir)
     base.mkdir(parents=True, exist_ok=True)
@@ -390,6 +391,95 @@ def add_inbound(
 
     dump_json_with_schema(path, payload, INBOUND_SCHEMA_URL)
     print_success(f"Created inbound scaffold at {path}")
+
+
+@add_app.command("module")
+def add_module(
+    ctx: typer.Context,
+    name: str | None = typer.Argument(None, help="Module name in snake_case (e.g. hero)."),
+    label: str | None = typer.Option(None, "--label", help="Name shown in the builder library."),
+    kind: str = typer.Option(
+        "section",
+        "--kind",
+        help="section (composes into a page), page (a whole page), header, footer, or cookie_banner.",
+    ),
+    framework: str | None = typer.Option(
+        None,
+        "--framework",
+        help="Scaffold an interactive island: react, preact, solid, svelte or vue.",
+    ),
+    force: bool = typer.Option(False, "--force", help="Overwrite an existing module."),
+) -> None:
+    """Scaffold a CMS module under src/app/modules/.
+
+    A module is an Astro component the website builder can place on a page. The
+    fields declared in the module's manifest become the inputs a content editor
+    sees, and arrive in the component as Astro.props.fields.
+    """
+    import re
+
+    from caraer_cli.app_sync import resolve_app_root
+    from caraer_cli.project.modules_codegen import write_module_types
+    from caraer_cli.project.modules_sync import (
+        MODULE_KINDS,
+        PINNED_FRAMEWORK_MAJORS,
+        discover_local_modules,
+    )
+    from caraer_cli.project.modules_scaffold import scaffold_module
+    from caraer_cli.project.scaffold import (
+        CMS_PACKAGES_INSTALLED,
+        ensure_package_json,
+        ensure_tsconfig,
+        install_npm_dependencies,
+    )
+    from caraer_cli.project.schema import load_workspace
+    from caraer_cli.wizard.prompts import require_text
+
+    app_ctx: AppContext = ctx.obj
+    raw_name = require_text(name, "Module name", flag="name")
+    module_name = re.sub(r"[^a-z0-9]+", "_", raw_name.strip().lower()).strip("_")
+    if not module_name:
+        raise ValueError("Module name must contain at least one letter or digit.")
+
+    kind_value = kind.strip().lower()
+    if kind_value not in MODULE_KINDS:
+        raise ValueError(f"kind must be one of {sorted(MODULE_KINDS)}, got '{kind}'.")
+
+    framework_value = framework.strip().lower() if framework else None
+    if framework_value and framework_value not in PINNED_FRAMEWORK_MAJORS:
+        raise ValueError(
+            f"framework must be one of {sorted(PINNED_FRAMEWORK_MAJORS)}, got '{framework}'."
+        )
+
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
+    config = load_workspace(root)
+
+    directory = scaffold_module(
+        root,
+        config,
+        name=module_name,
+        label=label,
+        kind=kind_value,
+        framework=framework_value,
+        force=force,
+    )
+    ensure_tsconfig(root)
+    wrote_package = ensure_package_json(root, config.name or root.name)
+    if wrote_package or not (root / "node_modules").is_dir():
+        try:
+            if install_npm_dependencies(root):
+                print_success(CMS_PACKAGES_INSTALLED)
+        except RuntimeError as exc:
+            print_warning(f"Could not install CMS module packages: {exc}")
+
+    # Write the field types straight away so the scaffolded index.astro
+    # type-checks in the editor without a separate validate run.
+    for module in discover_local_modules(root, config):
+        if module.name == module_name:
+            write_module_types(module)
+            break
+
+    print_success(f"Created module scaffold at {directory}")
 
 
 @add_app.command("setting")
@@ -457,7 +547,7 @@ def add_setting(
     from caraer_cli.wizard.marketplace import prompt_setting_field
 
     app_ctx: AppContext = ctx.obj
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
 
     sibling_names: list[str] = []
@@ -575,7 +665,7 @@ def add_lifecycle_hook(
     from caraer_cli.wizard.marketplace import prompt_lifecycle_hook
 
     app_ctx: AppContext = ctx.obj
-    root = resolve_app_root(app_file=app_ctx.profile.app_file)
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
     options = prompt_lifecycle_hook(
         event=event,

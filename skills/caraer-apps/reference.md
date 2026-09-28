@@ -88,7 +88,10 @@ Base: `{caraerApiBase}` (no trailing slash).
 `SINGLE_LINE`, `MULTI_LINE`, `SINGLE_SELECT`, `MULTI_SELECT`,
 `RECORD_SINGLE_SELECT`, `RECORD_MULTI_SELECT`, `OBJECT_SINGLE_SELECT`,
 `OBJECT_MULTI_SELECT`, `PROPERTY_SINGLE_SELECT`, `PROPERTY_MULTI_SELECT`,
-`SWITCH`, `MAPPING`, `FILE`, `MULTI_FILE`, `SECRET`.
+`SWITCH`, `MAPPING`, `FILE`, `MULTI_FILE`, `IMAGE`, `COLOR`, `SECRET`.
+
+CMS modules also allow `FORM_SINGLE_SELECT` and `REPEATABLE`. They reject
+`SECRET` and `ACTION`. See the `caraer-cms` skill.
 
 Use `caraer apps add setting` for the interactive picker (includes object /
 property selects). For `SINGLE_SELECT` / `MULTI_SELECT` choose static
@@ -201,7 +204,7 @@ caraer apps add options-function list-calendars
 ```
 
 Request action is `loadSettingOptions`. Response must be
-`{ "options": [{ "name", "label", "helpText?" }, ...] }`.
+`{ "options": [{ "name", "label", "helpText?", "preview?" }, ...] }`.
 
 Sibling values are available as:
 - `settingsValues` — flat `{ [fieldName]: value }` (preferred)
@@ -404,7 +407,7 @@ record scopes. Setting and trait scopes update when the installer saves.
 caraer apps current
 caraer apps validate
 caraer apps push --dry-run
-caraer apps push --deploy
+caraer apps push
 caraer apps status
 caraer apps local logs --follow
 caraer apps state get

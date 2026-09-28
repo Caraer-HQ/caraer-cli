@@ -17,6 +17,18 @@ from caraer_cli.project.paths import (
     schedules_dir,
     webhooks_dir,
 )
+from caraer_cli.project.modules_codegen import generate_module_types
+from caraer_cli.project.scaffold import ensure_package_json, ensure_tsconfig
+from caraer_cli.project.modules_sync import (
+    DISALLOWED_MODULE_FIELD_TYPES,
+    JSX_FRAMEWORKS,
+    MODULE_CATEGORIES,
+    MODULE_FIELD_TYPES,
+    MODULE_KINDS,
+    PINNED_FRAMEWORK_MAJORS,
+    discover_local_modules,
+    parse_major,
+)
 from caraer_cli.project.schedules_sync import discover_local_schedules
 from caraer_cli.project.schema import ProjectConfig, load_workspace
 from caraer_cli.project.settings_sections_sync import discover_local_settings_sections
@@ -52,6 +64,8 @@ SETTING_FIELD_TYPES = frozenset(
         "MAPPING",
         "FILE",
         "MULTI_FILE",
+        "IMAGE",
+        "COLOR",
         "SECRET",
         "ACTION",
     }
@@ -60,6 +74,12 @@ SELECT_FIELD_TYPES = frozenset(
     {
         "SINGLE_SELECT",
         "MULTI_SELECT",
+    }
+)
+OBJECT_SELECT_FIELD_TYPES = frozenset(
+    {
+        "OBJECT_SINGLE_SELECT",
+        "OBJECT_MULTI_SELECT",
     }
 )
 CONDITION_OPERATORS = frozenset(
@@ -232,6 +252,7 @@ class ValidationReport:
     settings: int = 0
     app_bars: int = 0
     lifecycle_hooks: int = 0
+    modules: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -245,6 +266,7 @@ class ValidationReport:
             "settings": self.settings,
             "appBars": self.app_bars,
             "lifecycleHooks": self.lifecycle_hooks,
+            "modules": self.modules,
             "errors": sum(1 for i in self.issues if i.severity == "error"),
             "warnings": sum(1 for i in self.issues if i.severity == "warning"),
             "issues": [asdict(i) for i in self.issues],
@@ -378,6 +400,7 @@ def validate_local_app(
     lifecycle_count = _validate_lifecycle(
         root, config, function_names, issues
     )
+    modules_count = _validate_modules(root, config, issues)
     _validate_against_json_schemas(root, config, issues)
 
     error_count = sum(1 for i in issues if i.severity == "error")
@@ -395,6 +418,7 @@ def validate_local_app(
         settings=settings_count,
         app_bars=app_bars_count,
         lifecycle_hooks=lifecycle_count,
+        modules=modules_count,
     )
 
 
@@ -616,12 +640,15 @@ def _validate_functions(
 ) -> int:
     base = functions_dir(root, config.srcDir)
     if not base.is_dir():
-        _issue(
-            issues,
-            "warning",
-            str(base.relative_to(root)),
-            "No functions directory found.",
-        )
+        # An app that only ships CMS modules has no runtime code to deploy, so
+        # a missing functions directory is expected rather than suspicious.
+        if not discover_local_modules(root, config):
+            _issue(
+                issues,
+                "warning",
+                str(base.relative_to(root)),
+                "No functions directory found.",
+            )
         return 0
 
     try:
@@ -1018,6 +1045,7 @@ def _validate_settings(
             _issue(issues, "error", f"{rel}:name", f"Duplicate setting name '{name}'.")
         seen.add(key)
         _validate_visible_when(item, name, known_names, action_names, rel, issues)
+        _validate_filter_traits(item, rel, issues)
         value_scope = str(item.get("valueScope") or "").strip().upper()
         if value_scope and value_scope not in ("COMPANY", "USER"):
             _issue(
@@ -1186,6 +1214,41 @@ def _validate_action_source(
             f"{rel}:actionSource.serverlessFunctionName",
             f"Unknown local function '{fn_name}'.",
         )
+
+
+def _validate_filter_traits(
+    item: dict[str, Any],
+    rel: str,
+    issues: list[ValidationIssue],
+) -> None:
+    """Validate the object-picker trait filter on one settings field."""
+    traits = item.get("filterTraits")
+    if traits is None:
+        return
+    where = f"{rel}:filterTraits"
+    if not isinstance(traits, list):
+        _issue(issues, "error", where, "filterTraits must be a list of trait names.")
+        return
+
+    field_type = str(item.get("type") or "").strip().upper()
+    if field_type and field_type not in OBJECT_SELECT_FIELD_TYPES:
+        _issue(
+            issues,
+            "error",
+            where,
+            "filterTraits only applies to OBJECT_SINGLE_SELECT and "
+            "OBJECT_MULTI_SELECT fields.",
+        )
+        return
+
+    for index, trait in enumerate(traits):
+        if not isinstance(trait, str) or not trait.strip():
+            _issue(
+                issues,
+                "error",
+                f"{where}[{index}]",
+                "Each filterTraits entry must be a non-empty trait name.",
+            )
 
 
 def _validate_visible_when(
@@ -1359,6 +1422,466 @@ def _validate_sf_ref(
         )
 
 
+def _validate_modules(
+    root: Path,
+    config: ProjectConfig,
+    issues: list[ValidationIssue],
+) -> int:
+    """Validate CMS v2 modules and regenerate their TypeScript declarations."""
+    modules = discover_local_modules(root, config)
+    if not modules:
+        return 0
+
+    seen_names: set[str] = set()
+
+    for module in modules:
+        rel_dir = str(module.directory.relative_to(root))
+        rel_config = str(module.entry.relative_to(root))
+
+        if not module.entry.is_file():
+            _issue(
+                issues,
+                "error",
+                rel_dir,
+                "Missing index.astro. A module's entry point must be an .astro file, "
+                "because Astro can only apply client:* directives to components it "
+                "resolves statically.",
+            )
+            continue
+
+        if module.legacy_config_path.is_file():
+            _issue(
+                issues,
+                "error",
+                str(module.legacy_config_path.relative_to(root)),
+                "A module is one file now. Move this into "
+                "`export const manifest = {...}` in index.astro and delete it.",
+            )
+
+        if module.error:
+            _issue(issues, "error", rel_config, module.error)
+            continue
+
+        declared = str(module.config.get("name") or "").strip()
+        if not declared:
+            _issue(issues, "error", rel_config, "Module manifest is missing 'name'.")
+        elif declared != module.name:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"name '{declared}' must match the directory name '{module.name}'.",
+            )
+        elif not SETTING_FIELD_NAME_RE.match(declared):
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"name '{declared}' must be snake_case (a-z, 0-9, underscore).",
+            )
+        elif declared in seen_names:
+            _issue(issues, "error", rel_config, f"Duplicate module name '{declared}'.")
+        else:
+            seen_names.add(declared)
+
+        if not str(module.config.get("label") or "").strip():
+            _issue(issues, "error", rel_config, "Module manifest is missing 'label'.")
+
+        kind = str(module.config.get("kind") or "").strip()
+        if not kind:
+            _issue(issues, "error", rel_config, "Module manifest is missing 'kind'.")
+        elif kind not in MODULE_KINDS:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"kind '{kind}' is not one of {sorted(MODULE_KINDS)}.",
+            )
+
+        # A fixed set, so the same kind of block lands in the same group of the
+        # library picker whichever app shipped it.
+        category = str(module.config.get("category") or "").strip()
+        if not category:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"Module manifest is missing 'category'. One of {sorted(MODULE_CATEGORIES)}.",
+            )
+        elif category not in MODULE_CATEGORIES:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"category '{category}' is not one of {sorted(MODULE_CATEGORIES)}.",
+            )
+
+        _validate_module_fields(module, rel_config, issues)
+        _validate_module_frameworks(module, rel_dir, rel_config, issues)
+
+    # Types are only worth writing once the shape is known to be sound.
+    if not any(i.severity == "error" and "modules/" in i.path for i in issues):
+        generate_module_types(root, config)
+        if modules:
+            ensure_tsconfig(root)
+            ensure_package_json(root, config.name or root.name)
+
+    return len(modules)
+
+
+def _validate_module_fields(
+    module: Any,
+    rel_config: str,
+    issues: list[ValidationIssue],
+) -> None:
+    field_names: set[str] = set()
+
+    for item in module.fields:
+        name = str(item.get("name") or "").strip()
+        if not name:
+            _issue(issues, "error", rel_config, "A field is missing 'name'.")
+            continue
+        if not SETTING_FIELD_NAME_RE.match(name):
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}' must be snake_case (a-z, 0-9, underscore).",
+            )
+        if name in field_names:
+            _issue(issues, "error", rel_config, f"Duplicate field '{name}'.")
+        field_names.add(name)
+
+        if not str(item.get("label") or "").strip():
+            _issue(issues, "error", rel_config, f"field '{name}' is missing 'label'.")
+
+        field_type = str(item.get("type") or "").strip()
+        if not field_type:
+            _issue(issues, "error", rel_config, f"field '{name}' is missing 'type'.")
+        elif field_type in DISALLOWED_MODULE_FIELD_TYPES:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}' uses {field_type}, which is not available on modules. "
+                "A page document is public, so it must not hold a secret, and an "
+                "ACTION button belongs on a settings screen.",
+            )
+        elif field_type not in MODULE_FIELD_TYPES:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}' has unknown type '{field_type}'.",
+            )
+        elif field_type in SELECT_FIELD_TYPES and not item.get("options"):
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}' is {field_type} and needs 'options'. "
+                "Modules cannot use a serverless optionsSource; the builder renders "
+                "field inputs without invoking the app runtime.",
+            )
+
+        if item.get("optionsSource"):
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}' declares optionsSource, which modules do not support. "
+                "Use static 'options' instead.",
+            )
+
+        if field_type == "REPEATABLE":
+            _validate_repeatable_field(item, name, rel_config, issues)
+
+    for item in module.fields:
+        for condition in item.get("visibleWhen") or []:
+            if not isinstance(condition, dict):
+                continue
+            target = str(condition.get("field") or "").strip()
+            operator = str(condition.get("operator") or "").strip().upper()
+            name = str(item.get("name") or "?")
+
+            if target and target not in field_names:
+                _issue(
+                    issues,
+                    "error",
+                    rel_config,
+                    f"field '{name}' has a visibleWhen on unknown field '{target}'.",
+                )
+            if operator and operator not in CONDITION_OPERATORS:
+                _issue(
+                    issues,
+                    "error",
+                    rel_config,
+                    f"field '{name}' has unknown visibleWhen operator '{operator}'.",
+                )
+            if operator in LIST_CONDITION_OPERATORS and not isinstance(
+                condition.get("value"), list
+            ):
+                _issue(
+                    issues,
+                    "error",
+                    rel_config,
+                    f"field '{name}' uses {operator}, which needs a list 'value'.",
+                )
+
+        if str(item.get("type") or "").strip().upper() != "REPEATABLE":
+            continue
+        nested = item.get("itemFields")
+        if not isinstance(nested, list):
+            continue
+        nested_names = set(field_names)
+        for child in nested:
+            if isinstance(child, dict):
+                child_name = str(child.get("name") or "").strip()
+                if child_name:
+                    nested_names.add(child_name)
+        parent_name = str(item.get("name") or "?")
+        for child in nested:
+            if not isinstance(child, dict):
+                continue
+            child_name = str(child.get("name") or "").strip() or "?"
+            for condition in child.get("visibleWhen") or []:
+                if not isinstance(condition, dict):
+                    continue
+                target = str(condition.get("field") or "").strip()
+                operator = str(condition.get("operator") or "").strip().upper()
+                scoped = f"{parent_name}.{child_name}"
+                if target and target not in nested_names:
+                    _issue(
+                        issues,
+                        "error",
+                        rel_config,
+                        f"field '{scoped}' has a visibleWhen on unknown field '{target}'.",
+                    )
+                if operator and operator not in CONDITION_OPERATORS:
+                    _issue(
+                        issues,
+                        "error",
+                        rel_config,
+                        f"field '{scoped}' has unknown visibleWhen operator '{operator}'.",
+                    )
+                if operator in LIST_CONDITION_OPERATORS and not isinstance(
+                    condition.get("value"), list
+                ):
+                    _issue(
+                        issues,
+                        "error",
+                        rel_config,
+                        f"field '{scoped}' uses {operator}, which needs a list 'value'.",
+                    )
+
+
+def _validate_repeatable_field(
+    item: dict,
+    name: str,
+    rel_config: str,
+    issues: list[ValidationIssue],
+) -> None:
+    """A REPEATABLE field is a list of tiles; authors set min/max and itemFields."""
+    nested = item.get("itemFields")
+    if not isinstance(nested, list) or not nested:
+        _issue(
+            issues,
+            "error",
+            rel_config,
+            f"field '{name}' is REPEATABLE and needs 'itemFields' — the schema "
+            "for one item. Set 'min' and 'max' so editors can add items without "
+            "a count dropdown.",
+        )
+        return
+
+    minimum = item.get("min", 0)
+    maximum = item.get("max", 20)
+    if not isinstance(minimum, int) or minimum < 0:
+        _issue(
+            issues,
+            "error",
+            rel_config,
+            f"field '{name}' min must be an integer of 0 or more.",
+        )
+        minimum = 0
+    if not isinstance(maximum, int) or maximum < 1:
+        _issue(
+            issues,
+            "error",
+            rel_config,
+            f"field '{name}' max must be an integer of 1 or more.",
+        )
+        maximum = 20
+    if maximum > 50:
+        _issue(
+            issues,
+            "error",
+            rel_config,
+            f"field '{name}' max cannot be more than 50.",
+        )
+    if maximum < minimum:
+        _issue(
+            issues,
+            "error",
+            rel_config,
+            f"field '{name}' max ({maximum}) is less than min ({minimum}).",
+        )
+
+    child_names: set[str] = set()
+    for child in nested:
+        if not isinstance(child, dict):
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}' has an itemFields entry that is not a field object.",
+            )
+            continue
+        child_name = str(child.get("name") or "").strip()
+        if not child_name:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}' has an itemFields entry missing 'name'.",
+            )
+            continue
+        if not SETTING_FIELD_NAME_RE.match(child_name):
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}.{child_name}' must be snake_case (a-z, 0-9, underscore).",
+            )
+        if child_name in child_names:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}' has duplicate itemFields name '{child_name}'.",
+            )
+        child_names.add(child_name)
+        if not str(child.get("label") or "").strip():
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}.{child_name}' is missing 'label'.",
+            )
+        child_type = str(child.get("type") or "").strip()
+        if not child_type:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}.{child_name}' is missing 'type'.",
+            )
+        elif child_type == "REPEATABLE":
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}.{child_name}' cannot be REPEATABLE. Nesting lists "
+                "is not supported; keep one itemFields level.",
+            )
+        elif child_type in DISALLOWED_MODULE_FIELD_TYPES:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}.{child_name}' uses {child_type}, which is not "
+                "available on modules.",
+            )
+        elif child_type not in MODULE_FIELD_TYPES:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}.{child_name}' has unknown type '{child_type}'.",
+            )
+        elif child_type in SELECT_FIELD_TYPES and not child.get("options"):
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"field '{name}.{child_name}' is {child_type} and needs 'options'.",
+            )
+
+
+def _validate_module_frameworks(
+    module: Any,
+    rel_dir: str,
+    rel_config: str,
+    issues: list[ValidationIssue],
+) -> None:
+    declared = module.frameworks
+
+    for framework, range_spec in declared.items():
+        if framework not in PINNED_FRAMEWORK_MAJORS:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"Unknown framework '{framework}'. "
+                f"Supported: {sorted(PINNED_FRAMEWORK_MAJORS)}.",
+            )
+            continue
+
+        major = parse_major(range_spec)
+        pinned = PINNED_FRAMEWORK_MAJORS[framework]
+        if major is None:
+            _issue(
+                issues,
+                "warning",
+                rel_config,
+                f"Could not read a major version from {framework} range '{range_spec}'.",
+            )
+        elif major != pinned:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"{framework} range '{range_spec}' targets major {major}, but the "
+                f"platform pins {pinned}. A build hoists one copy of each framework, "
+                "so a mismatch would break every site that installs this app "
+                "alongside another.",
+            )
+
+        if not module.island_files(framework):
+            _issue(
+                issues,
+                "warning",
+                rel_dir,
+                f"Declares {framework} but has no {framework}/ island files.",
+            )
+
+    # A JSX island outside its framework folder is invisible to Astro's
+    # include patterns, so it would be compiled by the wrong renderer or none.
+    for path in module.directory.rglob("*"):
+        if path.suffix not in {".jsx", ".tsx"}:
+            continue
+        relative = path.relative_to(module.directory)
+        top = relative.parts[0] if len(relative.parts) > 1 else ""
+        if top not in JSX_FRAMEWORKS:
+            _issue(
+                issues,
+                "error",
+                f"{rel_dir}/{relative}",
+                "JSX island must live in a framework folder "
+                f"({', '.join(f'{f}/' for f in JSX_FRAMEWORKS)}). React, Preact and "
+                "Solid share the .jsx/.tsx extensions, so Astro can only tell them "
+                "apart by path.",
+            )
+        elif top not in declared:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"Module ships {top}/ islands but does not declare '{top}' under "
+                "'frameworks'.",
+            )
+
+
 def _validate_against_json_schemas(
     root: Path,
     config: ProjectConfig,
@@ -1446,6 +1969,7 @@ def _validate_against_json_schemas(
         if hook is None:
             continue
         check("lifecycle", str((base / f"{stem}.json").relative_to(root)), hook)
+
 
 
 def _validate_lifecycle(

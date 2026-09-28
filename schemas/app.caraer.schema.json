@@ -284,6 +284,10 @@
             "MAPPING",
             "FILE",
             "MULTI_FILE",
+            "IMAGE",
+            "COLOR",
+            "FORM_SINGLE_SELECT",
+            "REPEATABLE",
             "SECRET",
             "ACTION"
           ],
@@ -293,6 +297,11 @@
         "helpText": { "type": "string" },
         "defaultValue": {
           "description": "Initial value before the installer saves."
+        },
+        "filterTraits": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "OBJECT_SINGLE_SELECT / OBJECT_MULTI_SELECT only: limit the picker to objects that have every listed trait (for example [\"event\"])."
         },
         "options": {
           "type": "array",
@@ -311,6 +320,10 @@
         "hidden": {
           "type": "boolean",
           "description": "Never show this field. The value is still stored (provisioned ids, workspace handles)."
+        },
+        "advanced": {
+          "type": "boolean",
+          "description": "Show this field under a collapsed Advanced settings section. Unlike hidden, the value is still editable once opened."
         },
         "visibleWhen": {
           "type": "array",

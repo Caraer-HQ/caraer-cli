@@ -16,7 +16,7 @@ src/app/functions/on-{install,uninstall,rotate,update}/
 Edit the stubs, then push:
 
 ```bash
-caraer apps push --deploy
+caraer apps push
 ```
 
 To recreate a single hook (e.g. after deleting it):
