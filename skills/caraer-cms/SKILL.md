@@ -50,7 +50,7 @@ Use `satisfies ModuleManifest` from `@caraer/cms-runtime`.
 ```astro
 ---
 import type { ModuleManifest, ModuleProps } from '@caraer/cms-runtime';
-import type { HeroFields } from './fields.d.ts';
+import type { HeroFields } from './types.d.ts';
 
 export const manifest = {
   name: 'hero',
@@ -72,7 +72,7 @@ const { fields } = Astro.props as ModuleProps<HeroFields>;
 </section>
 ```
 
-`fields.d.ts` is generated. Do not edit it by hand.
+`types.d.ts` is generated. Do not edit it by hand.
 
 ## Field rules
 

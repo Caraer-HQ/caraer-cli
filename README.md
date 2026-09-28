@@ -221,7 +221,7 @@ my_app/
     app.caraer.yaml           # identity, auth, OAuth, settings, app bars
     lifecycle/*.json          # install|uninstall|rotate|update hooks
     functions/<name>/         # function.caraer.json + entry source
-    modules/<name>/           # CMS module (index.astro + fields.d.ts)
+    modules/<name>/           # CMS module (index.astro + types.d.ts)
     webhooks/*.json           # one webhook definition per file
     schedules/*.json          # cron → function (integration runtime)
     inbound/*.json            # public inbound routes → function

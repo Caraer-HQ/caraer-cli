@@ -181,7 +181,7 @@ def _copy_allowed_files(source_dir: Path, dest_dir: Path, *, skip_generated: boo
             continue
         if source.suffix not in _ALLOWED_SUFFIXES:
             continue
-        if skip_generated and source.name == GENERATED_TYPES_FILE:
+        if skip_generated and source.name in {GENERATED_TYPES_FILE, "fields.d.ts"}:
             continue
         relative = source.relative_to(source_dir)
         copy_to = dest_dir / relative

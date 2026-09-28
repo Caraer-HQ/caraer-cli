@@ -65,7 +65,7 @@ def test_scaffold_app_project_layout(tmp_path: Path) -> None:
     assert (root / "src" / "app" / "webhooks").is_dir()
     hello_module = root / "src" / "app" / "modules" / "hello_world"
     assert (hello_module / "index.astro").is_file()
-    assert (hello_module / "fields.d.ts").is_file()
+    assert (hello_module / "types.d.ts").is_file()
     assert result["sample_module"].resolve() == hello_module.resolve()
     webhook = root / "src" / "app" / "webhooks" / "record-candidate-created-serverless.json"
     assert webhook.is_file()
@@ -135,7 +135,7 @@ def test_node_init_writes_tsconfig_and_module_package_json(tmp_path: Path) -> No
 
     tsconfig = json.loads((root / "tsconfig.json").read_text(encoding="utf-8"))
     assert tsconfig["compilerOptions"]["moduleResolution"] == "bundler"
-    assert "src/**/*.ts" in tsconfig["include"]
+    assert "src/**/*" in tsconfig["include"]
 
     package = json.loads((root / "package.json").read_text(encoding="utf-8"))
     assert package["type"] == "module"
@@ -147,7 +147,7 @@ def test_node_init_writes_tsconfig_and_module_package_json(tmp_path: Path) -> No
     assert package["dependencies"]["@caraer/cms-runtime"].startswith("github:Caraer-HQ/caraer-cms-runtime")
     assert package["dependencies"]["@caraer/cms-tokens"].startswith("github:Caraer-HQ/caraer-cms-tokens")
     assert (root / "src" / "app" / "modules" / "hello_world" / "index.astro").is_file()
-    assert (root / "src" / "app" / "modules" / "hello_world" / "fields.d.ts").is_file()
+    assert (root / "src" / "app" / "modules" / "hello_world" / "types.d.ts").is_file()
     assert ensure_tsconfig(root) is None
 
 

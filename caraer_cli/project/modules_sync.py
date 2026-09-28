@@ -24,7 +24,7 @@ from caraer_cli.project.schema import ProjectConfig
 #: validation can point at a leftover and say what to do with it.
 LEGACY_MODULE_CONFIG_FILE = "module.caraer.json"
 MODULE_ENTRY_FILE = "index.astro"
-GENERATED_TYPES_FILE = "fields.d.ts"
+GENERATED_TYPES_FILE = "types.d.ts"
 
 #: What the module renders as, which decides where it may be placed.
 MODULE_KINDS = frozenset({"section", "page", "header", "footer", "cookie_banner"})

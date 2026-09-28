@@ -55,7 +55,7 @@ def _entry_source(name: str, label: str, kind: str, framework: str | None) -> st
         "import CaraerRichText from '@caraer/cms-runtime/CaraerRichText.astro';",
         "import type { ModuleManifest, ModuleProps } from '@caraer/cms-runtime';",
         "",
-        f"import type {{ {interface} }} from './fields.d.ts';",
+        f"import type {{ {interface} }} from './types.d.ts';",
     ]
     if framework:
         imports.insert(0, f"import {island} from './{framework}/{island}.tsx';")

@@ -289,7 +289,7 @@ def test_codegen_runs_during_validation(tmp_path: Path) -> None:
     )
     validate_local_app(root)
 
-    generated = root / "src" / "app" / "modules" / "hero" / "fields.d.ts"
+    generated = root / "src" / "app" / "modules" / "hero" / "types.d.ts"
     assert generated.is_file()
     assert "HeroFields" in generated.read_text(encoding="utf-8")
     tsconfig = json.loads((root / "tsconfig.json").read_text(encoding="utf-8"))

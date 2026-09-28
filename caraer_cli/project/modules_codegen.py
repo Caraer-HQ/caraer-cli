@@ -1,6 +1,6 @@
 """Generate TypeScript declarations for CMS modules.
 
-Writes a ``fields.d.ts`` next to each ``index.astro`` so the IDE autocompletes
+Writes a ``types.d.ts`` next to each ``index.astro`` so the IDE autocompletes
 ``Astro.props.fields`` from the field list the developer declared, and flags a
 typo before the module ever reaches a build.
 
@@ -173,9 +173,15 @@ def render_module_types(module: LocalModule) -> str:
 
 
 def write_module_types(module: LocalModule) -> Path:
-    """Write ``fields.d.ts`` for one module, returning its path."""
+    """Write ``types.d.ts`` for one module, returning its path."""
     target = module.directory / GENERATED_TYPES_FILE
     target.write_text(render_module_types(module), encoding="utf-8")
+    legacy = module.directory / "fields.d.ts"
+    if legacy.exists() and legacy != target:
+        try:
+            legacy.unlink()
+        except OSError:
+            pass
     return target
 
 
