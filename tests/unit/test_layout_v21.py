@@ -401,6 +401,14 @@ def test_example_webhook_cases_are_separate_functions() -> None:
     assert MAP_TOPIC in by_topic
     stems = {item["serverlessFunction"]["name"] for item in items}
     assert {"hello-world", "due-date", "field-map"} <= stems
+    config = load_workspace(EXAMPLE)
+    files = discover_layout_v21_functions(EXAMPLE, config)
+    by_name = {item.name: item for item in files}
+    assert by_name["ping"].role == "appbars"
+    assert by_name["list-dialog-options"].path.parent.name == "appbars"
+    assert "appBars" not in (EXAMPLE / "src" / "app" / "functions" / "hello-world.js").read_text(
+        encoding="utf-8"
+    )
     assert not (EXAMPLE / "src" / "app" / "app-bars.yaml").exists()
     report = validate_local_app(EXAMPLE)
     assert report.ok, [issue.message for issue in report.issues]

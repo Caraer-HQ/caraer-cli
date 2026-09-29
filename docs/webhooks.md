@@ -204,8 +204,8 @@ on `due-date`, and `<setting:field_map.email>` on `field-map`.
 
 ## App bars
 
-Record buttons are webhooks too. On `2026.2.1` declare the bar on the
-function that should run. There is no `app-bars.yaml` and no
+Record buttons are webhooks too. On `2026.2.1` declare the bar on a function
+in `src/app/appbars/`. There is no `app-bars.yaml` and no
 `serverlessFunction` reference:
 
 ```js
@@ -236,5 +236,6 @@ and `defaultValue` apply per field. `icon` is a Font Awesome name such as
 
 In the function the dialog arrives as `appBarSettingsValues`.
 `settingsSchema` on the body is still the installation settings.
-[`examples/layout-v21`](../examples/layout-v21/src/app/functions/hello-world.js)
+[`examples/layout-v21`](../examples/layout-v21/src/app/appbars/ping.js)
 declares one bar per location and every dialog field on `ping_overview`.
+`list-dialog-options.js` in that folder loads the Channel options.

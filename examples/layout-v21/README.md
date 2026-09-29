@@ -16,7 +16,7 @@ reference; `caraer apps init` still creates a smaller starter.
 | Property scope | `records.<setting:due_date.objectName>.property.<setting:due_date.propertyName>.all` |
 | Inbound | `src/app/inbound/echo.js` |
 | Schedule | `src/app/schedules/heartbeat.js` |
-| App bar | `appBars` on `src/app/functions/hello-world.js` (every location, every dialog field) |
+| App bars | `src/app/appbars/ping.js` (every location) and `list-dialog-options.js` |
 | Lifecycle | `src/app/lifecycle/*.js` |
 | CMS module | `src/app/modules/hello_world/hello_world.astro` |
 | Installation SQL | `POST .../installation/db` from install |
@@ -36,6 +36,7 @@ layout-v21/
     app.caraer.yaml
     settings.yaml
     functions/{hello-world,due-date,field-map}.js
+    appbars/{ping,list-dialog-options}.js
     shared/index.js
     lifecycle/{install,update,rotate,uninstall}.js
     inbound/echo.js

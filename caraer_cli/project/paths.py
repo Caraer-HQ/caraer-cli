@@ -118,6 +118,15 @@ def app_bars_dir(root: Path, src_dir: str = "src") -> Path:
     return app_dir(root, src_dir) / "app-bars"
 
 
+def appbars_dir(root: Path, src_dir: str = "src") -> Path:
+    """2026.2.1 function files that declare ``appBars``.
+
+    Same depth as ``functions/``, so ``require("../shared")`` still resolves.
+    Legacy ``app-bars/`` JSON stays on 2026.2.
+    """
+    return app_dir(root, src_dir) / "appbars"
+
+
 def lifecycle_dir(root: Path, src_dir: str = "src") -> Path:
     return app_dir(root, src_dir) / "lifecycle"
 

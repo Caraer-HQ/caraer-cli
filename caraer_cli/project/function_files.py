@@ -1,4 +1,4 @@
-"""Discover 2026.2.1 function files across functions, lifecycle, schedules, inbound."""
+"""Discover 2026.2.1 function files across functions, appbars, lifecycle, schedules, inbound."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from typing import Any
 from caraer_cli.project.code_manifest import parse_code_manifest_file
 from caraer_cli.project.modules_manifest import ManifestError
 from caraer_cli.project.paths import (
+    appbars_dir,
     functions_dir,
     inbound_dir,
     is_function_code_file,
@@ -17,7 +18,7 @@ from caraer_cli.project.paths import (
 )
 from caraer_cli.project.schema import FunctionManifest, ProjectConfig
 
-FUNCTION_ROLES = ("functions", "lifecycle", "schedules", "inbound")
+FUNCTION_ROLES = ("functions", "appbars", "lifecycle", "schedules", "inbound")
 LIFECYCLE_NAMES = ("install", "uninstall", "rotate", "update")
 
 
@@ -79,6 +80,7 @@ def discover_layout_v21_functions(
 ) -> list[LocalFunctionFile]:
     files: list[LocalFunctionFile] = []
     files.extend(_scan_dir(functions_dir(root, config.srcDir), "functions", config))
+    files.extend(_scan_dir(appbars_dir(root, config.srcDir), "appbars", config))
     files.extend(_scan_dir(lifecycle_dir(root, config.srcDir), "lifecycle", config))
     files.extend(_scan_dir(schedules_dir(root, config.srcDir), "schedules", config))
     files.extend(_scan_dir(inbound_dir(root, config.srcDir), "inbound", config))

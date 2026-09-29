@@ -314,7 +314,7 @@ Example every 12 hours:
 
 ## App bars
 
-On `2026.2.1` declare `appBars` on the function that should run (no
+On `2026.2.1` declare `appBars` on a function in `src/app/appbars/` (no
 `add app-bar` scaffold and no `app-bars.yaml`). Caraer sends
 `app.bar.triggered` to that function.
 
