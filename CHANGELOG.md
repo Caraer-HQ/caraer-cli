@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- CMS preview reinstalls when `@caraer/cms-runtime` or `@caraer/cms-tokens`
+  are missing or are broken `caraer-web/packages` links, instead of treating
+  an existing `@astrojs/node` as enough.
+
 - CMS module preview (`.harness__preview`) uses block flow like live
   `#main`, so section modules fill the frame instead of shrink-wrapping
   in a centered flex row.

@@ -2517,8 +2517,23 @@ def _harness_install_command() -> list[str]:
     return ["npm", "install"]
 
 
+def _harness_package_resolves(harness: Path, *parts: str) -> bool:
+    """True when the installed package is a real directory, not a broken link."""
+    dest = harness / "node_modules"
+    for part in parts:
+        dest = dest / part
+    return dest.is_dir()
+
+
 def _harness_ready(harness: Path) -> bool:
-    return (harness / "node_modules" / "@astrojs" / "node").is_dir()
+    # ``@astrojs/node`` is the previous gate. After cms-runtime / cms-tokens
+    # moved out of caraer-web, that left a working Astro install pointing at
+    # broken ``@caraer/*`` links and Vite then cannot resolve the tokens.
+    return (
+        _harness_package_resolves(harness, "@astrojs", "node")
+        and _harness_package_resolves(harness, "@caraer", "cms-runtime")
+        and _harness_package_resolves(harness, "@caraer", "cms-tokens")
+    )
 
 
 def install_harness(harness: Path, *, force: bool = False) -> int:
