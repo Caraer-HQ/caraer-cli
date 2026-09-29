@@ -12,7 +12,6 @@ reference; `caraer apps init` still creates a smaller starter.
 | Settings list | `src/app/settings.yaml` (`section` cards) |
 | Setting-targeted webhook | `record.<setting:target_object>.created` on `hello-world` |
 | Due-date webhook | `due-date.js`: `record.<setting:due_date.objectName>.date_due.<setting:due_date.propertyName>` |
-| Mapping-row webhook | `field-map.js`: `<setting:field_map.email>` is the property mapped to the `email` key |
 | Property scope | `records.<setting:due_date.objectName>.property.<setting:due_date.propertyName>.all` |
 | Inbound | `src/app/inbound/echo.js` |
 | Schedule | `src/app/schedules/heartbeat.js` |
@@ -24,8 +23,7 @@ reference; `caraer apps init` still creates a smaller starter.
 `records.<setting:target_object>.all` grants access to the object the installer
 picked. `records.<setting:due_date.objectName>.property.<setting:due_date.propertyName>.all`
 grants read and write for that one property. Mapping scopes stay on the object,
-`records.<setting:field_map.objectName>.all`, while the webhook names one row
-with `<setting:field_map.email>`. See [docs/webhooks.md](../../docs/webhooks.md).
+`records.<setting:field_map.objectName>.all`. See [docs/webhooks.md](../../docs/webhooks.md).
 
 ## Layout
 
@@ -35,7 +33,7 @@ layout-v21/
   src/app/
     app.caraer.yaml
     settings.yaml
-    functions/{hello-world,due-date,field-map}.js
+    functions/{hello-world,due-date}.js
     appbars/{ping,list-dialog-options}.js
     shared/index.js
     lifecycle/{install,update,rotate,uninstall}.js

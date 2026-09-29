@@ -384,7 +384,6 @@ def test_app_bar_dialog_rejects_unknown_field_type(tmp_path: Path) -> None:
 
 EXAMPLE = Path(__file__).resolve().parents[2] / "examples" / "layout-v21"
 DUE_TOPIC = "record.<setting:due_date.objectName>.date_due.<setting:due_date.propertyName>"
-MAP_TOPIC = "record.<setting:field_map.objectName>.property_changed.<setting:field_map.email>"
 
 
 def _webhook_topics(root: Path) -> list[dict]:
@@ -398,9 +397,9 @@ def test_example_webhook_cases_are_separate_functions() -> None:
     by_topic = {item["topic"]: item for item in items}
     assert "record.<setting:target_object>.created" in by_topic
     assert by_topic[DUE_TOPIC]["triggerOffsetSeconds"] == 0
-    assert MAP_TOPIC in by_topic
     stems = {item["serverlessFunction"]["name"] for item in items}
-    assert {"hello-world", "due-date", "field-map"} <= stems
+    assert {"hello-world", "due-date"} <= stems
+    assert "field-map" not in stems
     config = load_workspace(EXAMPLE)
     files = discover_layout_v21_functions(EXAMPLE, config)
     by_name = {item.name: item for item in files}

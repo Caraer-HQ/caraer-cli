@@ -199,8 +199,8 @@ grant that property:
 `records.<setting:due_date.objectName>.property.<setting:due_date.propertyName>.all`.
 
 [`examples/layout-v21`](../examples/layout-v21) declares
-`record.<setting:target_object>.created` on `hello-world`, the due-date path
-on `due-date`, and `<setting:field_map.email>` on `field-map`.
+`record.<setting:target_object>.created` on `hello-world` and the due-date path
+on `due-date`.
 
 ## App bars
 

@@ -27,7 +27,7 @@
 - name: field_map
   type: MAPPING
   label: Field map
-  helpText: field-map reads the email row with <setting:field_map.email>.
+  helpText: Maps the email and phone keys onto properties of the chosen object.
   required: true
   section: Records
   mappingValue:
