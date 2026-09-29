@@ -95,7 +95,8 @@ schema (also emitted by `caraer apps init`):
 Browse the schemas at [Caraer-HQ/caraer-app-schemas](https://github.com/Caraer-HQ/caraer-app-schemas).
 `caraer apps validate` still uses the copies bundled with the CLI.
 
-Reference example: `examples/webhook-inbox` in the caraer-cli repo.
+Reference example: `examples/layout-v21` in the caraer-cli repo
+(`2026.2.1`). `examples/webhook-inbox` is the older `2026.2` folder layout.
 
 ## Agent workflow
 
@@ -139,9 +140,9 @@ Installation settings are for **admins installing the app**, not developers.
   `.relations_all`) instead of hard-coding object names. Bare `<field>`
   still works. Empty mappings grant no extra scopes. Use
   `records.<trait:user>.all` when every object with that trait must be
-  reachable. Setting placeholders are for scopes only — a webhook topic
-  must be a concrete `record.<object>.…` name. Register install-time
-  topics from a lifecycle hook (see [reference.md](reference.md)).
+  reachable. The same placeholders work on webhook topics
+  (`record.<setting:target_object>.created`). `date_due` still needs a
+  concrete object name.
 - Group related fields into installer cards with `section` / `sectionSubtitle`
   on each field in `settings.yaml`. On 2026.2 use `settings-sections/*.json`.
   Do not invent a grid; Caraer lays cards out left-to-right, top-to-bottom,

@@ -1,0 +1,22 @@
+const { contextFrom, putState, ok } = require("../shared");
+
+exports.handler = async (req, res) => {
+  const ctx = contextFrom(req);
+  const updatedAt = new Date().toISOString();
+  if (ctx.token && ctx.appUuid) {
+    await putState(ctx, {
+      updatedAt,
+      displayName: ctx.settings.display_name || null,
+    });
+  }
+  ok(res, {
+    functionName: "update",
+    updatedAt,
+  });
+};
+
+exports.manifest = {
+  lifecycle: "update",
+  topic: "app.updated",
+  waitUntilComplete: true,
+};

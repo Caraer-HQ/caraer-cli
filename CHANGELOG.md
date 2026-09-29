@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Webhook topics accept the same setting and trait placeholders as
+  `requiredScopes` (`record.<setting:target_object>.created`). `date_due`
+  still needs a concrete object name.
+
+- Example app `examples/layout-v21`: full 2026.2.1 layout with settings,
+  inbound, schedule, app bar, CMS module, and a setting-targeted record webhook.
+
 - Guides for serverless functions, CMS modules, webhooks, lifecycle hooks,
   schedules, and inbound routes: `docs/functions.md`, `docs/modules.md`,
   `docs/webhooks.md`, `docs/app_lifecycle.md`, `docs/schedules.md`,

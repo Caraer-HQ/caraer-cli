@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Caraer-HQ/caraer-app-schemas/main/schemas/app.caraer.schema.json
+label: Layout 2026.2.1
+name: layout_v21
+runtime: nodejs22
+authMethod: API_KEY
+hideApiKeyField: true
+oauthRedirectUris:
+  - http://localhost:3000/oauth/callback
+requiredScopes:
+  - records.<setting:target_object>.all
+webhookRateLimitPerMinute: 100
+jobRateLimitPerMinute: 60
+# Settings: src/app/settings.yaml
+# App bars: src/app/app-bars.yaml
+# Functions: src/app/functions/<name>.js
+# Lifecycle / inbound / schedules: matching folders of named files

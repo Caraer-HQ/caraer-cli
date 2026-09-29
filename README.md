@@ -201,8 +201,10 @@ Shared helpers live in `src/app/shared/` and are imported with the same relative
 path locally and when deployed, for example `require("../shared")` from
 `functions/<name>.js`.
 
-See [`examples/webhook-inbox`](examples/webhook-inbox) for a small app with an
-inbound route, settings, lifecycle hooks, and a schedule.
+See [`examples/layout-v21`](examples/layout-v21) for a full `2026.2.1` app
+(named files, settings list, inbound, schedule, app bar, CMS module, and a
+setting-targeted record webhook). [`examples/webhook-inbox`](examples/webhook-inbox)
+is the older `2026.2` folder layout.
 
 ## App pieces
 
@@ -259,9 +261,8 @@ Do not ask the installer for the Caraer API base URL. The runtime injects
 `body.caraerApiBase`.
 
 `records.<setting:field>.all` on `requiredScopes` follows the installer's
-object pick. Webhook **topics** cannot use that placeholder — they need a
-literal `record.candidate.created` (or the same name built in a lifecycle
-hook). See [docs/webhooks.md](docs/webhooks.md).
+object pick. The same placeholder works on webhook topics
+(`record.<setting:field>.created`). See [docs/webhooks.md](docs/webhooks.md).
 
 ## Profiles
 

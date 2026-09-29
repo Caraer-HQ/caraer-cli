@@ -1,0 +1,53 @@
+---
+import CaraerRichText from '@caraer/cms-runtime/CaraerRichText.astro';
+import type { ModuleManifest, ModuleProps } from '@caraer/cms-runtime';
+
+import type { HelloWorldFields } from './types.d.ts';
+
+export const manifest = {
+  name: 'hello_world',
+  label: 'Hello world',
+  kind: 'section',
+  category: 'content',
+  description: 'Named-file CMS module for the 2026.2.1 layout.',
+  fields: [
+    {
+      name: 'heading',
+      label: 'Heading',
+      type: 'SINGLE_LINE',
+      required: true,
+      defaultValue: 'Hello world',
+    },
+    {
+      name: 'body',
+      label: 'Text',
+      type: 'MULTI_LINE',
+      helpText: 'Markdown is supported.',
+    },
+  ],
+} satisfies ModuleManifest;
+
+const { fields } = Astro.props as ModuleProps<HelloWorldFields>;
+---
+
+<section class="hello_world">
+  <div class="caraer-container">
+    <h2>{fields.heading}</h2>
+    {fields.body && <CaraerRichText value={fields.body} />}
+  </div>
+</section>
+
+<style>
+  .hello_world {
+    padding-block: var(--caraer-space-2xl);
+  }
+
+  .hello_world h2 {
+    margin-block: 0 var(--caraer-space-md);
+    font-family: var(--caraer-font-h2);
+    font-size: var(--caraer-size-h2);
+    font-weight: var(--caraer-weight-h2);
+    line-height: var(--caraer-leading-h2);
+    color: var(--caraer-color-font);
+  }
+</style>

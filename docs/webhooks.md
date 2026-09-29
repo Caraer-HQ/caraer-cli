@@ -7,7 +7,7 @@ declares it:
 
 ```js
 exports.manifest = {
-  webhooks: [{ topic: "record.candidate.created" }],
+  webhooks: [{ topic: "record.<setting:target_object>.created" }],
 };
 ```
 
@@ -58,28 +58,25 @@ filter object.
 
 Append `.<relation>` when only one relation type should fire.
 
-`<object>` and `<property>` in the topic are literal names (`candidate`,
-`email`). They are **not** setting placeholders. `record.<setting:target_object>.created`
-is invalid. Use `records.<setting:target_object>.all` on `requiredScopes` so
-the installer can pick the object; then register the webhook from a
-[lifecycle hook](app_lifecycle.md) once you know the value:
+`<object>` and `<property>` can be a literal name (`candidate`, `email`) or the
+same setting/trait placeholders as `requiredScopes`:
 
 ```js
-const objectName = String(settings.target_object || "").toLowerCase();
-await caraerFetch(ctx, `/v2/apps/${ctx.appUuid}/webhooks`, {
-  method: "POST",
-  body: {
-    topic: `record.${objectName}.created`,
-    deliveryMode: "SERVERLESS",
-    webhookFormat: "USER_FRIENDLY",
-    serverlessFunction: { name: "hello-world" },
-  },
-});
+exports.manifest = {
+  webhooks: [{ topic: "record.<setting:target_object>.created" }],
+};
 ```
 
-Do not declare that install-time topic on `exports.manifest.webhooks`. List
-existing hooks with `POST /v2/apps/{appUuid}/webhooks/index` and delete stale
-topics on update and uninstall.
+Caraer expands that per installation when the event fires. Pair it with
+`records.<setting:target_object>.all` on `requiredScopes`. An empty setting
+means the webhook does not fire. `record.<trait:user>.created` expands to
+every object with that trait.
+
+`date_due` topics still need a concrete object and property — schedules are
+precomputed and cannot resolve placeholders.
+
+[`examples/layout-v21`](../examples/layout-v21) declares
+`record.<setting:target_object>.created` on `hello-world`.
 
 ## App bars
 

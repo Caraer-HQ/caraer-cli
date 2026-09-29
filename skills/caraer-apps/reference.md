@@ -228,9 +228,19 @@ const settings = body.settingsValues
 On `2026.2.1` declare a static topic on `exports.manifest.webhooks`. On
 `2026.2` use one JSON file under `src/app/webhooks/`.
 
-The topic must use a concrete object (and property) name. Setting
-placeholders such as `record.<setting:target_object>.created` are **not**
-valid. `records.<setting:field>.all` belongs on `requiredScopes` only.
+The object (and property) may be a literal name or a setting/trait
+placeholder, the same tokens as `requiredScopes`:
+
+```js
+exports.manifest = {
+  webhooks: [{ topic: "record.<setting:target_object>.created" }],
+};
+```
+
+Caraer expands the placeholder from that installation's settings when the
+event fires. Pair it with `records.<setting:target_object>.all`. An empty
+setting means the webhook does not fire. `date_due` topics cannot use
+placeholders.
 
 | Topic | Fires on |
 |-------|----------|
@@ -243,25 +253,8 @@ valid. `records.<setting:field>.all` belongs on `requiredScopes` only.
 `<object>` is lower case. Object and property scoping lives entirely in the topic
 string — there is no separate filter block.
 
-When the object or property is chosen at **install** time, register the webhook
-from a lifecycle hook instead of declaring it locally. Read the object name
-from the setting, then POST a concrete topic:
-
-```js
-const functionUuid = await resolveFunctionUuidByName(ctx, "cv-changed");
-await caraerFetch(ctx, `/v2/apps/${ctx.appUuid}/webhooks`, {
-  method: "POST",
-  body: JSON.stringify({
-    topic: `record.${objectName.toLowerCase()}.property_changed.${propertyName}`,
-    deliveryMode: "SERVERLESS",
-    webhookFormat: "USER_FRIENDLY",
-    serverlessFunction: { uuid: functionUuid },
-  }),
-});
-```
-
-List with `POST /v2/apps/{appUuid}/webhooks/index` and remove stale topics on
-`app.updated` / `app.uninstalled`.
+Prefer a static placeholder topic on the function. Lifecycle POST is only
+needed when the topic cannot be expressed as a setting or trait reference.
 
 ## Inbound routes
 
@@ -405,7 +398,8 @@ Object-select fields use the selected object name. Mapping fields use
 `mappingValue.objectName`. Empty settings or unmatched traits grant no extra
 record scopes. Setting and trait scopes update when the installer saves.
 
-These placeholders do not work in webhook `topic` strings. See
+The same tokens work in webhook `topic` strings
+(`record.<setting:field>.created`). See
 [Record webhook topics](#record-webhook-topics).
 
 ## Useful CLI

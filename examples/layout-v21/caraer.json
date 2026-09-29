@@ -1,0 +1,9 @@
+{
+  "platformVersion": "2026.2.1",
+  "name": "layout_v21",
+  "appUuid": null,
+  "srcDir": "src",
+  "autoDeploy": false,
+  "runtime": "nodejs22",
+  "privateApp": true
+}

@@ -1,0 +1,20 @@
+- name: display_name
+  type: SINGLE_LINE
+  label: Display name
+  helpText: Returned by hello-world, inbound echo, and the heartbeat.
+  defaultValue: Layout 2026.2.1
+  section: General
+  sectionSubtitle: How this install identifies itself
+- name: log_events
+  type: SWITCH
+  label: Log inbound events
+  helpText: When on, inbound echo writes lastInboundAt to installation state.
+  defaultValue: true
+  section: General
+- name: target_object
+  type: OBJECT_SINGLE_SELECT
+  label: Record object
+  helpText: Install and update subscribe hello-world to record.<this>.created.
+  required: true
+  section: Records
+  sectionSubtitle: Object chosen at install time. Not a webhook topic placeholder.

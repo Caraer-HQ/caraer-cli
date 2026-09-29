@@ -182,6 +182,7 @@ def lifecycle_items_from_files(
                 "deliveryMode": "SERVERLESS",
                 "enabled": bool(item.manifest.get("enabled", True)),
                 "serverlessFunction": {"name": item.name},
+                "waitUntilComplete": item.manifest.get("waitUntilComplete"),
             }
         )
         found[manifest_key] = payload
