@@ -1,18 +1,20 @@
 # Caraer CLI
 
-Standalone developer CLI for Caraer app lifecycle management.
+Developer CLI for building Caraer apps: serverless functions, webhooks, schedules,
+inbound routes, lifecycle hooks, and CMS modules.
 
-Install and use this package independently of the Caraer backend. It talks to
-the Caraer API as a thin client — no GCP credentials are required on your machine.
+The CLI is a thin client of the Caraer API. You do not need GCP credentials on
+your machine.
+
+Docs: [developer.caraer.com](https://developer.caraer.com)
 
 ## Requirements
 
-- **Python 3.10+**
-- A Caraer account with access to a company that can create apps
+- **Python 3.10+** (the CLI itself)
+- **Node.js 22** and npm (default `nodejs22` runtime and the starter CMS module)
+- A Caraer account that can create apps in a company
 
 ## Install
-
-### From PyPI
 
 ```bash
 pipx install caraer-cli
@@ -20,119 +22,202 @@ pipx install caraer-cli
 # or: pip install caraer-cli
 ```
 
-Publishing (maintainers): tag `v*` runs [`.github/workflows/publish.yml`](.github/workflows/publish.yml).
-Add a PyPI API token as the `API_TOKEN` secret on the GitHub `pypi` environment
-(or as a repository secret with the same name).
-
-### From source (development)
+Confirm:
 
 ```bash
-git clone <this-repo> caraer-cli
+caraer --version
+```
+
+The first-run profile is `dev` and points at `http://localhost:8080`. Switch to
+production before you log in:
+
+```bash
+caraer profile use prod
+caraer profile current    # base_url must be https://caraer.com
+```
+
+### Install from source
+
+```bash
+git clone https://github.com/Caraer-HQ/caraer-cli.git
 cd caraer-cli
 python3 -m venv .venv
 source .venv/bin/activate
-./scripts/install.sh                 # pip install + shell tab completion
-# or: ./scripts/install.sh --shell zsh
-caraer --help
+./scripts/install.sh
+caraer --version
+caraer profile use prod
 ```
 
 If install fails with `requires a different Python`, create the venv with
-`python3.10` / `python3.11` / `python3.12` explicitly.
+`python3.10`, `python3.11`, or `python3.12`. Restart the terminal so tab
+completion loads.
 
-Tab completion is installed by `scripts/install.sh`. Restart the terminal afterward.
+## Prompt for an AI coding agent
 
-## AI IDEs (Cursor skill)
+Paste this into Cursor, Claude Code, or a similar agent. It installs the CLI,
+logs you into production, and scaffolds an app. It does not deploy.
 
-Ship an Agent Skill so Cursor (and similar IDEs) can scaffold and validate Caraer
-apps correctly:
+```text
+Set up the Caraer CLI on this machine and scaffold a Caraer app. Do not push,
+deploy, install, or publish the app unless I explicitly ask.
+
+1. Check Python is 3.10 or newer (`python3 --version`). If it is older, stop
+   and tell me how to install it.
+2. Check Node.js 22 is available (`node --version`). The default `nodejs22`
+   runtime and starter CMS module need it. If it is missing, stop and tell me.
+3. If `caraer --version` fails, install the CLI:
+   prefer `pipx install caraer-cli`, else `uv tool install caraer-cli`,
+   else `pip install caraer-cli`. Confirm with `caraer --version`.
+4. The default profile talks to localhost. Switch to production before login:
+   `caraer profile use prod`
+   Confirm `caraer profile current` shows base_url https://caraer.com.
+5. Install the agent skills so later edits follow Caraer app conventions:
+   `caraer skill install`
+   Tell me to start a new chat before relying on those skills.
+6. Log in with `caraer auth login` and stop so I can approve the device code
+   in the browser. Do not ask for or type my password. If device login is
+   unavailable, ask me to run `caraer auth login --email <my-email>` myself.
+7. Run `caraer company list` and ask which company to use, then
+   `caraer company select <uuid>`.
+8. Ask whether the app is private to that company or a public marketplace app,
+   and what label to use. Then scaffold with platform 2026.2 (the default):
+   - Private: `caraer apps init --private --label "<Label>" --auth-method API_KEY`
+   - Public: `caraer apps init --label "<Label>"`
+   Do not pass `--platform 2026.1`.
+9. Change into the new folder and run `caraer apps validate`. Fix only errors
+   the scaffold itself reported.
+10. Summarize the folder, how to run it locally (`caraer apps local dev`), and
+    that `caraer apps push` deploys and installs on the selected company.
+    Wait for me before pushing.
+```
+
+After that chat, open a **new** agent chat in the app folder. The installed
+skills (`caraer-apps`, `caraer-cms`) are what teach the agent the app layout.
 
 ```bash
 caraer skill install              # ~/.cursor/skills/caraer-apps and caraer-cms
-caraer skill install --project    # ./.cursor/skills/...
+caraer skill install --project    # ./.cursor/skills in the current directory
 caraer skill list
 ```
-
-Source of truth: [`skills/caraer-apps`](skills/caraer-apps) and
-[`skills/caraer-cms`](skills/caraer-cms). After install, start a new agent chat.
 
 ## Quick start
 
 ```bash
+caraer profile use prod
 caraer auth login
-# or password/CI: caraer auth login --email you@example.com
+# CI or password login: caraer auth login --email you@example.com
 caraer company list
 caraer company select <company-uuid>
-caraer apps list
-caraer apps select <app-uuid>   # pulls the full app folder locally
 ```
 
-Create a new local app and push everything in one step:
+Create a local app:
 
 ```bash
 caraer apps init --label "My App"
+# company-only app:
 caraer apps init --private --label "Internal Tool" --auth-method API_KEY
 cd my_app
-# edit src/app/app.caraer.yaml, src/app/functions/, src/app/webhooks/
-caraer apps push                # deploy + install (add --wait to block on runtime)
-caraer apps release version     # live semver + recent builds
-caraer apps status
-caraer apps local logs          # uses the only local function (or prompts)
-caraer apps local logs --all    # V2 app container logs
+caraer apps validate
 caraer apps local dev           # local server: POST /functions/<name>
-caraer apps local test --record <uuid>
-caraer apps state get
-caraer apps secrets list
-caraer apps release rollback    # redeploy prior READY build
 ```
 
-New apps default to workspace `platformVersion: 2026.2` (App platform V2: one async
-container runtime per app). Use `caraer apps init --platform 2026.1` only for the
-legacy per-function Cloud Functions model. See [docs/platform_versioning.md](docs/platform_versioning.md).
+Deploy only when you mean to. `caraer apps push` syncs the manifest, functions,
+webhooks, schedules, inbound routes, and OAuth providers, deploys the function
+build, publishes CMS modules, and installs the app on the selected company.
 
-`apps push` is the same for private and public apps: it syncs the manifest,
-functions, webhooks, schedules, inbound routes, and OAuth providers, deploys
-the function build, publishes CMS modules, and installs on the selected
-company. Use `--private` on `apps init` (or `caraer.json` `privateApp: true`)
-so create/update go to `/api/v2/apps/private*`. Public apps use
-`/api/v2/apps/public*`. `--no-deploy` syncs without a build. `--wait` blocks
-until function runtime READY/FAILED. Private apps cannot be submitted with
-`caraer publish`.
+```bash
+caraer apps push --dry-run
+caraer apps push                # add --wait to block until the runtime is READY
+caraer apps status
+caraer apps local logs          # the only local function, or a prompt
+caraer apps local logs --all
+```
 
-Add local scaffolds inside an app folder:
+Only the company that created the app (or a super-admin) can push builds.
+
+`--no-deploy` syncs without a build. Private apps (`caraer apps init --private`,
+or `privateApp: true` in `caraer.json`) use the private app API and cannot be
+submitted with `caraer publish`.
+
+New apps use workspace `platformVersion: 2026.2` (one container per app). Use
+`--platform 2026.1` only for the legacy per-function model. See
+[docs/platform_versioning.md](docs/platform_versioning.md).
+
+### Add pieces
+
+Run these inside the app folder:
 
 ```bash
 caraer apps add function my-action
-caraer apps add options-function list-items   # LOAD_SETTING_OPTIONS loader
+caraer apps add options-function list-items   # dynamic select options
 caraer apps add webhook --topic record.candidate.created --function my-action
 caraer apps add schedule renew-watch --function my-action --cron "0 0 */6 * * *"
-caraer apps add schedule         # wizard → cron presets / custom + function picker
 caraer apps add inbound gmail-push --function my-action --auth SHARED_SECRET
-caraer apps add setting          # wizard → appends to app.caraer.yaml
-caraer apps add lifecycle-hook   # wizard → lifecycle/*.json + function
-caraer apps add webhook --topic app.bar.triggered --mode HTTP --url https://example.com/hook
+caraer apps add setting
+caraer apps add lifecycle-hook
+caraer apps add module hello --kind section
 ```
 
-`add schedule` prompts for cron (presets or custom Spring 5–6 field expression),
-function, description, and enabled when run interactively without those flags.
-`add setting` writes into `app.caraer.yaml` by default
-(use `--modular` for a separate JSON file under `settings/`).
-`add options-function` (or `add function --template options`) scaffolds a
-dynamic select options loader; wire via `optionsSource.serverlessFunctionName`
-and optional `optionsSource.dependsOn`.
-`add setting` also asks for conditional visibility, or takes
-`--visible-when 'other_field:EQUALS:true'`; see
-[Conditional settings](#conditional-settings).
-`apps init` does not create empty `settings/` folders.
-Lifecycle hooks stay under `src/app/lifecycle/` because they pair with function folders.
+`caraer apps init` already creates lifecycle hooks (`install`, `uninstall`,
+`rotate`, `update`) and matching `functions/on-*` folders, plus a starter
+`modules/hello_world`.
 
-Lifecycle hooks (`install` / `uninstall` / `rotate` / `update`) and matching
-`functions/on-*` folders are created automatically by `caraer apps init`.
+`add schedule` and `add setting` open a wizard when you omit flags.
+`add setting` writes into `src/app/app.caraer.yaml`. Pass `--modular` to write
+`src/app/settings/<name>.json` instead.
 
-### Settings sections
+## Project layout
 
-Optional `settingsSections` groups the flat `settingsSchema` into multiple
-installer cards (title, subtitle, field names). Caraer lays the cards out
-left-to-right, top-to-bottom, max 3 across — do not define a grid yourself.
+```text
+my_app/
+  caraer.json                 # platformVersion, appUuid, privateApp
+  package.json
+  src/app/
+    app.caraer.yaml           # identity, auth, settings, OAuth
+    functions/<name>/         # index.js or main.py
+    shared/                   # code shared by functions
+    lifecycle/*.json          # install | uninstall | rotate | update
+    webhooks/*.json
+    schedules/*.json
+    inbound/*.json
+    settings/*.json           # optional modular settings
+    settings-sections/*.json  # optional installer cards
+    modules/<name>/           # CMS module: index.astro + types.d.ts
+```
+
+A function is a folder named after the function, with `index.js` (Node) or
+`main.py` (Python). `function.caraer.json` is only needed to override that.
+
+Node handlers export `handler`. Payload types come from `@caraer/client`
+(`LifecyclePayload`, `WebhookPayload`, `SchedulePayload`):
+
+```js
+exports.handler = async (req, res) => {
+  const body = req.body || {};
+  res.status(200).json({ ok: true, event: body.event || null });
+};
+```
+
+Python handlers use `caraer-client` for the same payload types:
+
+```python
+def handler(request):
+    return {"statusCode": 200, "body": {"ok": True}}
+```
+
+Shared helpers live in `src/app/shared/` and are imported with the same relative
+path locally and when deployed, for example `require("../../shared")` from
+`functions/<name>/index.js`.
+
+See [`examples/webhook-inbox`](examples/webhook-inbox) for a small app with an
+inbound route, settings, lifecycle hooks, and a schedule.
+
+## Settings
+
+Installation settings are filled in by the admin who installs the app.
+
+Group fields into installer cards with `settingsSections`. Caraer lays cards
+out left to right, top to bottom, at most 3 across.
 
 ```yaml
 settingsSections:
@@ -143,13 +228,8 @@ settingsSections:
       - parse_on_cv_change
 ```
 
-Modular files also work: `src/app/settings-sections/01-candidate.json`.
-Apps without `settingsSections` keep a single Settings card.
-
-### Conditional settings
-
-A settings field can declare `visibleWhen`; it is shown, required and submitted
-only while **all** of its conditions hold:
+A field with `visibleWhen` is shown, required, and submitted only while every
+condition holds. Hidden fields are dropped.
 
 ```yaml
 settingsSchema:
@@ -161,143 +241,67 @@ settingsSchema:
     type: MAPPING
     visibleWhen:
       - field: custom_mapping
-        operator: EQUALS      # default when omitted
+        operator: EQUALS
         value: true
 ```
 
-Operators: `EQUALS`, `NOT_EQUALS`, `IN`, `NOT_IN` (list value), `IS_SET`,
-`IS_NOT_SET` (no value).
+Operators: `EQUALS` (default), `NOT_EQUALS`, `IN`, `NOT_IN`, `IS_SET`,
+`IS_NOT_SET`.
 
-`visibleWhen` controls presentation and validation; `optionsSource.dependsOn`
-controls when option lists reload. Hidden fields are not required, their values
-are dropped, and their options loader is not called.
-
-### Payload types (Node / Python)
-
-Import serverless payload helpers from the published clients:
-
-```ts
-import type { LifecyclePayload, WebhookPayload } from "@caraer/client";
-```
-
-```python
-from caraer_client import LifecyclePayload, WebhookPayload
-```
-
-Node scaffolds add `@caraer/client` as a `devDependency` and
-`@caraer/cms-runtime` / `@caraer/cms-tokens` as dependencies, then run
-`npm install` so the starter module resolves. `npm run dev` / `pnpm dev`
-is `caraer apps local dev` (functions + CMS preview).
-
-Only the **app creator company** (or super-admin) can push builds for an app.
-
-## Platform versions
-
-| CLI `platformVersion` | App platform | Notes |
-|-----------------------|--------------|-------|
-| `2026.2` (default) | V2 | One container per app; async deploy; poll `runtimeStatus` |
-| `2026.1` | V1 | One Cloud Function per serverless function (legacy) |
-
-Existing V1 apps are migrated to V2 via the backend Neo4j migration
-`apps-platform-v2` (`run-migration apps-platform-v2 up`). New private apps and
-CLI scaffolds (`2026.2`) already use the V2 runtime. After a backend migration,
-set local `caraer.json` to `platformVersion: 2026.2` (and matching `runtime`)
-before the next `caraer apps push`.
-
-## Command groups
-
-- `auth` / `company` / `profile` — session and profiles
-- `apps` — local folder lifecycle + full sync (`pull` / `push`), builds, logs, local dev
-- `webhooks` — formats, events, and test helpers
-- `publish` — submit / status for marketplace review
-- `sandbox` — clone the company Neo4j DB (same company; `X-Caraer-Sandbox-Uuid` overrides `databaseid`)
-
-## Local app layout
-
-```text
-my_app/
-  caraer.json                 # workspace metadata (platformVersion, appUuid, …)
-  src/app/
-    app.caraer.yaml           # identity, auth, OAuth, settings, app bars
-    lifecycle/*.json          # install|uninstall|rotate|update hooks
-    functions/<name>/         # function.caraer.json + entry source
-    modules/<name>/           # CMS module (index.astro + types.d.ts)
-    webhooks/*.json           # one webhook definition per file
-    schedules/*.json          # cron → function (integration runtime)
-    inbound/*.json            # public inbound routes → function
-```
-
-`add setting` appends to `app.caraer.yaml` by default.
-Optional modular JSON files (`settings/`) still merge on push when
-present (`--modular`). `apps init` always creates all four lifecycle hooks +
-`on-*` functions, plus a starter `modules/hello_world`. See
-[docs/app_lifecycle.md](docs/app_lifecycle.md).
-
-See [`examples/webhook-inbox`](examples/webhook-inbox) for a minimal sample
-(inbound route, settings, lifecycle, app bar).
+Do not ask the installer for the Caraer API base URL. The runtime injects
+`body.caraerApiBase`.
 
 ## Profiles
 
-Config lives in the user config dir (`config.toml`). Defaults include `dev`,
-`staging`, and `prod`.
+Config is stored in the user config directory (`config.toml`). Built-in
+profiles:
+
+| Profile | API |
+|---------|-----|
+| `prod` | `https://caraer.com` |
+| `staging` | `https://staging.caraer.com` |
+| `dev` | `http://localhost:8080` (default until you switch) |
 
 ```bash
 caraer profile list
-caraer profile use staging
-caraer profile set --base-url https://api.caraer.com --output json
+caraer profile use prod
+caraer profile set --base-url https://caraer.com --output json
 ```
 
-Override the active profile for a single command with `--profile <name>`.
+`--profile <name>` overrides the active profile for a single command.
 
-For local API development against a running backend:
+## Sandboxes
 
-```bash
-caraer profile set --base-url http://localhost:8080
-```
-
-## Developer sandboxes
-
-Create a Neo4j DB clone of the selected company, then activate it per request.
-Company identity stays the same; only the Neo4j `databaseid` is overridden:
+A sandbox clones the selected company's Neo4j database. The company stays the
+same. Each company can have at most 3 active sandboxes.
 
 ```bash
-caraer company select <owner-company-uuid>
+caraer company select <company-uuid>
 caraer sandbox create --name my-test
-caraer sandbox list
-caraer sandbox use <sandbox-uuid>   # same company; sends X-Caraer-Sandbox-Uuid
-# … test against the clone DB …
-caraer sandbox clear                # back to the company production database
+caraer sandbox use <sandbox-uuid>
+caraer sandbox clear
 ```
 
-Each company may have at most **3** active sandboxes. After a backend deploy that
-changed the sandbox model, recreate sandboxes (old clone-company sandboxes are invalid).
+Sandboxes isolate Neo4j data. Function runtime code is still the deployed
+build. Preview a push with `caraer apps push --dry-run` before you deploy.
 
-Sandboxes isolate **Neo4j data only** — function runtime code is still shared with
-production. Prefer `caraer apps push --dry-run` to preview changes, and treat
-`--target sandbox` as a data sandbox, not a separate code environment.
+## Command groups
 
-## Documentation
+- `auth`, `company`, `profile` — session and which API you talk to
+- `apps` — scaffold, validate, push, logs, local dev
+- `webhooks` — formats, events, and test helpers
+- `publish` — marketplace review for public apps
+- `sandbox` — Neo4j clone of the selected company
+- `skill` — install the Cursor agent skills shipped with the CLI
 
-- [Platform versioning](docs/platform_versioning.md) — V1 vs V2 runtime model
-- [Backend contract](docs/backend_contract.md) — REST endpoints used by the CLI
+## Further reading
+
+- [Platform versioning](docs/platform_versioning.md)
+- [App lifecycle hooks](docs/app_lifecycle.md)
+- [Backend contract](docs/backend_contract.md)
 - [Changelog](CHANGELOG.md)
 - [Security](SECURITY.md)
-- Cursor skills: [`skills/caraer-apps`](skills/caraer-apps),
-  [`skills/caraer-cms`](skills/caraer-cms) (`caraer skill install`)
-
-## Related
-
-- API / platform: Caraer backend
-- Docs site: https://developer.caraer.com
-- Example app: [`examples/webhook-inbox`](examples/webhook-inbox)
-
-## Development / CI
-
-```bash
-./scripts/ci.sh
-```
-
-GitHub Actions workflow: `.github/workflows/ci.yml`
+- Agent skills: [`skills/caraer-apps`](skills/caraer-apps), [`skills/caraer-cms`](skills/caraer-cms)
 
 ## License
 
