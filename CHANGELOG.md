@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Guides for serverless functions, CMS modules, webhooks, lifecycle hooks,
+  schedules, and inbound routes: `docs/functions.md`, `docs/modules.md`,
+  `docs/webhooks.md`, `docs/app_lifecycle.md`, `docs/schedules.md`,
+  `docs/inbound.md`.
+
+- The default profile is `prod` (`https://api.caraer.com`). Built-in profiles
+  are `local` (`http://localhost:8080`), `dev` (`https://v2.dev.api.caraer.com`),
+  `staging` (`https://v2.staging.api.caraer.com`), and `prod`. Existing configs
+  that still use the old hosts are updated on the next command. Staging and
+  dev are not proxied through Cloudflare.
+
 - CMS preview reinstalls when `@caraer/cms-runtime` or `@caraer/cms-tokens`
   are missing or are broken `caraer-web/packages` links, instead of treating
   an existing `@astrojs/node` as enough.
