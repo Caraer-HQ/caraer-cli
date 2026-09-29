@@ -225,7 +225,12 @@ const settings = body.settingsValues
 
 ## Record webhook topics
 
-`src/app/webhooks/<name>.json` declares one topic each:
+On `2026.2.1` declare a static topic on `exports.manifest.webhooks`. On
+`2026.2` use one JSON file under `src/app/webhooks/`.
+
+The topic must use a concrete object (and property) name. Setting
+placeholders such as `record.<setting:target_object>.created` are **not**
+valid. `records.<setting:field>.all` belongs on `requiredScopes` only.
 
 | Topic | Fires on |
 |-------|----------|
@@ -239,7 +244,8 @@ const settings = body.settingsValues
 string — there is no separate filter block.
 
 When the object or property is chosen at **install** time, register the webhook
-from a lifecycle hook instead of declaring it locally:
+from a lifecycle hook instead of declaring it locally. Read the object name
+from the setting, then POST a concrete topic:
 
 ```js
 const functionUuid = await resolveFunctionUuidByName(ctx, "cv-changed");
@@ -398,6 +404,9 @@ requiredScopes:
 Object-select fields use the selected object name. Mapping fields use
 `mappingValue.objectName`. Empty settings or unmatched traits grant no extra
 record scopes. Setting and trait scopes update when the installer saves.
+
+These placeholders do not work in webhook `topic` strings. See
+[Record webhook topics](#record-webhook-topics).
 
 ## Useful CLI
 

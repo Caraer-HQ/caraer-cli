@@ -58,11 +58,28 @@ filter object.
 
 Append `.<relation>` when only one relation type should fire.
 
-When the object or property is chosen at install time, do not hard-code the
-topic in `webhooks/`. Create the webhook from the install or update
-[lifecycle hook](app_lifecycle.md) with
-`POST {caraerApiBase}/v2/apps/{appUuid}/webhooks`, and delete stale topics
-when the app is updated or uninstalled.
+`<object>` and `<property>` in the topic are literal names (`candidate`,
+`email`). They are **not** setting placeholders. `record.<setting:target_object>.created`
+is invalid. Use `records.<setting:target_object>.all` on `requiredScopes` so
+the installer can pick the object; then register the webhook from a
+[lifecycle hook](app_lifecycle.md) once you know the value:
+
+```js
+const objectName = String(settings.target_object || "").toLowerCase();
+await caraerFetch(ctx, `/v2/apps/${ctx.appUuid}/webhooks`, {
+  method: "POST",
+  body: {
+    topic: `record.${objectName}.created`,
+    deliveryMode: "SERVERLESS",
+    webhookFormat: "USER_FRIENDLY",
+    serverlessFunction: { name: "hello-world" },
+  },
+});
+```
+
+Do not declare that install-time topic on `exports.manifest.webhooks`. List
+existing hooks with `POST /v2/apps/{appUuid}/webhooks/index` and delete stale
+topics on update and uninstall.
 
 ## App bars
 

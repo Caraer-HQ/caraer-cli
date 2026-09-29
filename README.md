@@ -258,6 +258,11 @@ Operators: `EQUALS` (default), `NOT_EQUALS`, `IN`, `NOT_IN`, `IS_SET`,
 Do not ask the installer for the Caraer API base URL. The runtime injects
 `body.caraerApiBase`.
 
+`records.<setting:field>.all` on `requiredScopes` follows the installer's
+object pick. Webhook **topics** cannot use that placeholder — they need a
+literal `record.candidate.created` (or the same name built in a lifecycle
+hook). See [docs/webhooks.md](docs/webhooks.md).
+
 ## Profiles
 
 Config is stored in the user config directory (`config.toml`). Built-in

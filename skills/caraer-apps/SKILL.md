@@ -139,7 +139,9 @@ Installation settings are for **admins installing the app**, not developers.
   `.relations_all`) instead of hard-coding object names. Bare `<field>`
   still works. Empty mappings grant no extra scopes. Use
   `records.<trait:user>.all` when every object with that trait must be
-  reachable.
+  reachable. Setting placeholders are for scopes only — a webhook topic
+  must be a concrete `record.<object>.…` name. Register install-time
+  topics from a lifecycle hook (see [reference.md](reference.md)).
 - Group related fields into installer cards with `section` / `sectionSubtitle`
   on each field in `settings.yaml`. On 2026.2 use `settings-sections/*.json`.
   Do not invent a grid; Caraer lays cards out left-to-right, top-to-bottom,

@@ -10,7 +10,7 @@
     "topic": {
       "type": "string",
       "minLength": 1,
-      "description": "Event topic. Record webhooks are object-scoped: record.{object}.{created|updated|deleted|all}."
+      "description": "Concrete event topic such as record.candidate.created. Setting placeholders (record.<setting:field>.created) are not valid; use requiredScopes plus a lifecycle hook to subscribe after install."
     },
     "deliveryMode": {
       "type": "string",

@@ -123,6 +123,10 @@ exports.handler = async (req, res) => {
 };
 ```
 
+Install and update are also where you subscribe to a record object the
+installer chose. Webhook topics cannot embed `records.<setting:…>` —
+build `record.${objectName}.created` and POST it. See [Webhooks](webhooks.md).
+
 ## What is not a lifecycle webhook today
 
 OAuth **Connect** / **Disconnect** (`ConnectionConnected` / `ConnectionRevoked`) refresh
