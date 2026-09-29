@@ -18,3 +18,21 @@
   required: true
   section: Records
   sectionSubtitle: Object chosen at install time. Not a webhook topic placeholder.
+- name: due_date
+  type: PROPERTY_SINGLE_SELECT
+  label: Due date
+  helpText: Fills record.<this.objectName>.date_due.<this.propertyName> on due-date.
+  required: true
+  section: Records
+- name: field_map
+  type: MAPPING
+  label: Field map
+  helpText: field-map reads the email row with <setting:field_map.email>.
+  required: true
+  section: Records
+  mappingValue:
+    items:
+      - fieldName: email
+        fieldLabel: Email
+      - fieldName: phone
+        fieldLabel: Phone

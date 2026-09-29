@@ -137,15 +137,19 @@ Installation settings are for **admins installing the app**, not developers.
 - Keep required settings to the minimum that makes the app work.
 - When the app writes mapped records, declare
   `records.<setting:mapping_field>.all` (and `.properties_all` /
-  `.relations_all`) instead of hard-coding object names. Bare `<field>`
+  `.relations_all`) instead of hard-coding object names. A property
+  single-select targets that property with
+  `records.<setting:due_date.objectName>.property.<setting:due_date.propertyName>.all`.
+  `propertyNames` grants each selected property. Bare `<field>`
   still works. Empty mappings grant no extra scopes. Use
   `records.<trait:user>.all` when every object with that trait must be
   reachable. The same placeholders work on webhook topics
   (`record.<setting:target_object>.created`). `date_due` uses the same
   placeholder; the company copy is what gets scheduled. Read a key with a
   path: `record.<setting:due_date.objectName>.date_due.<setting:due_date.propertyName>`.
-  Mapping fields use `<setting:field_map.objectName>` and
-  `<setting:field_map.mappingValue.items.propertyName>`. The template still needs
+  Mapping fields use `<setting:field_map.objectName>` for the object and
+  `<setting:field_map.email>` for the row whose `fieldName` is `email`.
+  Scopes stay `records.<setting:field_map.objectName>.all`. The template still needs
   `triggerOffsetSeconds`.
 - Group related fields into installer cards with `section` / `sectionSubtitle`
   on each field in `settings.yaml`. On 2026.2 use `settings-sections/*.json`.

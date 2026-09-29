@@ -247,9 +247,9 @@ Caraer expands the placeholder from that installation's settings when the
 event fires. Pair it with `records.<setting:target_object>.all`. An empty
 setting means the webhook does not fire. A path reads one key:
 `record.<setting:due_date.objectName>.date_due.<setting:due_date.propertyName>`
-becomes `record.candidate.date_due.interview_date`. A mapping uses
-`<setting:field_map.objectName>` and
-`<setting:field_map.mappingValue.items.propertyName>`. Caraer stores the
+becomes `record.candidate.date_due.interview_date`. A mapping object is
+`<setting:field_map.objectName>`. A row is `<setting:field_map.email>`, the
+`fieldName` key. Caraer stores the
 concrete topic on that company's webhook when settings are saved, and
 schedules that copy. The template still needs `triggerOffsetSeconds`.
 
@@ -415,7 +415,8 @@ requiredScopes:
 |---|---|
 | `<fieldName>` | Setting value (still supported) |
 | `<setting:fieldName>` | Same setting value, preferred for new apps |
-| `<setting:field.key>` | One key on that value (`objectName`, `propertyName`, `mappingValue.objectName`, `mappingValue.items.propertyName`) |
+| `<setting:field.key>` | One key on that value (`objectName`, `propertyName`, `propertyNames`, `mappingValue.objectName`) |
+| `records.<setting:field.objectName>.property.<setting:field.propertyName>.all` | Read and write for the property a property single-select stored. `propertyNames` grants each selected property. |
 | `<trait:traitName>` | Every object with that trait (e.g. `user` → employee) |
 
 Object-select fields use the selected object name. Mapping fields use

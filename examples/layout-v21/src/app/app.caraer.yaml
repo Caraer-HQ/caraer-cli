@@ -8,6 +8,9 @@ oauthRedirectUris:
   - http://localhost:3000/oauth/callback
 requiredScopes:
   - records.<setting:target_object>.all
+  - records.<setting:due_date.objectName>.all
+  - records.<setting:due_date.objectName>.property.<setting:due_date.propertyName>.all
+  - records.<setting:field_map.objectName>.all
 webhookRateLimitPerMinute: 100
 jobRateLimitPerMinute: 60
 # Settings: src/app/settings.yaml

@@ -168,8 +168,8 @@ means the webhook does not fire. `record.<trait:user>.created` expands to
 every object with that trait.
 
 A path after the field name reads one key. A property single-select stores
-`objectName` and `propertyName`. A mapping stores `mappingValue.objectName`,
-and `mappingValue.items.propertyName` expands to one topic per mapped property.
+`objectName` and `propertyName`. A mapping stores `mappingValue.objectName`.
+A row is selected by its `fieldName`, so `field.email` is that key's target.
 
 ```js
 exports.manifest = {
@@ -188,9 +188,14 @@ builds the schedule from it. The template is not scheduled. It still needs
 scheduled. A fixed property stays literal:
 `record.<setting:target_object>.date_due.interview_date`.
 
-`<setting:field_map.objectName>` reads the mapping's object.
-`<setting:field_map.mappingValue.items.propertyName>` reads each mapped
-property.
+`<setting:field_map.objectName>` reads the mapping's object. A row is addressed
+by its `fieldName`: `<setting:field_map.email>` is the property, record, or
+literal the installer mapped to the `email` key.
+`<setting:field_map.mappingValue.items.propertyName>` still reads every mapped
+property. Mapping scopes stay on the object,
+`records.<setting:field_map.objectName>.all`. A property single-select can
+grant that property:
+`records.<setting:due_date.objectName>.property.<setting:due_date.propertyName>.all`.
 
 [`examples/layout-v21`](../examples/layout-v21) declares
 `record.<setting:target_object>.created` on `hello-world`.

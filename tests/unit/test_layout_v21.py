@@ -380,3 +380,48 @@ def test_app_bar_dialog_rejects_unknown_field_type(tmp_path: Path) -> None:
     path.write_text(upsert_code_manifest(source, manifest), encoding="utf-8")
     report = validate_local_app(root)
     assert any("NOT_A_TYPE" in issue.message for issue in report.issues)
+
+
+EXAMPLE = Path(__file__).resolve().parents[2] / "examples" / "layout-v21"
+DUE_TOPIC = "record.<setting:due_date.objectName>.date_due.<setting:due_date.propertyName>"
+MAP_TOPIC = "record.<setting:field_map.objectName>.property_changed.<setting:field_map.email>"
+
+
+def _webhook_topics(root: Path) -> list[dict]:
+    config = load_workspace(root)
+    files = discover_layout_v21_functions(root, config)
+    return [item for _, item in webhook_items_from_files(files)]
+
+
+def test_example_webhook_cases_are_separate_functions() -> None:
+    items = _webhook_topics(EXAMPLE)
+    by_topic = {item["topic"]: item for item in items}
+    assert "record.<setting:target_object>.created" in by_topic
+    assert by_topic[DUE_TOPIC]["triggerOffsetSeconds"] == 0
+    assert MAP_TOPIC in by_topic
+    stems = {item["serverlessFunction"]["name"] for item in items}
+    assert {"hello-world", "due-date", "field-map"} <= stems
+    assert not (EXAMPLE / "src" / "app" / "app-bars.yaml").exists()
+    report = validate_local_app(EXAMPLE)
+    assert report.ok, [issue.message for issue in report.issues]
+
+
+def test_example_documents_function_body_shapes() -> None:
+    shared = (EXAMPLE / "src" / "app" / "shared" / "index.js").read_text(encoding="utf-8")
+    assert "eventType:" in shared
+    assert "dialog: body.appBarSettingsValues" in shared
+    assert "body.record && body.record.record" in shared or "record.record" in shared
+    docs = (Path(__file__).resolve().parents[2] / "docs")
+    functions = (docs / "functions.md").read_text(encoding="utf-8")
+    webhooks = (docs / "webhooks.md").read_text(encoding="utf-8")
+    assert "scheduleName" in functions
+    assert "app.inbound" in functions
+    assert "Installed" in functions
+    assert "body.record.record" in webhooks or "record.record" in webhooks
+    assert "appBarSettingsValues" in webhooks
+    install = (EXAMPLE / "src" / "app" / "lifecycle" / "install.js").read_text(encoding="utf-8")
+    heartbeat = (EXAMPLE / "src" / "app" / "schedules" / "heartbeat.js").read_text(encoding="utf-8")
+    echo = (EXAMPLE / "src" / "app" / "inbound" / "echo.js").read_text(encoding="utf-8")
+    assert "Installed" in install
+    assert "scheduleName" in heartbeat or "body.payload" in heartbeat
+    assert "body.payload" in echo or "ctx.body" in echo
