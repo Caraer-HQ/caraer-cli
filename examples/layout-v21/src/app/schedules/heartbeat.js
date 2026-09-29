@@ -1,3 +1,5 @@
+// req.body.action is "app.schedule". The schedule is req.body.payload
+// ({ scheduleName, ...template }). Token and settingsSchema are on req.body.
 const { contextFrom, putState, ok } = require("../shared");
 
 exports.handler = async (req, res) => {

@@ -311,3 +311,21 @@ def test_sanitize_lifecycle_keeps_wait_until_complete() -> None:
     )
     assert sanitized["waitUntilComplete"] is True
     assert "uuid" not in sanitized
+    assert sanitized["serverlessFunction"] == {"name": "on-install"}
+
+
+def test_sanitize_lifecycle_keeps_function_name_and_uuid() -> None:
+    from caraer_cli.project.lifecycle_sync import sanitize_lifecycle
+
+    sanitized = sanitize_lifecycle(
+        {
+            "topic": "app.installed",
+            "deliveryMode": "SERVERLESS",
+            "serverlessFunction": {
+                "name": "install",
+                "uuid": "5b9a5c40-1be3-4aeb-b8f5-bc44ca41556a",
+            },
+        }
+    )
+    assert sanitized["serverlessFunction"]["name"] == "install"
+    assert sanitized["serverlessFunction"]["uuid"] == "5b9a5c40-1be3-4aeb-b8f5-bc44ca41556a"

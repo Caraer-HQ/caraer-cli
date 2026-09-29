@@ -179,8 +179,9 @@ def push_webhooks(
             results.append({"file": path.name, "uuid": uuid, "action": "created"})
             if uuid:
                 wh_state[path.stem] = {"uuid": uuid, "topic": local.get("topic")}
-            # Persist uuid back into the local file for stable future matches.
-            if uuid and not raw.get("uuid"):
+            # Legacy webhook JSON files keep the remote uuid for the next push.
+            # Function manifests declare the topic only; do not rewrite them as JSON.
+            if uuid and not raw.get("uuid") and path.suffix == ".json":
                 raw["uuid"] = uuid
                 path.write_text(json.dumps(_sanitize_local_webhook(raw), indent=2) + "\n", encoding="utf-8")
 

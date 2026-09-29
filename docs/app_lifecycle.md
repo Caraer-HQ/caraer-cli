@@ -143,6 +143,6 @@ provision after the user saves USER-scoped settings (`userSettingsChanged`).
 |----------------|---------|---------|
 | `settings.yaml` field list (or `settings/*.json` on 2026.2) | `caraer apps add setting` | Installation settings |
 | `section` / `sectionSubtitle` on a field (or `settings-sections/*.json` on 2026.2) | edit settings | Installer setting cards |
-| `appBars` in YAML | edit manifest | Record / tool / trait bars |
+| `appBars` on the function manifest | edit the function | Record / tool / trait bars |
 
 Validate with `caraer apps validate`.

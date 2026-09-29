@@ -34,10 +34,105 @@ to a URL you own).
 ```
 
 `USER_FRIENDLY` is the normal payload. `RAW` is the platform event as stored.
+The function receives that object as `req.body`. It is not nested under
+`payload`. Lifecycle hooks use a different envelope; see
+[functions](functions.md).
 
-The handler receives a [function body](functions.md) plus the event on
-`payload`. Type it as `WebhookPayload` from `@caraer/client` or
-`caraer-client`.
+## What the function receives
+
+A record webhook (`webhookFormat: USER_FRIENDLY`) looks like this. The
+record is `body.record.record`. `body.record.relations` is present only when
+the webhook lists `includeRelations`.
+
+```json
+{
+  "event": {
+    "type": "Created",
+    "timestamp": 1710000000000,
+    "correlationId": "…",
+    "propertyName": "email",
+    "previousValue": "old@example.com",
+    "newValue": "new@example.com"
+  },
+  "record": {
+    "record": {
+      "uuid": "…",
+      "objectName": "candidate",
+      "properties": { "email": "new@example.com", "name": "Ada" }
+    },
+    "relations": {}
+  },
+  "user": {
+    "type": "user",
+    "uuid": "…",
+    "email": "ada@example.com",
+    "firstname": "Ada",
+    "lastname": "Lovelace",
+    "companyUuid": "…"
+  },
+  "context": { "companyUuid": "…" },
+  "appUuid": "…",
+  "companyUuid": "…",
+  "companyName": "Acme",
+  "caraerApiBase": "https://api.caraer.com/api",
+  "installationToken": "inst_…",
+  "settingsSchema": [
+    { "name": "display_name", "type": "SINGLE_LINE", "value": "Hello" }
+  ],
+  "scopes": ["records.candidate.all"],
+  "secrets": {},
+  "connections": []
+}
+```
+
+`event.type` is `Created`, `Updated`, `Deleted`, `property_changed`,
+`date_due`, `relation_created`, `relation_updated`, or `relation_deleted`.
+`propertyName`, `previousValue`, and `newValue` are set for property and
+date-due events. Relation events also set `relationName`, `fromRecord`,
+`toRecord`, `fromRecordUuid`, and `toRecordUuid`. Form submissions set
+`formName`.
+
+`settingsSchema` is the installation settings, each field with its stored
+`value`. Flatten it with `name → value`. `installationToken` is the
+short-lived Bearer for `{caraerApiBase}`.
+
+An app-bar click (`app.bar.triggered`) is a flat body. Dialog answers are
+`appBarSettingsValues`. `settingsSchema` is still the installation settings,
+not the dialog.
+
+```json
+{
+  "event": "app.bar.triggered",
+  "timestamp": 1710000000000,
+  "appUuid": "…",
+  "appName": "layout_v21",
+  "appLabel": "Layout v21",
+  "appBarUuid": "…",
+  "appBarLabel": "Layout v21 ping",
+  "location": "RECORD_OVERVIEW",
+  "recordUuid": "…",
+  "object": "candidate",
+  "viewId": "…",
+  "trait": "user",
+  "companyUuid": "…",
+  "companyName": "Acme",
+  "userUuid": "…",
+  "installationToken": "inst_…",
+  "caraerApiBase": "https://api.caraer.com/api",
+  "appBarSettingsValues": { "note": "Hello", "priority": "high" },
+  "appBarSettingsSchema": [
+    { "name": "note", "type": "SINGLE_LINE", "value": "Hello" }
+  ],
+  "settingsSchema": [
+    { "name": "display_name", "type": "SINGLE_LINE", "value": "Hello" }
+  ],
+  "scopes": []
+}
+```
+
+`recordUuid` and `object` are the open record. `viewId` and `trait` are set
+when that location has them. `viewData` is the overview selection when the
+bar is `RECORD_OVERVIEW`.
 
 ## Topics
 
@@ -72,20 +167,67 @@ Caraer expands that per installation when the event fires. Pair it with
 means the webhook does not fire. `record.<trait:user>.created` expands to
 every object with that trait.
 
-`date_due` topics still need a concrete object and property — schedules are
-precomputed and cannot resolve placeholders.
+A path after the field name reads one key. A property single-select stores
+`objectName` and `propertyName`. A mapping stores `mappingValue.objectName`,
+and `mappingValue.items.propertyName` expands to one topic per mapped property.
+
+```js
+exports.manifest = {
+  webhooks: [{
+    topic: "record.<setting:due_date.objectName>.date_due.<setting:due_date.propertyName>",
+    triggerOffsetSeconds: 86400,
+    scheduleDirection: "BEFORE",
+  }],
+};
+```
+
+When the company picks candidate / `interview_date`, Caraer stores
+`record.candidate.date_due.interview_date` on that company's webhook and
+builds the schedule from it. The template is not scheduled. It still needs
+`triggerOffsetSeconds`. A missing key removes the company copy, so nothing is
+scheduled. A fixed property stays literal:
+`record.<setting:target_object>.date_due.interview_date`.
+
+`<setting:field_map.objectName>` reads the mapping's object.
+`<setting:field_map.mappingValue.items.propertyName>` reads each mapped
+property.
 
 [`examples/layout-v21`](../examples/layout-v21) declares
 `record.<setting:target_object>.created` on `hello-world`.
 
 ## App bars
 
-Record buttons are webhooks too. Declare them on `appBars` in
-`src/app/app.caraer.yaml` (there is no `add` command). Locations:
+Record buttons are webhooks too. On `2026.2.1` declare the bar on the
+function that should run. There is no `app-bars.yaml` and no
+`serverlessFunction` reference:
+
+```js
+exports.manifest = {
+  appBars: [
+    {
+      name: "ping_overview",
+      location: "RECORD_OVERVIEW",
+      label: "Ping",
+      actionLabel: "Ping",
+    },
+  ],
+};
+```
+
+Caraer sends topic `app.bar.triggered` to that function. Locations:
 `RECORD_PREVIEW`, `RECORD_OVERVIEW`, `RECORD_TRAIT`, `RECORD_DETAIL`,
-`TOOL_BAR`, `TRAIT_BAR`.
+`TOOL_BAR`, `TRAIT_BAR`. `2026.2` still uses `src/app/app-bars/*.json`.
 
 `RECORD_PREVIEW`, `RECORD_OVERVIEW`, and `RECORD_TRAIT` can show a dialog
-first. Put that dialog's fields on the bar's own `settingsSchema`. In the
-function they arrive as `appBarSettingsValues`. `settingsSchema` on the body
-is still the installation settings.
+first. Put that dialog's fields on the bar's own `settingsSchema`. The same
+field types as installation settings work here: text, switch, selects
+(static `options` or `optionsSource`), object and property pickers,
+`MAPPING`, `FILE`, `MULTI_FILE`, `IMAGE`, `COLOR`, `SECRET`, `REPEATABLE`,
+and `ACTION`. `visibleWhen`, `advanced`, `hidden`, `required`, `helpText`,
+and `defaultValue` apply per field. `icon` is a Font Awesome name such as
+`bolt`.
+
+In the function the dialog arrives as `appBarSettingsValues`.
+`settingsSchema` on the body is still the installation settings.
+[`examples/layout-v21`](../examples/layout-v21/src/app/functions/hello-world.js)
+declares one bar per location and every dialog field on `ping_overview`.

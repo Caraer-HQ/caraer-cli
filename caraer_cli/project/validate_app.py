@@ -68,6 +68,7 @@ SETTING_FIELD_TYPES = frozenset(
         "COLOR",
         "SECRET",
         "ACTION",
+        "REPEATABLE",
     }
 )
 SELECT_FIELD_TYPES = frozenset(
@@ -1415,7 +1416,110 @@ def _validate_app_bars(
                     f"{rel}:iframeUrl",
                     "iframeUrl must be an http(s) URL.",
                 )
+        if item.get("settingsSchema") is not None:
+            _validate_app_bar_settings(
+                item.get("settingsSchema"),
+                f"{rel}:settingsSchema",
+                function_names,
+                issues,
+            )
     return count
+
+
+def _validate_app_bar_settings(
+    fields: Any,
+    rel: str,
+    function_names: set[str],
+    issues: list[ValidationIssue],
+) -> None:
+    """Validate one app-bar dialog schema the same way as installation settings."""
+    if not isinstance(fields, list):
+        _issue(issues, "error", rel, "settingsSchema must be a list.")
+        return
+    known_names = {
+        str(item.get("name") or "").strip()
+        for item in fields
+        if isinstance(item, dict) and str(item.get("name") or "").strip()
+    }
+    action_names = {
+        str(item.get("name") or "").strip()
+        for item in fields
+        if isinstance(item, dict)
+        and str(item.get("type") or "").strip().upper() == "ACTION"
+        and str(item.get("name") or "").strip()
+    }
+    seen: set[str] = set()
+    for index, item in enumerate(fields):
+        where = f"{rel}[{index}]"
+        if not isinstance(item, dict):
+            _issue(issues, "error", where, "Each settings field must be an object.")
+            continue
+        name = str(item.get("name") or "").strip()
+        if not name:
+            _issue(issues, "error", f"{where}:name", "name is required.")
+            continue
+        key = name.lower()
+        if key in seen:
+            _issue(issues, "error", f"{where}:name", f"Duplicate setting name '{name}'.")
+        seen.add(key)
+        _validate_visible_when(item, name, known_names, action_names, where, issues)
+        _validate_filter_traits(item, where, issues)
+        field_type = str(item.get("type") or "").strip().upper()
+        if not field_type:
+            _issue(issues, "error", f"{where}:type", "type is required.")
+            continue
+        if field_type not in SETTING_FIELD_TYPES:
+            _issue(
+                issues,
+                "error",
+                f"{where}:type",
+                f"Unknown type '{field_type}'.",
+            )
+            continue
+        if field_type in SELECT_FIELD_TYPES:
+            options = item.get("options")
+            options_source = item.get("optionsSource")
+            if not options and not options_source:
+                _issue(
+                    issues,
+                    "error",
+                    f"{where}:options",
+                    "SELECT fields require options or optionsSource.",
+                )
+            if isinstance(options_source, dict):
+                fn_name = str(options_source.get("serverlessFunctionName") or "").strip()
+                if fn_name and fn_name not in function_names:
+                    _issue(
+                        issues,
+                        "error",
+                        f"{where}:optionsSource.serverlessFunctionName",
+                        f"Unknown local function '{fn_name}'.",
+                    )
+        elif field_type == "ACTION":
+            if item.get("required") is True:
+                _issue(
+                    issues,
+                    "error",
+                    f"{where}:required",
+                    "ACTION fields cannot be required.",
+                )
+            _validate_action_source(item, where, function_names, issues)
+        elif field_type == "REPEATABLE":
+            children = item.get("itemFields")
+            if not isinstance(children, list) or not children:
+                _issue(
+                    issues,
+                    "error",
+                    f"{where}:itemFields",
+                    "REPEATABLE fields require itemFields.",
+                )
+            else:
+                _validate_app_bar_settings(
+                    children,
+                    f"{where}:itemFields",
+                    function_names,
+                    issues,
+                )
 
 
 def _validate_sf_ref(

@@ -42,10 +42,10 @@ def sanitize_lifecycle(item: dict[str, Any]) -> dict[str, Any]:
     sf = payload.get("serverlessFunction")
     if isinstance(sf, dict):
         cleaned: dict[str, Any] = {}
+        if sf.get("uuid"):
+            cleaned["uuid"] = sf["uuid"]
         if sf.get("name"):
             cleaned["name"] = sf["name"]
-        elif sf.get("uuid"):
-            cleaned["uuid"] = sf["uuid"]
         if cleaned:
             payload["serverlessFunction"] = cleaned
         else:

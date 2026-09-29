@@ -94,6 +94,64 @@ def function_file_by_name(
     return None
 
 
+_ACTION_BAR_LOCATIONS = frozenset(
+    {"RECORD_PREVIEW", "RECORD_OVERVIEW", "RECORD_TRAIT"}
+)
+_APP_BAR_FIELDS = (
+    "name",
+    "location",
+    "label",
+    "tooltipLabel",
+    "description",
+    "actionLabel",
+    "iframeUrl",
+    "icon",
+    "settingsSchema",
+)
+
+
+def app_bar_items_from_files(
+    files: list[LocalFunctionFile],
+) -> list[tuple[Path, dict[str, Any]]]:
+    """Build app bars from ``appBar`` / ``appBars`` on a function manifest.
+
+    The function file is the handler. Action bars get ``app.bar.triggered``
+    wired to that function, so the manifest does not name another function.
+    """
+    items: list[tuple[Path, dict[str, Any]]] = []
+    for item in files:
+        declared: list[Any] = []
+        raw_list = item.manifest.get("appBars")
+        if isinstance(raw_list, list):
+            declared.extend(raw_list)
+        single = item.manifest.get("appBar")
+        if isinstance(single, dict):
+            declared.append(single)
+        for raw in declared:
+            if not isinstance(raw, dict):
+                continue
+            payload = {
+                key: raw[key]
+                for key in _APP_BAR_FIELDS
+                if key in raw and raw[key] is not None
+            }
+            if not payload.get("label") or not payload.get("location"):
+                continue
+            if not payload.get("name"):
+                payload["name"] = item.name.replace("-", "_")
+            location = str(payload["location"]).strip().upper()
+            payload["location"] = location
+            if location in _ACTION_BAR_LOCATIONS:
+                payload["webhook"] = {
+                    "topic": "app.bar.triggered",
+                    "deliveryMode": "SERVERLESS",
+                    "enabled": True,
+                    "serverlessFunction": {"name": item.name},
+                }
+            items.append((item.path, payload))
+    return items
+
+
 def webhook_items_from_files(
     files: list[LocalFunctionFile],
 ) -> list[tuple[Path, dict[str, Any]]]:

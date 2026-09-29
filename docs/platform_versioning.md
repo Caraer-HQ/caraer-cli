@@ -26,7 +26,8 @@ New private apps are always created as V2 (`runtime` defaults to `nodejs22`).
 - Flat functions: `src/app/functions/<name>.js` (or `.py`)
 - Lifecycle, schedules, and inbound are code files with `exports.manifest`
 - Webhooks live on the function manifest; there is no `webhooks/` folder
-- Settings are a single-level field list in `settings.yaml`; app bars are `app-bars.yaml`
+- Settings are a single-level field list in `settings.yaml`
+- App bars are `appBars` on the function manifest; the file is the handler
 - Modules are `modules/<name>/<name>.astro`
 - Upgrade an existing 2026.2 tree with `caraer apps upgrade`
 

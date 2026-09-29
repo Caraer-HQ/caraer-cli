@@ -225,21 +225,19 @@ def _upgrade_settings(root: Path, config: ProjectConfig, moved: list[str]) -> No
 
 
 def _upgrade_app_bars(root: Path, config: ProjectConfig, moved: list[str]) -> None:
-    import yaml
-
-    from caraer_cli.project.app_bars_sync import discover_local_app_bars, sanitize_app_bar
-    from caraer_cli.project.paths import app_bars_yaml_path
+    from caraer_cli.project.app_bars_sync import (
+        discover_local_app_bars,
+        sanitize_app_bar,
+        write_app_bars_to_function_manifests,
+    )
 
     bars = [sanitize_app_bar(item) for _path, item in discover_local_app_bars(root, config)]
-    path = app_bars_yaml_path(root, config.srcDir)
-    path.write_text(
-        yaml.safe_dump({"appBars": bars}, sort_keys=False, allow_unicode=True),
-        encoding="utf-8",
-    )
+    if bars:
+        write_app_bars_to_function_manifests(root, config, bars)
+        moved.append("function appBars")
     directory = app_bars_dir(root, config.srcDir)
     if directory.is_dir():
         shutil.rmtree(directory)
-    moved.append("app-bars.yaml")
 
 
 def _upgrade_modules(root: Path, config: ProjectConfig, moved: list[str]) -> None:

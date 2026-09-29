@@ -11,6 +11,7 @@ from caraer_cli.project.layout_upgrade import upgrade_layout_to_v21
 from caraer_cli.project.marketplace_assemble import assemble_local_manifest
 from caraer_cli.project.scaffold import scaffold_app_project
 from caraer_cli.project.schema import PLATFORM_VERSION, PLATFORM_VERSION_V2, load_workspace
+from caraer_cli.project.validate_app import validate_local_app
 from caraer_cli.project.settings_sections_sync import discover_local_settings_sections
 from caraer_cli.project.settings_sync import (
     append_settings_yaml_field,
@@ -58,12 +59,84 @@ def test_scaffold_v21_layout(tmp_path: Path) -> None:
     assert yaml.safe_load(settings_yaml) == []
     assert "settingsSchema" not in settings_yaml
     assert "settingsSections" not in settings_yaml
-    assert (root / "src" / "app" / "app-bars.yaml").is_file()
+    assert not (root / "src" / "app" / "app-bars.yaml").exists()
     assert (root / "src" / "app" / "inbound").is_dir()
     assert (root / "src" / "app" / "schedules").is_dir()
     assert (root / "src" / "app" / "inbound" / ".gitkeep").is_file()
     assert (root / "src" / "app" / "schedules" / ".gitkeep").is_file()
     assert not (root / "src" / "app" / "webhooks").exists()
+
+
+def test_function_manifest_app_bar_attaches_that_function(tmp_path: Path) -> None:
+    root = tmp_path / "app"
+    scaffold_app_project(
+        root,
+        app_payload=build_public_app_placeholder(label="Demo", name="demo"),
+        sample_function="hello-world",
+        runtime="nodejs22",
+    )
+    path = root / "src" / "app" / "functions" / "hello-world.js"
+    source = path.read_text(encoding="utf-8")
+    manifest = parse_code_manifest(source)
+    manifest["appBars"] = [
+        {
+            "name": "ping_overview",
+            "location": "RECORD_OVERVIEW",
+            "label": "Layout v21 ping",
+            "actionLabel": "Ping",
+        }
+    ]
+    path.write_text(upsert_code_manifest(source, manifest), encoding="utf-8")
+    config = load_workspace(root)
+    assembled = assemble_local_manifest(
+        root, config, {"name": "demo"}, resolve_functions=False
+    )
+    bar = assembled["appBars"][0]
+    assert bar["name"] == "ping_overview"
+    assert bar["location"] == "RECORD_OVERVIEW"
+    assert bar["webhook"]["topic"] == "app.bar.triggered"
+    assert bar["webhook"]["serverlessFunction"] == {"name": "hello-world"}
+    assert "serverlessFunction" not in path.read_text(encoding="utf-8")
+
+
+def test_upgrade_moves_app_bar_onto_the_function(tmp_path: Path) -> None:
+    root = tmp_path / "legacy"
+    scaffold_app_project(
+        root,
+        app_payload=build_public_app_placeholder(label="Legacy", name="legacy"),
+        sample_function="hello-world",
+        runtime="nodejs22",
+        platform_version=PLATFORM_VERSION_V2,
+    )
+    bar_dir = root / "src" / "app" / "app-bars"
+    bar_dir.mkdir()
+    (bar_dir / "ping.json").write_text(
+        """{
+  "name": "ping_overview",
+  "location": "RECORD_OVERVIEW",
+  "label": "Layout v21 ping",
+  "webhook": {
+    "topic": "app.bar.triggered",
+    "deliveryMode": "SERVERLESS",
+    "serverlessFunction": { "name": "hello-world" }
+  }
+}
+""",
+        encoding="utf-8",
+    )
+    upgrade_layout_to_v21(root)
+    hello = (root / "src" / "app" / "functions" / "hello-world.js").read_text(encoding="utf-8")
+    assert "ping_overview" in hello
+    assert "serverlessFunction" not in hello
+    assert not (root / "src" / "app" / "app-bars.yaml").exists()
+    assert not bar_dir.exists()
+    config = load_workspace(root)
+    assembled = assemble_local_manifest(
+        root, config, {"name": "legacy"}, resolve_functions=False
+    )
+    bar = assembled["appBars"][0]
+    assert bar["webhook"]["serverlessFunction"]["name"] == "hello-world"
+    assert bar["webhook"]["topic"] == "app.bar.triggered"
 
 
 def test_upgrade_rewrites_2026_2_tree(tmp_path: Path) -> None:
@@ -283,3 +356,27 @@ def test_upgrade_copies_yaml_settings_into_flat_list(tmp_path: Path) -> None:
     upgraded = yaml.safe_load(manifest.read_text(encoding="utf-8"))
     assert "settingsSchema" not in upgraded
     assert "settingsSections" not in upgraded
+
+
+def test_app_bar_dialog_rejects_unknown_field_type(tmp_path: Path) -> None:
+    root = tmp_path / "app"
+    scaffold_app_project(
+        root,
+        app_payload=build_public_app_placeholder(label="Demo", name="demo"),
+        sample_function="hello-world",
+        runtime="nodejs22",
+    )
+    path = root / "src" / "app" / "functions" / "hello-world.js"
+    source = path.read_text(encoding="utf-8")
+    manifest = parse_code_manifest(source)
+    manifest["appBars"] = [
+        {
+            "name": "ping_overview",
+            "location": "RECORD_OVERVIEW",
+            "label": "Ping",
+            "settingsSchema": [{"name": "note", "type": "NOT_A_TYPE"}],
+        }
+    ]
+    path.write_text(upsert_code_manifest(source, manifest), encoding="utf-8")
+    report = validate_local_app(root)
+    assert any("NOT_A_TYPE" in issue.message for issue in report.issues)

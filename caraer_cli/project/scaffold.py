@@ -607,11 +607,9 @@ def scaffold_app_project(
 
     app_file = write_app_manifest(project_root, manifest_payload, src_dir=src_dir)
     if config.is_layout_v21():
-        from caraer_cli.project.app_bars_sync import write_app_bars_files
         from caraer_cli.project.settings_sync import write_settings_yaml
 
         write_settings_yaml(project_root, config, [], [])
-        write_app_bars_files(project_root, config, [])
     ensure_gitignore(project_root)
     ensure_tsconfig(project_root)
     if sample_module or not str(runtime or "").startswith("python"):

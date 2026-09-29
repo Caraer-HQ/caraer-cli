@@ -168,8 +168,7 @@ my_app/
   src/app/
     app.caraer.yaml           # identity, scopes, auth, details
     settings.yaml             # installer setting fields (optional section grouping)
-    app-bars.yaml
-    functions/<name>.js       # name is the filename; webhooks live in its manifest
+    functions/<name>.js       # name is the filename; webhooks and app bars live in its manifest
     lifecycle/<hook>.js       # install | uninstall | rotate | update
     schedules/<name>.js
     inbound/<name>.js

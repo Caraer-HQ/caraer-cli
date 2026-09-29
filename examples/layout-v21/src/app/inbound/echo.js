@@ -1,3 +1,5 @@
+// Direct inbound: req.body.body is the HTTP JSON, req.body.action is
+// "app.inbound". Queued inbound wraps that object as req.body.payload.
 const { contextFrom, putState, ok } = require("../shared");
 
 exports.handler = async (req, res) => {

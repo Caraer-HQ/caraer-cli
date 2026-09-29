@@ -67,8 +67,7 @@ tsconfig.json               # resolves module npm imports from package.json
 src/app/
   app.caraer.yaml           # identity, scopes, auth, details
   settings.yaml             # installer setting fields (optional section grouping)
-  app-bars.yaml
-  functions/<name>.js       # name is the filename; webhooks in exports.manifest
+  functions/<name>.js       # name is the filename; webhooks and app bars in exports.manifest
   lifecycle/<hook>.js       # install|uninstall|rotate|update
   schedules/<name>.js
   inbound/<name>.js
@@ -81,9 +80,10 @@ src/app/
 Payload types: import from `@caraer/client` (Node) or `caraer-client` (Python),
 e.g. `LifecyclePayload`, `WebhookPayload`, `SchedulePayload`.
 
-On `2026.2.1` the filename is the function name. Webhooks, schedules, inbound,
-and lifecycle are `exports.manifest` / `manifest = {...}` literals. `2026.2`
-still uses folders and JSON.
+On `2026.2.1` the filename is the function name. Webhooks, app bars, schedules,
+inbound, and lifecycle are `exports.manifest` / `manifest = {...}` literals.
+The function that declares an app bar is the handler. `2026.2` still uses
+folders and JSON.
 
 Add this line at the top of `app.caraer.yaml` so the editor loads the public
 schema (also emitted by `caraer apps init`):
@@ -141,8 +141,12 @@ Installation settings are for **admins installing the app**, not developers.
   still works. Empty mappings grant no extra scopes. Use
   `records.<trait:user>.all` when every object with that trait must be
   reachable. The same placeholders work on webhook topics
-  (`record.<setting:target_object>.created`). `date_due` still needs a
-  concrete object name.
+  (`record.<setting:target_object>.created`). `date_due` uses the same
+  placeholder; the company copy is what gets scheduled. Read a key with a
+  path: `record.<setting:due_date.objectName>.date_due.<setting:due_date.propertyName>`.
+  Mapping fields use `<setting:field_map.objectName>` and
+  `<setting:field_map.mappingValue.items.propertyName>`. The template still needs
+  `triggerOffsetSeconds`.
 - Group related fields into installer cards with `section` / `sectionSubtitle`
   on each field in `settings.yaml`. On 2026.2 use `settings-sections/*.json`.
   Do not invent a grid; Caraer lays cards out left-to-right, top-to-bottom,

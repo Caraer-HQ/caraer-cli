@@ -1,4 +1,4 @@
-"""Discover / write modular appBars files under src/app/app-bars/."""
+"""Discover app bars from function manifests, or from legacy app-bar files."""
 
 from __future__ import annotations
 
@@ -69,10 +69,10 @@ def _sanitize_webhook(webhook: Any) -> dict[str, Any] | None:
     sf = cleaned.get("serverlessFunction")
     if isinstance(sf, dict):
         sf_out: dict[str, Any] = {}
+        if sf.get("uuid"):
+            sf_out["uuid"] = sf["uuid"]
         if sf.get("name"):
             sf_out["name"] = sf["name"]
-        elif sf.get("uuid"):
-            sf_out["uuid"] = sf["uuid"]
         if sf_out:
             cleaned["serverlessFunction"] = sf_out
         else:
@@ -94,22 +94,43 @@ def sanitize_app_bar(item: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+def _yaml_app_bars(root: Path, config: ProjectConfig) -> list[tuple[Path, dict[str, Any]]]:
+    path = app_bars_yaml_path(root, config.srcDir)
+    if not path.is_file():
+        return []
+    import yaml
+
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    items = data.get("appBars") if isinstance(data, dict) else data
+    found: list[tuple[Path, dict[str, Any]]] = []
+    if isinstance(items, list):
+        for item in items:
+            if isinstance(item, dict) and item.get("label") and item.get("location"):
+                found.append((path, sanitize_app_bar(item)))
+    return found
+
+
 def discover_local_app_bars(
     root: Path, config: ProjectConfig
 ) -> list[tuple[Path, dict[str, Any]]]:
     if config.is_layout_v21():
-        path = app_bars_yaml_path(root, config.srcDir)
-        if not path.is_file():
-            return []
-        import yaml
+        from caraer_cli.project.function_files import (
+            app_bar_items_from_files,
+            discover_layout_v21_functions,
+        )
 
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        items = data.get("appBars") if isinstance(data, dict) else data
-        found: list[tuple[Path, dict[str, Any]]] = []
-        if isinstance(items, list):
-            for item in items:
-                if isinstance(item, dict) and item.get("label") and item.get("location"):
-                    found.append((path, sanitize_app_bar(item)))
+        found = [
+            (path, sanitize_app_bar(item))
+            for path, item in app_bar_items_from_files(
+                discover_layout_v21_functions(root, config)
+            )
+        ]
+        seen = {app_bar_identity(item) for _path, item in found}
+        for path, item in _yaml_app_bars(root, config):
+            if app_bar_identity(item) in seen:
+                continue
+            found.append((path, item))
+            seen.add(app_bar_identity(item))
         return found
     base = app_bars_dir(root, config.srcDir)
     if not base.is_dir():
@@ -122,40 +143,120 @@ def discover_local_app_bars(
     return found
 
 
+def _author_app_bar(item: dict[str, Any]) -> dict[str, Any]:
+    """Fields a developer writes on the function. The function is the handler."""
+    payload: dict[str, Any] = {}
+    for key in (
+        "name",
+        "location",
+        "label",
+        "tooltipLabel",
+        "description",
+        "actionLabel",
+        "iframeUrl",
+        "icon",
+        "settingsSchema",
+    ):
+        if key in item and item[key] is not None:
+            payload[key] = item[key]
+    return payload
+
+
+def _function_name_for_bar(
+    item: dict[str, Any], owners: dict[str, str]
+) -> str:
+    webhook = item.get("webhook")
+    if isinstance(webhook, dict):
+        sf = webhook.get("serverlessFunction")
+        if isinstance(sf, dict) and sf.get("name"):
+            return str(sf["name"])
+    identity = app_bar_identity(item)
+    if identity in owners:
+        return owners[identity]
+    name = str(item.get("name") or "app-bar").strip().replace("_", "-")
+    return name or "app-bar"
+
+
+def write_app_bars_to_function_manifests(
+    root: Path, config: ProjectConfig, items: list[dict[str, Any]]
+) -> int:
+    """Store app bars on the function that runs them.
+
+    Remote uuid and ``serverlessFunction`` stay off the source file. A later
+    discover call attaches this function as the ``app.bar.triggered`` handler.
+    """
+    from caraer_cli.project.code_manifest import parse_code_manifest_file, write_code_manifest
+    from caraer_cli.project.function_files import (
+        discover_layout_v21_functions,
+        function_file_by_name,
+    )
+    from caraer_cli.project.paths import functions_dir
+    from caraer_cli.project.sync import _v21_function_source
+
+    owners: dict[str, str] = {}
+    for existing in discover_layout_v21_functions(root, config):
+        declared: list[Any] = []
+        raw_list = existing.manifest.get("appBars")
+        if isinstance(raw_list, list):
+            declared.extend(raw_list)
+        single = existing.manifest.get("appBar")
+        if isinstance(single, dict):
+            declared.append(single)
+        for raw in declared:
+            if isinstance(raw, dict):
+                owners[app_bar_identity(raw)] = existing.name
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        sanitized = sanitize_app_bar(item)
+        if not app_bar_identity(sanitized).strip("|"):
+            continue
+        grouped.setdefault(_function_name_for_bar(sanitized, owners), []).append(
+            _author_app_bar(sanitized)
+        )
+
+    for existing in discover_layout_v21_functions(root, config):
+        if existing.name in grouped:
+            continue
+        if "appBars" not in existing.manifest and "appBar" not in existing.manifest:
+            continue
+        current = parse_code_manifest_file(existing.path)
+        current.pop("appBars", None)
+        current.pop("appBar", None)
+        write_code_manifest(existing.path, current)
+
+    count = 0
+    runtime = config.resolved_runtime("nodejs22")
+    for name, bars in grouped.items():
+        existing = function_file_by_name(root, config, name)
+        if existing is not None:
+            path = existing.path
+            current = parse_code_manifest_file(path)
+        else:
+            suffix = ".py" if runtime.startswith("python") else ".js"
+            path = functions_dir(root, config.srcDir) / f"{name}{suffix}"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if not path.is_file():
+                path.write_text(_v21_function_source(runtime), encoding="utf-8")
+            current = parse_code_manifest_file(path) if path.is_file() else {}
+        current.pop("appBar", None)
+        current["appBars"] = bars
+        write_code_manifest(path, current)
+        count += len(bars)
+
+    yaml_path = app_bars_yaml_path(root, config.srcDir)
+    if yaml_path.is_file():
+        yaml_path.unlink()
+    return count
+
+
 def write_app_bars_files(
     root: Path, config: ProjectConfig, items: list[dict[str, Any]]
 ) -> int:
     if config.is_layout_v21():
-        import yaml
-
-        path = app_bars_yaml_path(root, config.srcDir)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        existing_by_identity: dict[str, dict[str, Any]] = {}
-        if path.is_file():
-            raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-            current = raw.get("appBars") if isinstance(raw, dict) else raw
-            if isinstance(current, list):
-                for item in current:
-                    if isinstance(item, dict):
-                        existing_by_identity[app_bar_identity(item)] = item
-        bars = []
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            sanitized = sanitize_app_bar(item)
-            identity = app_bar_identity(sanitized)
-            if not identity.strip("|"):
-                continue
-            if not sanitized.get("webhook"):
-                previous = existing_by_identity.get(identity) or {}
-                if isinstance(previous.get("webhook"), dict):
-                    sanitized["webhook"] = _sanitize_webhook(previous["webhook"])
-            bars.append(sanitized)
-        path.write_text(
-            yaml.safe_dump({"appBars": bars}, sort_keys=False, allow_unicode=True),
-            encoding="utf-8",
-        )
-        return len(bars)
+        return write_app_bars_to_function_manifests(root, config, items)
     base = app_bars_dir(root, config.srcDir)
     base.mkdir(parents=True, exist_ok=True)
     for existing in base.glob("*.json"):
@@ -211,14 +312,16 @@ def persist_app_bar_identities(
     config: ProjectConfig,
     remote_bars: list[Any],
 ) -> None:
-    """Write remote bar/webhook UUIDs back into modular app-bar files.
+    """Write remote bar/webhook UUIDs back into legacy ``app-bars/*.json`` files.
 
-    YAML manifests are left untouched so comments stay intact. The next push
-    still stamps UUIDs from the live app before update.
+    Function manifests and ``app-bars.yaml`` stay as authored. Push stamps
+    UUIDs from the live app before update, matched by bar name.
     """
     if not remote_bars:
         return
     for path, item in discover_local_app_bars(root, config):
+        if path.suffix != ".json":
+            continue
         stamped_items = stamp_app_bar_identities([item], remote_bars)
         if not stamped_items:
             continue

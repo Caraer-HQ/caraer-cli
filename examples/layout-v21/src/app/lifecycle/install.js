@@ -1,3 +1,5 @@
+// req.body.event is "Installed" | "Updated" | "Uninstalled" | "Rotated".
+// installationToken, caraerApiBase, and settingsSchema sit on req.body.
 const { contextFrom, putState, runSql, ok } = require("../shared");
 
 exports.handler = async (req, res) => {

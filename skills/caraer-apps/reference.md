@@ -34,7 +34,13 @@ overlay on `settingsSchema` when that user acts.
 
 ## Handler envelope (SERVERLESS)
 
-Approximate JSON body (also wrapped as `req.body` for Node):
+Lifecycle, schedule, and inbound calls use this envelope. A record webhook
+does not: `req.body` is the event itself (`event.type`, `record.record`).
+An app bar is flat, with `event: "app.bar.triggered"` and
+`appBarSettingsValues`. Full examples are in the CLI
+`docs/webhooks.md`.
+
+Approximate lifecycle JSON body (also wrapped as `req.body` for Node):
 
 ```json
 {
@@ -239,8 +245,13 @@ exports.manifest = {
 
 Caraer expands the placeholder from that installation's settings when the
 event fires. Pair it with `records.<setting:target_object>.all`. An empty
-setting means the webhook does not fire. `date_due` topics cannot use
-placeholders.
+setting means the webhook does not fire. A path reads one key:
+`record.<setting:due_date.objectName>.date_due.<setting:due_date.propertyName>`
+becomes `record.candidate.date_due.interview_date`. A mapping uses
+`<setting:field_map.objectName>` and
+`<setting:field_map.mappingValue.items.propertyName>`. Caraer stores the
+concrete topic on that company's webhook when settings are saved, and
+schedules that copy. The template still needs `triggerOffsetSeconds`.
 
 | Topic | Fires on |
 |-------|----------|
@@ -303,35 +314,47 @@ Example every 12 hours:
 
 ## App bars
 
-Define `appBars` in `app.caraer.yaml` when needed (no `add app-bar` scaffold).
-Action locations can use SERVERLESS without `iframeUrl`:
+On `2026.2.1` declare `appBars` on the function that should run (no
+`add app-bar` scaffold and no `app-bars.yaml`). Caraer sends
+`app.bar.triggered` to that function.
 
 - `RECORD_PREVIEW`, `RECORD_OVERVIEW`, `RECORD_TRAIT`, `RECORD_DETAIL`, `TOOL_BAR`, `TRAIT_BAR`
 
-Wire `webhook.serverlessFunction.name` to a local function folder name.
+`2026.2` still uses one JSON file under `src/app/app-bars/` with
+`webhook.serverlessFunction.name`.
 
 ### Action dialogs
 
 `RECORD_PREVIEW`, `RECORD_OVERVIEW`, and `RECORD_TRAIT` are actions. Give the bar its own
-`settingsSchema` and Caraer shows it as a dialog before triggering the webhook —
+`settingsSchema` and Caraer shows it as a dialog before triggering the function —
 that is how an action collects input (including a `FILE` upload):
 
-```yaml
-appBars:
-  - location: RECORD_OVERVIEW
-    label: Upload CV
-    actionLabel: Parse CV
-    webhook:
-      topic: app.bar.triggered
-      deliveryMode: SERVERLESS
-      serverlessFunction:
-        name: upload-cv
-    settingsSchema:
-      - name: cv_file
-        label: CV
-        type: FILE
-        required: true
+```js
+exports.manifest = {
+  appBars: [
+    {
+      location: "RECORD_OVERVIEW",
+      label: "Upload CV",
+      actionLabel: "Parse CV",
+      settingsSchema: [
+        { name: "cv_file", label: "CV", type: "FILE", required: true },
+      ],
+    },
+  ],
+};
 ```
+
+Field types match installation settings: `SINGLE_LINE`, `MULTI_LINE`,
+`SWITCH`, `SINGLE_SELECT`, `MULTI_SELECT`, `RECORD_SINGLE_SELECT`,
+`RECORD_MULTI_SELECT`, `OBJECT_SINGLE_SELECT`, `OBJECT_MULTI_SELECT`,
+`PROPERTY_SINGLE_SELECT`, `PROPERTY_MULTI_SELECT`, `MAPPING`, `FILE`,
+`MULTI_FILE`, `IMAGE`, `COLOR`, `SECRET`, `REPEATABLE`, and `ACTION`.
+Use `options` or `optionsSource`, plus `visibleWhen`, `advanced`, `hidden`,
+`required`, `helpText`, `defaultValue`, and `filterTraits`. `icon` is a
+Font Awesome name (`bolt`). Iframe locations take `iframeUrl` and no dialog.
+
+`examples/layout-v21` `hello-world.js` declares every location and every
+dialog field on `ping_overview`.
 
 In the handler the dialog values arrive as **`appBarSettingsValues`** (flat
 `name → value`) and `appBarSettingsSchema`. `settingsSchema` always carries the
@@ -392,6 +415,7 @@ requiredScopes:
 |---|---|
 | `<fieldName>` | Setting value (still supported) |
 | `<setting:fieldName>` | Same setting value, preferred for new apps |
+| `<setting:field.key>` | One key on that value (`objectName`, `propertyName`, `mappingValue.objectName`, `mappingValue.items.propertyName`) |
 | `<trait:traitName>` | Every object with that trait (e.g. `user` → employee) |
 
 Object-select fields use the selected object name. Mapping fields use

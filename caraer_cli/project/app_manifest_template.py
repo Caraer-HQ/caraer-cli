@@ -26,7 +26,7 @@ _EXAMPLE_SETTINGS_SCHEMA = """\
 
 _EXAMPLE_APP_BARS = """\
 # Edit appBars above when needed (record / tool / trait bars).
-# On 2026.2.1 app bars live in src/app/app-bars.yaml.
+# On 2026.2.1 declare the bar on the function: exports.manifest.appBars.
 # Lifecycle hooks: src/app/lifecycle/<event>.js (caraer apps add lifecycle-hook)
 """
 

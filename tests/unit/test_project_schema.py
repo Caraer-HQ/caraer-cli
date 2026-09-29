@@ -12,7 +12,7 @@ from caraer_cli.project.schema import (
     load_workspace,
     save_project_config,
 )
-from caraer_cli.project.state import get_project_uuid
+from caraer_cli.project.state import get_project_uuid, save_state
 from caraer_cli.project.webhooks_sync import (
     discover_local_webhooks,
     push_webhooks,
@@ -155,6 +155,44 @@ def test_discover_and_push_webhooks_create(tmp_path: Path) -> None:
     assert result["webhooks"][0]["uuid"] == "wh-1"
     written = json.loads((wh_dir / "record-created.json").read_text(encoding="utf-8"))
     assert written["uuid"] == "wh-1"
+
+
+def test_push_v21_webhook_does_not_rewrite_function_source(tmp_path: Path) -> None:
+    config = ProjectConfig(
+        name="demo", appUuid="app-1", srcDir="src", platformVersion="2026.2.1"
+    )
+    fn = tmp_path / "src" / "app" / "functions" / "hello-world.js"
+    fn.parent.mkdir(parents=True)
+    source = (
+        "exports.handler = async () => ({});\n"
+        'exports.manifest = { webhooks: [{ topic: "record.candidate.created" }] };\n'
+    )
+    fn.write_text(source, encoding="utf-8")
+    save_state(tmp_path, {"functions": {"hello-world": {"uuid": "fn-1"}}})
+
+    from caraer_cli.api import webhooks as webhook_api
+
+    original_list = webhook_api.list_webhooks
+    original_create = webhook_api.create_webhook
+    original_update = webhook_api.update_webhook
+    original_delete = webhook_api.delete_webhook
+    webhook_api.list_webhooks = MagicMock(return_value={"data": []})  # type: ignore[assignment]
+    webhook_api.create_webhook = MagicMock(  # type: ignore[assignment]
+        return_value={"data": {"uuid": "wh-1", "topic": "record.candidate.created"}}
+    )
+    webhook_api.update_webhook = MagicMock()  # type: ignore[assignment]
+    webhook_api.delete_webhook = MagicMock()  # type: ignore[assignment]
+    try:
+        result = push_webhooks(MagicMock(), tmp_path, config, delete_missing=False)
+    finally:
+        webhook_api.list_webhooks = original_list  # type: ignore[assignment]
+        webhook_api.create_webhook = original_create  # type: ignore[assignment]
+        webhook_api.update_webhook = original_update  # type: ignore[assignment]
+        webhook_api.delete_webhook = original_delete  # type: ignore[assignment]
+
+    assert result["webhooks"][0]["action"] == "created"
+    assert fn.read_text(encoding="utf-8") == source
+    assert not (tmp_path / "src" / "app" / "webhooks").exists()
 
 
 def test_pack_project_archive_includes_root_dotenv(tmp_path: Path) -> None:

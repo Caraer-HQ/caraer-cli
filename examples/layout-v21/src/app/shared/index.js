@@ -47,6 +47,20 @@ function apiBase(body) {
   return String(raw).replace(/\/$/, "");
 }
 
+function eventType(body) {
+  if (body.event && typeof body.event === "object") {
+    return body.event.type || null;
+  }
+  return body.topic || body.event || null;
+}
+
+function recordFrom(body) {
+  if (body.record && body.record.record) {
+    return body.record.record;
+  }
+  return null;
+}
+
 function contextFrom(req) {
   const body = parseBody(req);
   return {
@@ -55,9 +69,11 @@ function contextFrom(req) {
     apiBase: apiBase(body),
     token: body.installationToken,
     appUuid: body.appUuid,
-    companyUuid: body.companyUuid,
+    companyUuid: body.companyUuid || (body.context && body.context.companyUuid) || null,
     functionName: body.functionName,
-    topic: body.topic || body.event || null,
+    eventType: eventType(body),
+    record: recordFrom(body),
+    dialog: body.appBarSettingsValues || {},
   };
 }
 
@@ -118,6 +134,8 @@ module.exports = {
   contextFrom,
   flattenSettings,
   objectNameFromSetting,
+  eventType,
+  recordFrom,
   putState,
   runSql,
   ok,

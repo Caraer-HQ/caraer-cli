@@ -11,6 +11,6 @@ requiredScopes:
 webhookRateLimitPerMinute: 100
 jobRateLimitPerMinute: 60
 # Settings: src/app/settings.yaml
-# App bars: src/app/app-bars.yaml
+# App bars: appBars on the function that runs them
 # Functions: src/app/functions/<name>.js
 # Lifecycle / inbound / schedules: matching folders of named files

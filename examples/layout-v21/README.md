@@ -13,7 +13,7 @@ reference; `caraer apps init` still creates a smaller starter.
 | Setting-targeted webhook | `record.<setting:target_object>.created` on `hello-world` |
 | Inbound | `src/app/inbound/echo.js` |
 | Schedule | `src/app/schedules/heartbeat.js` |
-| App bar | `src/app/app-bars.yaml` |
+| App bar | `appBars` on `src/app/functions/hello-world.js` (every location, every dialog field) |
 | Lifecycle | `src/app/lifecycle/*.js` |
 | CMS module | `src/app/modules/hello_world/hello_world.astro` |
 | Installation SQL | `POST .../installation/db` from install |
@@ -30,7 +30,6 @@ layout-v21/
   src/app/
     app.caraer.yaml
     settings.yaml
-    app-bars.yaml
     functions/hello-world.js
     shared/index.js
     lifecycle/{install,update,rotate,uninstall}.js

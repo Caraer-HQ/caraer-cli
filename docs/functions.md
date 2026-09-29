@@ -28,9 +28,10 @@ src/app/functions/my-action.py   # Python
 src/app/shared/                  # require("../shared")
 ```
 
-The filename is the function name. Put webhooks on `exports.manifest` (or
-Python `manifest = {...}`). Helpers used by more than one function live in
-`src/app/shared/`.
+The filename is the function name. Put webhooks and app bars on
+`exports.manifest` (or Python `manifest = {...}`). The function that declares
+an app bar is the one Caraer runs for `app.bar.triggered`. Helpers used by
+more than one function live in `src/app/shared/`.
 
 `2026.2` still uses a folder with `index.js` / `main.py` and
 `require("../../shared")`.
@@ -58,8 +59,11 @@ An installation can also keep rows in its own Postgres schema via
 `POST /api/v2/apps/{appUuid}/installation/db` with the installation token.
 See the backend `docs/installation-db-cloud-sql.md`.
 
-Payload types come from `@caraer/client` (Node) or `caraer-client` (Python):
-`LifecyclePayload`, `WebhookPayload`, `SchedulePayload`.
+A record webhook and an app-bar click do not share one envelope. The record
+event is the body (`body.event.type`, `body.record.record`). An app bar is a
+flat body with `event: "app.bar.triggered"`. Both shapes are in
+[webhooks](webhooks.md#what-the-function-receives). Lifecycle, schedule, and
+inbound calls use the envelope below.
 
 The body always includes:
 
@@ -70,7 +74,87 @@ The body always includes:
 | `appUuid` | This app. |
 | `companyUuid` | The company that installed it. |
 | `settingsSchema` | Installation settings, each field with `name` and `value`. |
-| `functionName` | Which function was invoked. |
+| `functionName` | Set when the caller includes it. The runtime also routes on `/functions/<name>` and `X-Caraer-Function`. |
+
+## Lifecycle
+
+`event` is the class name: `Installed`, `Updated`, `Uninstalled`, or `Rotated`.
+The fields sit on `req.body`. There is no nested `payload`.
+
+```json
+{
+  "event": "Installed",
+  "timestamp": 1710000000000,
+  "appUuid": "…",
+  "appName": "layout_v21",
+  "appLabel": "Layout v21",
+  "privateApp": true,
+  "authMethod": "API_KEY",
+  "companyUuid": "…",
+  "companyName": "Acme",
+  "userUuid": "…",
+  "actingUserUuid": "…",
+  "installationToken": "inst_…",
+  "caraerApiBase": "https://api.caraer.com/api",
+  "settingsSchema": [
+    { "name": "display_name", "type": "SINGLE_LINE", "value": "Hello" }
+  ],
+  "scopes": []
+}
+```
+
+`Updated` also sets `settingsChanged`, `scopesChanged`, `filtersChanged`, and
+`userSettingsChanged`. `caraerApiBase`, `secrets`, and `connections` are added
+on the way to the function, the same as a webhook.
+
+## Schedule
+
+A schedule is queued, then invoked. `req.body.payload` is the schedule.
+Installation fields are on the root, next to `action` and `jobId`.
+
+```json
+{
+  "action": "app.schedule",
+  "jobId": "…",
+  "payload": { "scheduleName": "heartbeat" },
+  "appUuid": "…",
+  "companyUuid": "…",
+  "installationToken": "inst_…",
+  "caraerApiBase": "https://api.caraer.com/api",
+  "settingsSchema": [
+    { "name": "display_name", "type": "SINGLE_LINE", "value": "Hello" }
+  ],
+  "scopes": []
+}
+```
+
+Anything in the schedule's payload template is copied onto `payload` next to
+`scheduleName`.
+
+## Inbound
+
+A direct inbound call puts the HTTP body on `body`. A queued inbound call
+wraps that object under `payload`, the same way a schedule does.
+
+```json
+{
+  "action": "app.inbound",
+  "inboundRoute": "echo",
+  "headers": { "content-type": "application/json" },
+  "body": { "hello": "caraer" },
+  "appUuid": "…",
+  "companyUuid": "…",
+  "installationToken": "inst_…",
+  "caraerApiBase": "https://api.caraer.com/api",
+  "settingsSchema": [
+    { "name": "display_name", "type": "SINGLE_LINE", "value": "Hello" }
+  ],
+  "scopes": []
+}
+```
+
+Queued (`enqueue: true`) the same object is `req.body.payload`, and the root
+`action` is still `app.inbound` with a `jobId`.
 
 Installation state, secrets, and background jobs:
 
