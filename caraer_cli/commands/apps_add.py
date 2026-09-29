@@ -533,11 +533,14 @@ def add_setting(
     modular: bool = typer.Option(
         False,
         "--modular",
-        help="Write src/app/settings/<name>.json instead of app.caraer.yaml.",
+        help=(
+            "On 2026.2, write src/app/settings/<name>.json instead of "
+            "app.caraer.yaml. Ignored on 2026.2.1 (always settings.yaml)."
+        ),
     ),
     force: bool = typer.Option(False, "--force", help="Overwrite existing entry/file."),
 ) -> None:
-    """Add a settingsSchema field to app.caraer.yaml (wizard prompts when interactive)."""
+    """Add a setting field (settings.yaml on 2026.2.1, app.caraer.yaml otherwise)."""
     from caraer_cli.app_sync import resolve_app_root
     from caraer_cli.project.manifest_edit import append_manifest_list_item
     from caraer_cli.project.scaffold import scaffold_setting
@@ -615,7 +618,7 @@ def add_setting(
                 f"Options function '{scaffold_fn}' already exists — linking by name."
             )
     try:
-        if modular:
+        if modular and not config.is_layout_v21():
             path = scaffold_setting(
                 root,
                 config,

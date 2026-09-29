@@ -6,7 +6,10 @@ from pathlib import Path
 from caraer_cli.project.schema import ProjectConfig
 from caraer_cli.project.settings_sync import (
     discover_local_settings,
+    join_settings_payload,
+    parse_settings_yaml,
     sanitize_setting,
+    split_settings_payload,
     write_settings_files,
 )
 
@@ -84,3 +87,40 @@ def test_write_settings_files_keeps_list_order(tmp_path: Path) -> None:
         "parse_on_cv_change",
         "enable_matching",
     ]
+
+
+def test_parse_split_join_settings_yaml_helpers() -> None:
+    fields = parse_settings_yaml(
+        {
+            "settingsSchema": [
+                {"name": "candidate_mapping", "type": "MAPPING", "label": "Candidate"},
+                {"name": "orphan", "type": "SWITCH"},
+            ],
+            "settingsSections": [
+                {
+                    "title": "Candidate",
+                    "subtitle": "Map CV fields",
+                    "settings": ["candidate_mapping"],
+                }
+            ],
+        }
+    )
+    assert fields[0]["section"] == "Candidate"
+    assert fields[0]["sectionSubtitle"] == "Map CV fields"
+    assert "section" not in fields[1]
+
+    schema, sections = split_settings_payload(fields)
+    assert [item["name"] for item in schema] == ["candidate_mapping", "orphan"]
+    assert "section" not in schema[0]
+    assert sections == [
+        {
+            "title": "Candidate",
+            "subtitle": "Map CV fields",
+            "settings": ["candidate_mapping"],
+        }
+    ]
+
+    rejoined = join_settings_payload(schema, sections)
+    assert rejoined[0]["section"] == "Candidate"
+    assert rejoined[0]["sectionSubtitle"] == "Map CV fields"
+    assert "section" not in rejoined[1]

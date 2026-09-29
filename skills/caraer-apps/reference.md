@@ -104,30 +104,28 @@ Resolve a key to a download URL from a function with
 
 ### Settings sections (UI layout)
 
-`settingsSchema` stays a flat list of fields (values, `visibleWhen`,
-`optionsSource.dependsOn`, webhook payloads). Optional `settingsSections`
-only groups those fields into installer cards.
+`settings.yaml` is a single-level list of fields (values, `visibleWhen`,
+`optionsSource.dependsOn`, webhook payloads). Optional `section` /
+`sectionSubtitle` on a field groups it into an installer card. Assemble/push
+still emit backend `settingsSchema` (section keys stripped) and
+`settingsSections`.
 
 ```yaml
-settingsSchema:
-  - name: candidate_mapping
-  - name: parse_on_cv_change
-  - name: work_experience_mapping
-
-settingsSections:
-  - title: Candidate
-    subtitle: Map CV fields and parsing behavior
-    settings:
-      - candidate_mapping
-      - parse_on_cv_change
-  - title: Work experience
-    subtitle: Map Affinda work history to your objects
-    settings:
-      - work_experience_mapping
+- name: candidate_mapping
+  type: MAPPING
+  section: Candidate
+  sectionSubtitle: Map CV fields and parsing behavior
+- name: parse_on_cv_change
+  type: SWITCH
+  section: Candidate
+- name: work_experience_mapping
+  type: MAPPING
+  section: Work experience
+  sectionSubtitle: Map Affinda work history to your objects
 ```
 
-Modular files under `src/app/settings-sections/` (sorted, files win on title
-slug):
+On 2026.2, modular files under `src/app/settings-sections/` (sorted, files win
+on title slug) still group JSON settings:
 
 ```json
 {
@@ -139,10 +137,10 @@ slug):
 
 Rules:
 
-- Omit `settingsSections` to keep the current single "Settings" card.
-- Card order is the array / filename order. Caraer wraps them automatically
+- Omit `section` to keep a field schema-only (no section card).
+- Card order is first-seen `section` order. Caraer wraps them automatically
   (1–3 columns). Do not define rows, columns, or spans.
-- Unassigned `settingsSchema` fields appear in a final **Other settings** card.
+- Unassigned fields appear in a final **Other settings** card.
 - `caraer apps validate` errors on unknown or duplicate field names; unassigned
   fields are a warning.
 - Runtime payloads still send the flat `settingsSchema` only.

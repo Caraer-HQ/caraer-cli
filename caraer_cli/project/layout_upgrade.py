@@ -200,12 +200,24 @@ def _upgrade_named_code_files(
 
 
 def _upgrade_settings(root: Path, config: ProjectConfig, moved: list[str]) -> None:
-    from caraer_cli.project.settings_sections_sync import discover_local_settings_sections
-    from caraer_cli.project.settings_sync import discover_local_settings, write_settings_yaml
+    from caraer_cli.local_app import load_local_app
+    from caraer_cli.project.marketplace_assemble import assemble_local_manifest
+    from caraer_cli.project.paths import app_manifest_path
+    from caraer_cli.project.settings_sync import write_settings_yaml
 
-    settings = [item for _path, item in discover_local_settings(root, config)]
-    sections = [item for _path, item in discover_local_settings_sections(root, config)]
-    write_settings_yaml(root, config, settings, sections)
+    manifest_path = app_manifest_path(root, config.srcDir)
+    local = load_local_app(manifest_path) if manifest_path.is_file() else {}
+    assembled = assemble_local_manifest(
+        root, config, local, resolve_functions=False, strict_function_refs=False
+    )
+    settings = assembled.get("settingsSchema") or []
+    sections = assembled.get("settingsSections") or []
+    write_settings_yaml(
+        root,
+        config,
+        [item for item in settings if isinstance(item, dict)],
+        [item for item in sections if isinstance(item, dict)],
+    )
     for directory in (settings_dir(root, config.srcDir), settings_sections_dir(root, config.srcDir)):
         if directory.is_dir():
             shutil.rmtree(directory)

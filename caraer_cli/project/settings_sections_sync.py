@@ -47,16 +47,17 @@ def discover_local_settings_sections(
     root: Path, config: ProjectConfig
 ) -> list[tuple[Path, dict[str, Any]]]:
     if config.is_layout_v21():
-        from caraer_cli.project.settings_sync import _load_settings_yaml
+        from caraer_cli.project.settings_sync import (
+            _load_settings_yaml,
+            split_settings_payload,
+        )
 
         path = settings_yaml_path(root, config.srcDir)
-        data = _load_settings_yaml(root, config)
-        items = data.get("settingsSections") or data.get("sections") or []
+        _schema, items = split_settings_payload(_load_settings_yaml(root, config))
         found: list[tuple[Path, dict[str, Any]]] = []
-        if isinstance(items, list):
-            for item in items:
-                if isinstance(item, dict) and item.get("title") and item.get("settings"):
-                    found.append((path, sanitize_settings_section(item)))
+        for item in items:
+            if item.get("title") and item.get("settings"):
+                found.append((path, sanitize_settings_section(item)))
         return found
     base = settings_sections_dir(root, config.srcDir)
     if not base.is_dir():
@@ -75,14 +76,13 @@ def write_settings_sections_files(
     if config.is_layout_v21():
         from caraer_cli.project.settings_sync import _load_settings_yaml, write_settings_yaml
 
-        existing = _load_settings_yaml(root, config)
-        settings = existing.get("settingsSchema") or existing.get("settings") or []
+        fields = _load_settings_yaml(root, config)
         sanitized = [
             sanitize_settings_section(item)
             for item in items
             if isinstance(item, dict) and settings_section_identity(sanitize_settings_section(item))
         ]
-        write_settings_yaml(root, config, settings if isinstance(settings, list) else [], sanitized)
+        write_settings_yaml(root, config, fields, sanitized)
         return len(sanitized)
     base = settings_sections_dir(root, config.srcDir)
     base.mkdir(parents=True, exist_ok=True)

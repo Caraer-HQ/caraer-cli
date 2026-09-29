@@ -66,7 +66,7 @@ package.json                # npm/pnpm `dev` = caraer apps local dev (functions 
 tsconfig.json               # resolves module npm imports from package.json
 src/app/
   app.caraer.yaml           # identity, scopes, auth, details
-  settings.yaml             # settingsSchema and settingsSections
+  settings.yaml             # installer setting fields (optional section grouping)
   app-bars.yaml
   functions/<name>.js       # name is the filename; webhooks in exports.manifest
   lifecycle/<hook>.js       # install|uninstall|rotate|update
@@ -140,9 +140,10 @@ Installation settings are for **admins installing the app**, not developers.
   still works. Empty mappings grant no extra scopes. Use
   `records.<trait:user>.all` when every object with that trait must be
   reachable.
-- Group related fields into installer cards with `settingsSections` (or
-  `src/app/settings-sections/*.json`). Do not invent a grid; Caraer lays
-  cards out left-to-right, top-to-bottom, max 3 across.
+- Group related fields into installer cards with `section` / `sectionSubtitle`
+  on each field in `settings.yaml`. On 2026.2 use `settings-sections/*.json`.
+  Do not invent a grid; Caraer lays cards out left-to-right, top-to-bottom,
+  max 3 across.
 - Hide advanced settings behind a `SWITCH` + `visibleWhen` instead of showing
   everything at once:
 
@@ -186,7 +187,7 @@ Installation settings are for **admins installing the app**, not developers.
 | Inbound route | `caraer apps add inbound` |
 | Schedule | `caraer apps add schedule` (wizard prompts for cron presets / custom) |
 | Webhook | `caraer apps add webhook` |
-| Setting | `caraer apps add setting` (YAML by default; `--modular` → `settings/`) |
+| Setting | `caraer apps add setting` (`settings.yaml` on 2026.2.1; `--modular` → `settings/` on 2026.2) |
 | CMS module | `caraer apps add module` (Astro + `module.caraer.json` fields) |
 | Lifecycle | `caraer apps add lifecycle-hook` |
 

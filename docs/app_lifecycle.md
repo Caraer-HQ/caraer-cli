@@ -137,8 +137,8 @@ provision after the user saves USER-scoped settings (`userSettingsChanged`).
 
 | Folder / field | Command | Purpose |
 |----------------|---------|---------|
-| `settingsSchema` in YAML (or `settings/*.json` with `--modular`) | `caraer apps add setting` | Installation settings |
-| `settingsSections` in YAML (or `settings-sections/*.json`) | edit manifest | Installer setting cards (title, subtitle, field names) |
+| `settings.yaml` field list (or `settings/*.json` on 2026.2) | `caraer apps add setting` | Installation settings |
+| `section` / `sectionSubtitle` on a field (or `settings-sections/*.json` on 2026.2) | edit settings | Installer setting cards |
 | `appBars` in YAML | edit manifest | Record / tool / trait bars |
 
 Validate with `caraer apps validate`.

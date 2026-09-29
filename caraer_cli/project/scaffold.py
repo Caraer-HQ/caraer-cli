@@ -13,8 +13,10 @@ from caraer_cli.project.lifecycle_sync import LIFECYCLE_HOOKS
 from caraer_cli.project.paths import (
     WORKSPACE_FILE,
     functions_dir,
+    inbound_dir,
     lifecycle_dir,
     modules_dir,
+    schedules_dir,
     settings_dir,
     webhooks_dir,
     workspace_file,
@@ -379,6 +381,16 @@ def resolve_project_root(path: str | Path, *, create: bool = False) -> Path:
     return root
 
 
+def _ensure_tracked_dir(path: Path) -> None:
+    """Create ``path`` and add ``.gitkeep`` so an empty folder is tracked."""
+    path.mkdir(parents=True, exist_ok=True)
+    if any(child.name != ".gitkeep" for child in path.iterdir()):
+        return
+    gitkeep = path / ".gitkeep"
+    if not gitkeep.exists():
+        gitkeep.write_text("", encoding="utf-8")
+
+
 def write_app_manifest(
     root: Path,
     payload: dict[str, Any],
@@ -391,6 +403,8 @@ def write_app_manifest(
 
     functions_dir(root, src_dir).mkdir(parents=True, exist_ok=True)
     lifecycle_dir(root, src_dir).mkdir(parents=True, exist_ok=True)
+    _ensure_tracked_dir(inbound_dir(root, src_dir))
+    _ensure_tracked_dir(schedules_dir(root, src_dir))
     from caraer_cli.project.schema import load_workspace
 
     try:
@@ -549,6 +563,8 @@ def scaffold_app_project(
             functions/on-{install,uninstall,rotate,update}/
             functions/<sample>/   (optional)
             modules/<sample>/     (optional; default hello_world)
+            inbound/
+            schedules/
             webhooks/
     """
     project_root = resolve_project_root(root, create=True)
@@ -644,6 +660,8 @@ def scaffold_app_project(
         "webhooks_dir": webhooks_dir(project_root, src_dir),
         "modules_dir": modules_dir(project_root, src_dir),
         "lifecycle_dir": lifecycle_dir(project_root, src_dir),
+        "inbound_dir": inbound_dir(project_root, src_dir),
+        "schedules_dir": schedules_dir(project_root, src_dir),
         "lifecycle_hooks": lifecycle_hooks,
         "sample_function": function_folder,
         "sample_webhook": webhook_file,

@@ -20,7 +20,14 @@ def append_manifest_list_item(
     identity: Callable[[dict[str, Any]], str],
     force: bool = False,
 ) -> Path:
-    """Append (or replace) an item in a top-level list on ``app.caraer.yaml``."""
+    """Append (or replace) an item in a top-level list on ``app.caraer.yaml``.
+
+    On 2026.2.1, ``settingsSchema`` items are written to ``settings.yaml``.
+    """
+    if config.is_layout_v21() and list_key == "settingsSchema":
+        from caraer_cli.project.settings_sync import append_settings_yaml_field
+
+        return append_settings_yaml_field(root, config, item, force=force)
     manifest_path = app_manifest_path(root, config.srcDir)
     if not manifest_path.is_file():
         raise FileNotFoundError(f"App manifest not found: {manifest_path}")

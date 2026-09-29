@@ -63,6 +63,10 @@ def test_scaffold_app_project_layout(tmp_path: Path) -> None:
     assert (root / "src" / "app" / "functions" / "hello-world.py").is_file()
     assert not (root / "src" / "app" / "functions" / "hello-world" / "function.caraer.json").exists()
     assert not (root / "src" / "app" / "webhooks").exists()
+    assert result["inbound_dir"].is_dir()
+    assert result["schedules_dir"].is_dir()
+    assert (root / "src" / "app" / "inbound" / ".gitkeep").is_file()
+    assert (root / "src" / "app" / "schedules" / ".gitkeep").is_file()
     hello_module = root / "src" / "app" / "modules" / "hello_world"
     assert (hello_module / "hello_world.astro").is_file()
     assert (hello_module / "types.d.ts").is_file()

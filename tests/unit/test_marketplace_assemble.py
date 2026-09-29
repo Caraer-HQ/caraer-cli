@@ -9,7 +9,7 @@ from caraer_cli.project.marketplace_assemble import (
     split_marketplace_to_disk,
 )
 from caraer_cli.project.scaffold import scaffold_app_project, scaffold_lifecycle_hook
-from caraer_cli.project.schema import PLATFORM_VERSION_V2, load_workspace
+from caraer_cli.project.schema import PLATFORM_VERSION, PLATFORM_VERSION_V2, load_workspace
 from caraer_cli.project.settings_sections_sync import discover_local_settings_sections
 from caraer_cli.project.settings_sync import discover_local_settings
 from caraer_cli.project.state import load_state, save_state
@@ -245,6 +245,56 @@ def test_assemble_merges_settings_sections(tmp_path: Path) -> None:
     assert split["settingsSections"] == []
     titles = [item["title"] for _p, item in discover_local_settings_sections(root, config)]
     assert "Candidate" in titles
+
+
+def test_v21_assemble_and_split_settings_yaml(tmp_path: Path) -> None:
+    import yaml
+
+    root = tmp_path / "demo"
+    scaffold_app_project(
+        root,
+        app_payload=build_public_app_placeholder(label="Demo", name="demo"),
+        sample_function=None,
+        force=True,
+    )
+    config = load_workspace(root)
+    assert config.platformVersion == PLATFORM_VERSION
+    (root / "src" / "app" / "settings.yaml").write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "name": "candidate_mapping",
+                    "type": "MAPPING",
+                    "section": "Candidate",
+                    "sectionSubtitle": "From disk",
+                }
+            ],
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    assembled = assemble_local_manifest(
+        root, config, {"name": "demo"}, resolve_functions=False
+    )
+    assert assembled["settingsSchema"] == [{"name": "candidate_mapping", "type": "MAPPING"}]
+    assert assembled["settingsSections"] == [
+        {
+            "title": "Candidate",
+            "subtitle": "From disk",
+            "settings": ["candidate_mapping"],
+        }
+    ]
+
+    split = split_marketplace_to_disk(root, config, assembled)
+    assert "settingsSchema" not in split
+    assert "settingsSections" not in split
+    written = yaml.safe_load((root / "src" / "app" / "settings.yaml").read_text(encoding="utf-8"))
+    assert isinstance(written, list)
+    assert written[0]["section"] == "Candidate"
+    names = [item["name"] for _p, item in discover_local_settings(root, config)]
+    assert names == ["candidate_mapping"]
+    titles = [item["title"] for _p, item in discover_local_settings_sections(root, config)]
+    assert titles == ["Candidate"]
 
 
 def test_sanitize_lifecycle_keeps_wait_until_complete() -> None:

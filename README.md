@@ -167,7 +167,7 @@ my_app/
   package.json
   src/app/
     app.caraer.yaml           # identity, scopes, auth, details
-    settings.yaml             # settingsSchema and settingsSections
+    settings.yaml             # installer setting fields (optional section grouping)
     app-bars.yaml
     functions/<name>.js       # name is the filename; webhooks live in its manifest
     lifecycle/<hook>.js       # install | uninstall | rotate | update
@@ -222,34 +222,35 @@ modules, which are Astro components published with the app.
 
 Installation settings are filled in by the admin who installs the app.
 
-Group fields into installer cards with `settingsSections`. Caraer lays cards
-out left to right, top to bottom, at most 3 across.
+`src/app/settings.yaml` is a single-level list of fields. Group related
+fields into installer cards with `section` / `sectionSubtitle` on the field.
+Caraer lays cards out left to right, top to bottom, at most 3 across.
+Fields without `section` stay schema-only (no section card).
 
 ```yaml
-settingsSections:
-  - title: Candidate
-    subtitle: Map CV fields and parsing behavior
-    settings:
-      - candidate_mapping
-      - parse_on_cv_change
+- name: candidate_mapping
+  type: MAPPING
+  label: Candidate mapping
+  section: Candidate
+  sectionSubtitle: Map CV fields and parsing behavior
+- name: parse_on_cv_change
+  type: SWITCH
+  label: Parse when a CV changes
+  section: Candidate
+- name: custom_mapping
+  label: Custom mapping for work experience
+  type: SWITCH
+  defaultValue: false
+- name: work_experience_mapping
+  type: MAPPING
+  visibleWhen:
+    - field: custom_mapping
+      operator: EQUALS
+      value: true
 ```
 
 A field with `visibleWhen` is shown, required, and submitted only while every
 condition holds. Hidden fields are dropped.
-
-```yaml
-settingsSchema:
-  - name: custom_mapping
-    label: Custom mapping for work experience
-    type: SWITCH
-    defaultValue: false
-  - name: work_experience_mapping
-    type: MAPPING
-    visibleWhen:
-      - field: custom_mapping
-        operator: EQUALS
-        value: true
-```
 
 Operators: `EQUALS` (default), `NOT_EQUALS`, `IN`, `NOT_IN`, `IS_SET`,
 `IS_NOT_SET`.
