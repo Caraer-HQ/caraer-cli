@@ -130,13 +130,26 @@ def write_app_bars_files(
 
         path = app_bars_yaml_path(root, config.srcDir)
         path.parent.mkdir(parents=True, exist_ok=True)
+        existing_by_identity: dict[str, dict[str, Any]] = {}
+        if path.is_file():
+            raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            current = raw.get("appBars") if isinstance(raw, dict) else raw
+            if isinstance(current, list):
+                for item in current:
+                    if isinstance(item, dict):
+                        existing_by_identity[app_bar_identity(item)] = item
         bars = []
         for item in items:
             if not isinstance(item, dict):
                 continue
             sanitized = sanitize_app_bar(item)
-            if not app_bar_identity(sanitized).strip("|"):
+            identity = app_bar_identity(sanitized)
+            if not identity.strip("|"):
                 continue
+            if not sanitized.get("webhook"):
+                previous = existing_by_identity.get(identity) or {}
+                if isinstance(previous.get("webhook"), dict):
+                    sanitized["webhook"] = _sanitize_webhook(previous["webhook"])
             bars.append(sanitized)
         path.write_text(
             yaml.safe_dump({"appBars": bars}, sort_keys=False, allow_unicode=True),
