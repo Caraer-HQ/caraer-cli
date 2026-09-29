@@ -2,9 +2,9 @@
 
 A function is code Caraer runs when something happens: an install, a webhook,
 a schedule, an inbound HTTP call, or an app-bar action. On platform `2026.2`
-every function in the app shares one container. You change code locally and
-`caraer apps push`. The Caraer UI does not edit function source for a
-build-deployed app.
+and `2026.2.1` every function in the app shares one container. You change code
+locally and `caraer apps push`. The Caraer UI does not edit function source for
+a build-deployed app.
 
 ## Add one
 
@@ -20,22 +20,20 @@ a settings field whose options come from your code. See
 
 ## Layout
 
+`2026.2.1` (default):
+
 ```text
-src/app/functions/my-action/
-  index.js              # Node (default runtime nodejs22)
-  main.py               # Python (runtime python312)
-  function.caraer.json  # optional; only to override the defaults
+src/app/functions/my-action.js   # Node
+src/app/functions/my-action.py   # Python
+src/app/shared/                  # require("../shared")
 ```
 
-A folder with `index.js` or `main.py` is a function named after the folder.
-`function.caraer.json` is only needed for a custom entry file or description.
+The filename is the function name. Put webhooks on `exports.manifest` (or
+Python `manifest = {...}`). Helpers used by more than one function live in
+`src/app/shared/`.
 
-Helpers used by more than one function live in `src/app/shared/` and are
-imported with the same relative path locally and when deployed:
-
-```js
-const shared = require("../../shared");
-```
+`2026.2` still uses a folder with `index.js` / `main.py` and
+`require("../../shared")`.
 
 ## Handlers
 
@@ -55,6 +53,10 @@ def handler(request):
     body = request.get("body") if isinstance(request, dict) else {}
     return {"statusCode": 200, "body": {"ok": True}}
 ```
+
+An installation can also keep rows in its own Postgres schema via
+`POST /api/v2/apps/{appUuid}/installation/db` with the installation token.
+See the backend `docs/installation-db-cloud-sql.md`.
 
 Payload types come from `@caraer/client` (Node) or `caraer-client` (Python):
 `LifecyclePayload`, `WebhookPayload`, `SchedulePayload`.

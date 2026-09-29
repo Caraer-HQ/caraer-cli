@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -20,10 +21,59 @@ def get_project(client: CaraerApiClient, project_uuid: str) -> dict[str, Any]:
     return client.request("GET", f"/api/v2/developer-projects/{project_uuid}")
 
 
+def _write_layout_v21_sidecar(root: Path, config: ProjectConfig) -> Path | None:
+    if not config.is_layout_v21():
+        return None
+    from caraer_cli.project.function_files import discover_layout_v21_functions
+    from caraer_cli.project.inbound_sync import discover_local_inbound
+    from caraer_cli.project.lifecycle_sync import discover_local_lifecycle
+    from caraer_cli.project.marketplace_assemble import assemble_local_manifest
+    from caraer_cli.project.paths import app_manifest_path, build_manifest_path
+    from caraer_cli.project.schedules_sync import discover_local_schedules
+    from caraer_cli.project.webhooks_sync import discover_local_webhooks
+    from caraer_cli.apps_local import load_local_app
+
+    try:
+        local = load_local_app(app_manifest_path(root, config.srcDir))
+    except Exception:
+        local = {}
+    assembled = assemble_local_manifest(
+        root, config, local, resolve_functions=False, strict_function_refs=False
+    )
+    functions = []
+    for item in discover_layout_v21_functions(root, config):
+        functions.append(
+            {
+                "name": item.name,
+                "runtime": item.runtime,
+                "entry": item.path.name,
+                "folder": item.role,
+                "path": str(item.path.relative_to(root)),
+                "manifest": item.manifest,
+            }
+        )
+    sidecar = {
+        "platformVersion": config.platformVersion,
+        "functions": functions,
+        "webhooks": [item for _path, item in discover_local_webhooks(root, config)],
+        "schedules": [item for _path, item in discover_local_schedules(root, config)],
+        "inbound": [item for _path, item in discover_local_inbound(root, config)],
+        "lifecycle": discover_local_lifecycle(root, config),
+        "settingsSchema": assembled.get("settingsSchema") or [],
+        "settingsSections": assembled.get("settingsSections") or [],
+        "appBars": assembled.get("appBars") or [],
+    }
+    path = build_manifest_path(root, config.srcDir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(sidecar, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
 def pack_project_archive(root: Path, config: ProjectConfig) -> Path:
     src = root / config.srcDir
     out = root / ".caraer" / "upload.zip"
     out.parent.mkdir(parents=True, exist_ok=True)
+    _write_layout_v21_sidecar(root, config)
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         workspace_json = root / "caraer.json"
         if workspace_json.is_file():

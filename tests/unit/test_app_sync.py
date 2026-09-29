@@ -67,6 +67,7 @@ def test_push_app_pipeline_order(tmp_path: Path) -> None:
         app_uuid="app-1",
         sample_function=None,
         force=True,
+        platform_version="2026.2",
     )
     wh = root / "src" / "app" / "webhooks" / "hook.json"
     wh.write_text(

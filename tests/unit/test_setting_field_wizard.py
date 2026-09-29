@@ -141,10 +141,10 @@ def test_scaffold_options_function_nodejs(tmp_path: Path) -> None:
     root = result["root"]
     config = load_workspace(root)
     folder = scaffold_options_function(root, config, "list-items", "nodejs22")
-    source = (folder / "index.js").read_text(encoding="utf-8")
+    source = folder.read_text(encoding="utf-8") if folder.is_file() else (folder / "index.js").read_text(encoding="utf-8")
     assert "LOAD_SETTING_OPTIONS" in source
     assert "options" in source
     assert "flattenSettings" in source
     assert "dependsOn" in source
-    manifest = folder / "function.caraer.json"
-    assert manifest.is_file()
+    if folder.is_dir():
+        assert (folder / "function.caraer.json").is_file()

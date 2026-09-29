@@ -12,7 +12,8 @@ description: >-
 # Caraer Apps (CLI)
 
 Build Caraer apps with the **caraer** CLI and the V2 layout (`platformVersion:
-2026.2`). Prefer CLI scaffolds over inventing folders by hand.
+2026.2.1` by default; `2026.2` is the older folder layout). Prefer CLI
+scaffolds over inventing folders by hand.
 
 ## Install this skill
 
@@ -57,32 +58,32 @@ caraer apps local dev
 caraer apps local test --function <name> --sample-only
 ```
 
-## Project layout (V2)
+## Project layout (2026.2.1)
 
 ```text
 caraer.json
 package.json                # npm/pnpm `dev` = caraer apps local dev (functions + CMS)
 tsconfig.json               # resolves module npm imports from package.json
 src/app/
-  app.caraer.yaml           # identity, auth, brandmark, logo, settings, OAuth
-  functions/<name>/         # index.js|main.py (function.caraer.json optional)
-  modules/<name>/           # CMS module (index.astro + types.d.ts); init writes hello_world
-  modules/settings.ts       # optional shared module fields (import into manifests)
-  shared/                   # code shared by all functions (require "../../shared/...")
-  settings/*.json           # modular settingsSchema fields
-  settings-sections/*.json  # optional installer cards (title, subtitle, field names)
-  lifecycle/*.json          # install|uninstall|rotate|update → function
-  inbound/*.json            # public HTTP → function
-  schedules/*.json          # cron → function
-  webhooks/*.json           # platform events → function
+  app.caraer.yaml           # identity, scopes, auth, details
+  settings.yaml             # settingsSchema and settingsSections
+  app-bars.yaml
+  functions/<name>.js       # name is the filename; webhooks in exports.manifest
+  lifecycle/<hook>.js       # install|uninstall|rotate|update
+  schedules/<name>.js
+  inbound/<name>.js
+  shared/                   # require("../shared")
+  modules/<name>/<name>.astro
 ```
+
+`2026.2` apps keep folders and JSON. Rewrite them with `caraer apps upgrade`.
 
 Payload types: import from `@caraer/client` (Node) or `caraer-client` (Python),
 e.g. `LifecyclePayload`, `WebhookPayload`, `SchedulePayload`.
 
-`function.caraer.json` is only needed to override conventions (custom entry,
-description); a folder with `index.js` / `main.py` is a function named after
-the folder.
+On `2026.2.1` the filename is the function name. Webhooks, schedules, inbound,
+and lifecycle are `exports.manifest` / `manifest = {...}` literals. `2026.2`
+still uses folders and JSON.
 
 Add this line at the top of `app.caraer.yaml` so the editor loads the public
 schema (also emitted by `caraer apps init`):

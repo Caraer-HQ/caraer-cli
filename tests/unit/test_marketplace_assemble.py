@@ -9,7 +9,7 @@ from caraer_cli.project.marketplace_assemble import (
     split_marketplace_to_disk,
 )
 from caraer_cli.project.scaffold import scaffold_app_project, scaffold_lifecycle_hook
-from caraer_cli.project.schema import load_workspace
+from caraer_cli.project.schema import PLATFORM_VERSION_V2, load_workspace
 from caraer_cli.project.settings_sections_sync import discover_local_settings_sections
 from caraer_cli.project.settings_sync import discover_local_settings
 from caraer_cli.project.state import load_state, save_state
@@ -22,6 +22,7 @@ def test_assemble_merges_settings_files_over_yaml(tmp_path: Path) -> None:
         app_payload=build_public_app_placeholder(label="Demo", name="demo"),
         sample_function=None,
         force=True,
+        platform_version=PLATFORM_VERSION_V2,
     )
     config = load_workspace(root)
     settings = root / "src" / "app" / "settings"
@@ -64,6 +65,7 @@ def test_resolve_setting_options_source_by_name(tmp_path: Path) -> None:
         app_payload=build_public_app_placeholder(label="Demo", name="demo"),
         sample_function=None,
         force=True,
+        platform_version=PLATFORM_VERSION_V2,
     )
     config = load_workspace(root)
     save_state(
@@ -106,6 +108,7 @@ def test_resolve_setting_action_source_by_name(tmp_path: Path) -> None:
         app_payload=build_public_app_placeholder(label="Demo", name="demo"),
         sample_function=None,
         force=True,
+        platform_version=PLATFORM_VERSION_V2,
     )
     config = load_workspace(root)
     save_state(
@@ -149,6 +152,7 @@ def test_split_and_lifecycle_resolve(tmp_path: Path) -> None:
         app_payload=build_public_app_placeholder(label="Demo", name="demo"),
         sample_function=None,
         force=True,
+        platform_version=PLATFORM_VERSION_V2,
     )
     config = load_workspace(root)
     # Force-refresh one hook after init already created them.
@@ -195,6 +199,7 @@ def test_assemble_merges_settings_sections(tmp_path: Path) -> None:
         app_payload=build_public_app_placeholder(label="Demo", name="demo"),
         sample_function=None,
         force=True,
+        platform_version=PLATFORM_VERSION_V2,
     )
     config = load_workspace(root)
     sections = root / "src" / "app" / "settings-sections"

@@ -75,7 +75,7 @@ deploy, install, or publish the app unless I explicitly ask.
 7. Run `caraer company list` and ask which company to use, then
    `caraer company select <uuid>`.
 8. Ask whether the app is private to that company or a public marketplace app,
-   and what label to use. Then scaffold with platform 2026.2 (the default):
+   and what label to use. Then scaffold with platform 2026.2.1 (the default):
    - Private: `caraer apps init --private --label "<Label>" --auth-method API_KEY`
    - Public: `caraer apps init --label "<Label>"`
    Do not pass `--platform 2026.1`.
@@ -133,7 +133,7 @@ Only the company that created the app (or a super-admin) can push builds.
 or `privateApp: true` in `caraer.json`) use the private app API and cannot be
 submitted with `caraer publish`.
 
-New apps use workspace `platformVersion: 2026.2` (one container per app). Use
+New apps use workspace `platformVersion: 2026.2.1` (one container per app). Use
 `--platform 2026.1` only for the legacy per-function model. See
 [docs/platform_versioning.md](docs/platform_versioning.md).
 
@@ -152,35 +152,33 @@ caraer apps add lifecycle-hook
 caraer apps add module hello --kind section
 ```
 
-`caraer apps init` already creates lifecycle hooks (`install`, `uninstall`,
-`rotate`, `update`) and matching `functions/on-*` folders, plus a starter
-`modules/hello_world`.
+`caraer apps init` already creates lifecycle files (`install`, `uninstall`,
+`rotate`, `update`) and a starter `modules/hello_world`. Existing `2026.2`
+apps stay as they are until you run `caraer apps upgrade`.
 
 `add schedule` and `add setting` open a wizard when you omit flags.
-`add setting` writes into `src/app/app.caraer.yaml`. Pass `--modular` to write
-`src/app/settings/<name>.json` instead.
+`add setting` writes into `src/app/settings.yaml`.
 
 ## Project layout
 
 ```text
 my_app/
-  caraer.json                 # platformVersion, appUuid, privateApp
+  caraer.json                 # platformVersion 2026.2.1, appUuid, privateApp
   package.json
   src/app/
-    app.caraer.yaml           # identity, auth, settings, OAuth
-    functions/<name>/         # index.js or main.py
-    shared/                   # code shared by functions
-    lifecycle/*.json          # install | uninstall | rotate | update
-    webhooks/*.json
-    schedules/*.json
-    inbound/*.json
-    settings/*.json           # optional modular settings
-    settings-sections/*.json  # optional installer cards
-    modules/<name>/           # CMS module: index.astro + types.d.ts
+    app.caraer.yaml           # identity, scopes, auth, details
+    settings.yaml             # settingsSchema and settingsSections
+    app-bars.yaml
+    functions/<name>.js       # name is the filename; webhooks live in its manifest
+    lifecycle/<hook>.js       # install | uninstall | rotate | update
+    schedules/<name>.js
+    inbound/<name>.js
+    shared/                   # require("../shared") from each of the above
+    modules/<name>/<name>.astro
 ```
 
-A function is a folder named after the function, with `index.js` (Node) or
-`main.py` (Python). `function.caraer.json` is only needed to override that.
+A function is a file named after the function, with `exports.handler` (Node) or
+`def handler` (Python). Helpers live in `shared/`.
 
 Node handlers export `handler`. Payload types come from `@caraer/client`
 (`LifecyclePayload`, `WebhookPayload`, `SchedulePayload`):
@@ -200,8 +198,8 @@ def handler(request):
 ```
 
 Shared helpers live in `src/app/shared/` and are imported with the same relative
-path locally and when deployed, for example `require("../../shared")` from
-`functions/<name>/index.js`.
+path locally and when deployed, for example `require("../shared")` from
+`functions/<name>.js`.
 
 See [`examples/webhook-inbox`](examples/webhook-inbox) for a small app with an
 inbound route, settings, lifecycle hooks, and a schedule.

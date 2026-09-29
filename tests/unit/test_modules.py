@@ -87,7 +87,7 @@ def test_entry_must_be_astro(tmp_path: Path) -> None:
     # entry point cannot be a framework file.
     root = _workspace(tmp_path)
     _write_module(root, "hero", {"name": "hero", "label": "Hero", "kind": "section"}, entry=False)
-    assert any("Missing index.astro" in e for e in _errors(root))
+    assert any("Missing module .astro file" in e or "Missing index.astro" in e for e in _errors(root))
 
 
 def test_directory_name_must_match_config_name(tmp_path: Path) -> None:

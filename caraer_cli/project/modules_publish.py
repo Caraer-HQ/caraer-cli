@@ -147,7 +147,10 @@ def build_package_json(
     for module in modules:
         # The manifest is a named export of the component, so one entry covers
         # both the markup and the field schema.
-        exports[f"./modules/{module.name}/index.astro"] = f"./modules/{module.name}/index.astro"
+        entry_name = module.entry.name
+        exports[f"./modules/{module.name}/{entry_name}"] = f"./modules/{module.name}/{entry_name}"
+        if entry_name != "index.astro":
+            exports[f"./modules/{module.name}/index.astro"] = f"./modules/{module.name}/{entry_name}"
 
     payload: dict[str, Any] = {
         "name": package_name(app_name, private=private, company=company),

@@ -24,10 +24,20 @@ def _hash_text(value: str) -> str:
 def discover_local_functions(
     root: Path, config: ProjectConfig
 ) -> list[tuple[FunctionManifest, Path, str, dict[str, str]]]:
+    if config.is_layout_v21():
+        from caraer_cli.project.function_files import discover_layout_v21_functions
+
+        found: list[tuple[FunctionManifest, Path, str, dict[str, str]]] = []
+        for item in discover_layout_v21_functions(root, config):
+            if item.error:
+                raise FileNotFoundError(f"{item.path}: {item.error}")
+            code = item.path.read_text(encoding="utf-8")
+            found.append((item.to_function_manifest(), item.path, code, {}))
+        return found
     base = functions_dir(root, config.srcDir)
     if not base.is_dir():
         return []
-    found: list[tuple[FunctionManifest, Path, str, dict[str, str]]] = []
+    found = []
     for child in sorted(base.iterdir()):
         if not child.is_dir():
             continue
@@ -51,6 +61,13 @@ def discover_local_functions(
 
 def load_or_conventional_manifest(folder: Path, config: ProjectConfig) -> FunctionManifest:
     """Load function.caraer.json, or derive a conventional manifest from the entry file."""
+    if config.is_layout_v21():
+        from caraer_cli.project.function_files import function_file_by_name
+
+        item = function_file_by_name(folder.parent.parent.parent, config, folder.name)
+        if item is None:
+            raise FileNotFoundError(f"No 2026.2.1 function file named '{folder.name}'")
+        return item.to_function_manifest()
     manifest_path = folder / "function.caraer.json"
     if manifest_path.is_file():
         return load_function_manifest(manifest_path)
@@ -247,6 +264,8 @@ def pull_functions(client: CaraerApiClient, root: Path, config: ProjectConfig) -
 
     remote = functions_api.list_functions(client, config.appUuid, page=1, limit=200)
     remote_items = remote.get("data") or []
+    if config.is_layout_v21():
+        return _pull_functions_v21(root, config, remote_items)
     base = functions_dir(root, config.srcDir)
     base.mkdir(parents=True, exist_ok=True)
     state = load_state(root)
@@ -292,6 +311,40 @@ def pull_functions(client: CaraerApiClient, root: Path, config: ProjectConfig) -
         }
         pulled.append({"name": name, "uuid": uuid, "path": str(folder)})
 
+    save_state(root, state)
+    return {"functions": pulled}
+
+
+def _pull_functions_v21(
+    root: Path, config: ProjectConfig, remote_items: list[Any]
+) -> dict[str, Any]:
+    from caraer_cli.project.function_files import function_file_by_name
+    from caraer_cli.project.paths import functions_dir as functions_base
+
+    base = functions_base(root, config.srcDir)
+    base.mkdir(parents=True, exist_ok=True)
+    state = load_state(root)
+    fn_state: dict[str, Any] = state.setdefault("functions", {})
+    pulled: list[dict[str, Any]] = []
+    for item in remote_items:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or item.get("uuid") or "function")
+        runtime = str(item.get("runtime") or "nodejs22")
+        code = str(item.get("code") or "")
+        uuid = str(item.get("uuid") or "")
+        existing = function_file_by_name(root, config, name)
+        suffix = existing.path.suffix if existing else (".py" if runtime.startswith("python") else ".js")
+        path = existing.path if existing else base / f"{name}{suffix}"
+        if not code.strip():
+            pulled.append({"name": name, "uuid": uuid, "path": str(path), "skipped": "no remote code"})
+            if uuid:
+                fn_state.setdefault(name, {})["uuid"] = uuid
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(code, encoding="utf-8")
+        fn_state[name] = {"uuid": uuid, "hash": _hash_text(f"{runtime}\n{code}")}
+        pulled.append({"name": name, "uuid": uuid, "path": str(path)})
     save_state(root, state)
     return {"functions": pulled}
 
@@ -468,6 +521,33 @@ def handler(request):
 '''
 
 
+def _v21_function_source(
+    runtime: str, *, template: str | None = None, manifest: dict[str, Any] | None = None
+) -> str:
+    import json
+
+    body_js = _OPTIONS_FUNCTION_JS if template == "options" else (
+        "/**\n * Caraer serverless entrypoint.\n */\n"
+        "exports.handler = async (req, res) => {\n"
+        "  res.status(200).json({ ok: true });\n"
+        "};\n"
+    )
+    body_py = _OPTIONS_FUNCTION_PY if template == "options" else (
+        "def handler(request):\n"
+        '    """Caraer serverless entrypoint."""\n'
+        '    return {"statusCode": 200, "body": {"ok": True}}\n'
+    )
+    if not manifest:
+        return body_py if runtime.startswith("python") else body_js
+    literal = json.dumps(manifest, indent=2)
+    if runtime.startswith("python"):
+        py_literal = (
+            literal.replace("true", "True").replace("false", "False").replace("null", "None")
+        )
+        return f"manifest = {py_literal}\n\n{body_py}"
+    return f"{body_js.rstrip()}\n\nexports.manifest = {literal};\n"
+
+
 def scaffold_function(
     root: Path,
     config: ProjectConfig,
@@ -477,14 +557,32 @@ def scaffold_function(
     description: str | None = None,
     force: bool = False,
     template: str | None = None,
+    manifest: dict[str, Any] | None = None,
+    role: str = "functions",
 ) -> Path:
-    """Create ``src/app/functions/<name>/`` with an entry source file.
+    """Create a function file or folder, depending on platformVersion."""
+    if config.is_layout_v21():
+        from caraer_cli.project.paths import inbound_dir, lifecycle_dir, schedules_dir
 
-    function.caraer.json is only written when the function needs more than the
-    conventional defaults (folder name + default entry), i.e. a description.
+        directories = {
+            "functions": functions_dir(root, config.srcDir),
+            "lifecycle": lifecycle_dir(root, config.srcDir),
+            "schedules": schedules_dir(root, config.srcDir),
+            "inbound": inbound_dir(root, config.srcDir),
+        }
+        base = directories.get(role, functions_dir(root, config.srcDir))
+        base.mkdir(parents=True, exist_ok=True)
+        suffix = ".py" if runtime.startswith("python") else ".js"
+        path = base / f"{name}{suffix}"
+        if path.exists() and not force:
+            raise FileExistsError(f"Function file already exists: {path}. Use --force to overwrite.")
+        resolved_template = (template or "").strip().lower() or None
+        path.write_text(
+            _v21_function_source(runtime, template=resolved_template, manifest=manifest),
+            encoding="utf-8",
+        )
+        return path
 
-    ``template`` may be ``options`` for a LOAD_SETTING_OPTIONS loader scaffold.
-    """
     folder = functions_dir(root, config.srcDir) / name
     manifest_path = folder / "function.caraer.json"
     if folder.exists() and any(folder.iterdir()) and not force:

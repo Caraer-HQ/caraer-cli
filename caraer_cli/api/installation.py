@@ -91,3 +91,15 @@ def enqueue_job(
 
 def get_job(client: CaraerApiClient, app_uuid: str, job_id: str) -> dict[str, Any]:
     return client.request("GET", f"/api/v2/apps/{app_uuid}/installation/jobs/{job_id}")
+
+
+def run_db(
+    client: CaraerApiClient,
+    app_uuid: str,
+    statements: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return client.request(
+        "POST",
+        f"/api/v2/apps/{app_uuid}/installation/db",
+        json_body={"statements": statements},
+    )

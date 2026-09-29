@@ -45,7 +45,11 @@ from caraer_cli.project.marketplace_assemble import (
     assemble_local_manifest,
     split_marketplace_to_disk,
 )
-from caraer_cli.project.schema import PLATFORM_VERSION, PLATFORM_VERSION_V1
+from caraer_cli.project.schema import (
+    PLATFORM_VERSION,
+    PLATFORM_VERSION_V1,
+    PLATFORM_VERSION_V2,
+)
 from caraer_cli.utils import deep_merge
 
 
@@ -896,8 +900,8 @@ def pull_app_full(
     remote_full = _remote_app_data(client, config, app_uuid=linked_uuid)
     remote_platform = remote_full.get("platformVersion")
     if remote_platform == 2 or remote_platform == "2":
-        if config.platformVersion != PLATFORM_VERSION:
-            config.platformVersion = PLATFORM_VERSION
+        if not config.is_app_platform_v2():
+            config.platformVersion = PLATFORM_VERSION_V2
             dirty = True
     elif remote_platform == 1 or remote_platform == "1":
         if config.platformVersion != PLATFORM_VERSION_V1:

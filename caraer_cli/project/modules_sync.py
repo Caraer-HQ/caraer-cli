@@ -24,6 +24,14 @@ from caraer_cli.project.schema import ProjectConfig
 #: validation can point at a leftover and say what to do with it.
 LEGACY_MODULE_CONFIG_FILE = "module.caraer.json"
 MODULE_ENTRY_FILE = "index.astro"
+
+
+def module_entry_path(directory: Path) -> Path:
+    """Prefer ``<name>.astro``; fall back to legacy ``index.astro``."""
+    named = directory / f"{directory.name}.astro"
+    if named.is_file():
+        return named
+    return directory / MODULE_ENTRY_FILE
 GENERATED_TYPES_FILE = "types.d.ts"
 
 #: What the module renders as, which decides where it may be placed.
@@ -105,7 +113,7 @@ class LocalModule:
 
     @property
     def entry(self) -> Path:
-        return self.directory / MODULE_ENTRY_FILE
+        return module_entry_path(self.directory)
 
     @property
     def legacy_config_path(self) -> Path:
@@ -170,7 +178,7 @@ def discover_local_modules(root: Path, config: ProjectConfig) -> list[LocalModul
 
         payload: dict[str, Any] = {}
         error: str | None = None
-        entry = directory / MODULE_ENTRY_FILE
+        entry = module_entry_path(directory)
         if entry.is_file():
             try:
                 payload = parse_manifest_file(entry)

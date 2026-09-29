@@ -16,6 +16,7 @@ def test_build_push_plan_unlinked_creates(tmp_path: Path) -> None:
         app_payload=build_public_app_placeholder(label="Demo", name="demo"),
         sample_function="hello-world",
         force=True,
+        platform_version="2026.2",
     )
     # Unlinked scaffold may still write appUuid when passed; clear it.
     config = load_workspace(root)
@@ -90,6 +91,7 @@ def test_build_push_plan_detects_update_and_remote_only(tmp_path: Path) -> None:
         app_uuid="app-1",
         sample_function="hello-world",
         force=True,
+        platform_version="2026.2",
     )
     config = load_workspace(root)
 

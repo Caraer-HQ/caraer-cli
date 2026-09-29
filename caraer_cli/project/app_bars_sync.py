@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from caraer_cli.project.paths import app_bars_dir
+from caraer_cli.project.paths import app_bars_dir, app_bars_yaml_path
 from caraer_cli.project.schema import ProjectConfig
 
 LOCAL_APP_BAR_KEYS = (
@@ -97,10 +97,24 @@ def sanitize_app_bar(item: dict[str, Any]) -> dict[str, Any]:
 def discover_local_app_bars(
     root: Path, config: ProjectConfig
 ) -> list[tuple[Path, dict[str, Any]]]:
+    if config.is_layout_v21():
+        path = app_bars_yaml_path(root, config.srcDir)
+        if not path.is_file():
+            return []
+        import yaml
+
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        items = data.get("appBars") if isinstance(data, dict) else data
+        found: list[tuple[Path, dict[str, Any]]] = []
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, dict) and item.get("label") and item.get("location"):
+                    found.append((path, sanitize_app_bar(item)))
+        return found
     base = app_bars_dir(root, config.srcDir)
     if not base.is_dir():
         return []
-    found: list[tuple[Path, dict[str, Any]]] = []
+    found = []
     for path in sorted(base.glob("*.json")):
         data = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(data, dict) and data.get("label") and data.get("location"):
@@ -111,6 +125,24 @@ def discover_local_app_bars(
 def write_app_bars_files(
     root: Path, config: ProjectConfig, items: list[dict[str, Any]]
 ) -> int:
+    if config.is_layout_v21():
+        import yaml
+
+        path = app_bars_yaml_path(root, config.srcDir)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        bars = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            sanitized = sanitize_app_bar(item)
+            if not app_bar_identity(sanitized).strip("|"):
+                continue
+            bars.append(sanitized)
+        path.write_text(
+            yaml.safe_dump({"appBars": bars}, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+        return len(bars)
     base = app_bars_dir(root, config.srcDir)
     base.mkdir(parents=True, exist_ok=True)
     for existing in base.glob("*.json"):

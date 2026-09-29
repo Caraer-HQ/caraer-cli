@@ -665,24 +665,29 @@ def _validate_functions(
         manifest_runtime = ""
     expected_runtime = manifest_runtime or str(config.resolved_runtime("") or "").strip().lower()
 
-    # function.caraer.json is optional: a folder with an entry file (index.js /
-    # main.py) is discovered by convention. Only flag folders that are neither.
-    for child in sorted(base.iterdir()):
-        if not child.is_dir() or child.name.startswith("."):
-            continue
-        has_manifest = (child / "function.caraer.json").is_file()
-        has_entry = (child / "index.js").is_file() or (child / "main.py").is_file()
-        if not has_manifest and not has_entry:
-            _issue(
-                issues,
-                "error",
-                str(child.relative_to(root)),
-                "Not a function: add index.js/main.py or a function.caraer.json with an entry.",
-            )
+    if not config.is_layout_v21():
+        # function.caraer.json is optional: a folder with an entry file (index.js /
+        # main.py) is discovered by convention. Only flag folders that are neither.
+        for child in sorted(base.iterdir()):
+            if not child.is_dir() or child.name.startswith("."):
+                continue
+            has_manifest = (child / "function.caraer.json").is_file()
+            has_entry = (child / "index.js").is_file() or (child / "main.py").is_file()
+            if not has_manifest and not has_entry:
+                _issue(
+                    issues,
+                    "error",
+                    str(child.relative_to(root)),
+                    "Not a function: add index.js/main.py or a function.caraer.json with an entry.",
+                )
 
+    seen_function_names: set[str] = set()
     for manifest, entry_path, _code, _source_files in discovered:
-        rel = f"functions/{manifest.name}"
-        if manifest.name != entry_path.parent.name:
+        rel = str(entry_path.relative_to(root)) if config.is_layout_v21() else f"functions/{manifest.name}"
+        if manifest.name in seen_function_names:
+            _issue(issues, "error", rel, f"Function name '{manifest.name}' is used more than once.")
+        seen_function_names.add(manifest.name)
+        if not config.is_layout_v21() and manifest.name != entry_path.parent.name:
             _issue(
                 issues,
                 "warning",
@@ -738,21 +743,30 @@ def _validate_webhooks(
     issues: list[ValidationIssue],
 ) -> int:
     base = webhooks_dir(root, config.srcDir)
-    if not base.is_dir():
-        return 0
-
     function_names = set(list_local_function_names(root, config))
     try:
         local = discover_local_webhooks(root, config)
     except Exception as exc:  # noqa: BLE001
-        _issue(issues, "error", str(base.relative_to(root)), f"Could not read webhooks: {exc}")
+        _issue(
+            issues,
+            "error",
+            str(base.relative_to(root)) if base.is_dir() else "src/app",
+            f"Could not read webhooks: {exc}",
+        )
+        return 0
+    if not local:
         return 0
 
+    seen_topics: set[str] = set()
     for path, item in local:
         rel = str(path.relative_to(root))
         topic = str(item.get("topic") or "").strip()
         if not topic:
             _issue(issues, "error", f"{rel}:topic", "topic is required.")
+        elif topic in seen_topics:
+            _issue(issues, "error", f"{rel}:topic", f"Topic '{topic}' is declared on more than one function.")
+        else:
+            seen_topics.add(topic)
 
         mode = str(item.get("deliveryMode") or "").strip().upper()
         if not mode:
@@ -1443,7 +1457,7 @@ def _validate_modules(
                 issues,
                 "error",
                 rel_dir,
-                "Missing index.astro. A module's entry point must be an .astro file, "
+                "Missing module .astro file. A module's entry point must be an .astro file, "
                 "because Astro can only apply client:* directives to components it "
                 "resolves statically.",
             )
@@ -1455,7 +1469,7 @@ def _validate_modules(
                 "error",
                 str(module.legacy_config_path.relative_to(root)),
                 "A module is one file now. Move this into "
-                "`export const manifest = {...}` in index.astro and delete it.",
+                "`export const manifest = {...}` in the module .astro file and delete it.",
             )
 
         if module.error:

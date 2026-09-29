@@ -15,10 +15,13 @@ from caraer_cli.project.paths import (
 from caraer_cli.project.state import get_project_uuid, set_project_uuid
 
 
-# Workspace schema versions. 2026.2 maps to App.platformVersion = 2 (container runtime).
-PLATFORM_VERSION = "2026.2"
+# Workspace schema versions. 2026.2 and 2026.2.1 both map to App.platformVersion = 2.
 PLATFORM_VERSION_V1 = "2026.1"
-SUPPORTED_PLATFORM_VERSIONS = frozenset({PLATFORM_VERSION_V1, PLATFORM_VERSION})
+PLATFORM_VERSION_V2 = "2026.2"
+PLATFORM_VERSION = "2026.2.1"
+SUPPORTED_PLATFORM_VERSIONS = frozenset(
+    {PLATFORM_VERSION_V1, PLATFORM_VERSION_V2, PLATFORM_VERSION}
+)
 
 
 class FunctionManifest(BaseModel):
@@ -77,6 +80,10 @@ class ProjectConfig(BaseModel):
         return normalized
 
     def is_app_platform_v2(self) -> bool:
+        return self.platformVersion in {PLATFORM_VERSION_V2, PLATFORM_VERSION}
+
+    def is_layout_v21(self) -> bool:
+        """True when the app uses the 2026.2.1 flat-file layout."""
         return self.platformVersion == PLATFORM_VERSION
 
     def api_platform_version(self) -> int:

@@ -86,7 +86,7 @@ def test_scaffold_writes_files(tmp_path: Path) -> None:
 
     from caraer_cli.project.sync import discover_local_functions
 
-    config = ProjectConfig(name="demo")
+    config = ProjectConfig(name="demo", platformVersion="2026.2")
     folder = scaffold_function(tmp_path, config, "hello-world", "python312")
     assert not (folder / "function.caraer.json").exists()
     assert (folder / "main.py").is_file()
@@ -103,7 +103,7 @@ def test_webhook_filename_stable() -> None:
 
 
 def test_discover_and_push_webhooks_create(tmp_path: Path) -> None:
-    config = ProjectConfig(name="demo", appUuid="app-1", srcDir="src")
+    config = ProjectConfig(name="demo", appUuid="app-1", srcDir="src", platformVersion="2026.2")
     wh_dir = tmp_path / "src" / "app" / "webhooks"
     wh_dir.mkdir(parents=True)
     (wh_dir / "record-created.json").write_text(

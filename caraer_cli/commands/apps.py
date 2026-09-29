@@ -426,9 +426,9 @@ def init_app(
         help="OAuth callback / redirect URL (repeatable; required for OAUTH2).",
     ),
     platform: str = typer.Option(
-        "2026.2",
+        "2026.2.1",
         "--platform",
-        help="Workspace platformVersion: 2026.2 (container/V2, default) or 2026.1 (legacy).",
+        help="Workspace platformVersion: 2026.2.1 (default), 2026.2, or 2026.1.",
     ),
     function: str = typer.Option(
         "hello-world",
@@ -452,13 +452,21 @@ def init_app(
         install_npm_dependencies,
         scaffold_app_project,
     )
-    from caraer_cli.project.schema import PLATFORM_VERSION, PLATFORM_VERSION_V1, load_workspace
+    from caraer_cli.project.schema import (
+        PLATFORM_VERSION,
+        PLATFORM_VERSION_V1,
+        PLATFORM_VERSION_V2,
+        SUPPORTED_PLATFORM_VERSIONS,
+        load_workspace,
+    )
 
     app_ctx: AppContext = ctx.obj
     if runtime not in {"nodejs22", "python312"}:
         raise typer.BadParameter("--runtime must be nodejs22 or python312.")
-    if platform not in {PLATFORM_VERSION, PLATFORM_VERSION_V1}:
-        raise typer.BadParameter("--platform must be 2026.2 or 2026.1.")
+    if platform not in SUPPORTED_PLATFORM_VERSIONS:
+        raise typer.BadParameter(
+            "--platform must be 2026.2.1, 2026.2, or 2026.1."
+        )
     try:
         payload = build_public_app_placeholder(
             label=label,
@@ -903,6 +911,22 @@ def app_status(ctx: typer.Context) -> None:
     root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
     print_data(status_summary(app_ctx.api_client(), root, config), app_ctx.output)
+
+
+@app.command("upgrade")
+def upgrade_app(ctx: typer.Context) -> None:
+    """Rewrite a 2026.2 workspace into the 2026.2.1 file layout."""
+    from caraer_cli.app_sync import resolve_app_root
+    from caraer_cli.project.layout_upgrade import upgrade_layout_to_v21
+
+    app_ctx: AppContext = ctx.obj
+    root = resolve_app_root(app_file=app_ctx.pinned_app_file)
+    result = upgrade_layout_to_v21(root)
+    if result.get("skipped"):
+        print_warning(str(result.get("reason") or "Already on 2026.2.1."))
+        return
+    print_success("Upgraded workspace to 2026.2.1.")
+    print_data(result, app_ctx.output)
 
 
 @app.command("validate")

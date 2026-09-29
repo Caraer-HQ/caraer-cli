@@ -160,7 +160,8 @@ def scaffold_module(
 ) -> Path:
     """Create ``src/app/modules/<name>/`` with an entry and optional island."""
     directory = modules_dir(root, config.srcDir) / name
-    entry = directory / MODULE_ENTRY_FILE
+    entry_name = f"{name}.astro" if config.is_layout_v21() else MODULE_ENTRY_FILE
+    entry = directory / entry_name
 
     if entry.exists() and not force:
         raise FileExistsError(f"Module already exists: {directory}. Use --force to overwrite.")

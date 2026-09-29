@@ -1541,7 +1541,7 @@ def _harness_page(modules: list[LocalModule], app_label: str) -> str:
         for m in modules
     ]
     loaders = ",\n".join(
-        f"  {json.dumps(m.name)}: () => import({json.dumps(f'@modules/{m.name}/index.astro')})"
+        f"  {json.dumps(m.name)}: () => import({json.dumps(f'@modules/{m.name}/{m.entry.name}')})"
         for m in modules
     )
 

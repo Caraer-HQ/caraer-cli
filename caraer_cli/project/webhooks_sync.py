@@ -44,6 +44,13 @@ def webhook_filename(item: dict[str, Any]) -> str:
 
 
 def discover_local_webhooks(root: Path, config: ProjectConfig) -> list[tuple[Path, dict[str, Any]]]:
+    if config.is_layout_v21():
+        from caraer_cli.project.function_files import (
+            discover_layout_v21_functions,
+            webhook_items_from_files,
+        )
+
+        return webhook_items_from_files(discover_layout_v21_functions(root, config))
     base = webhooks_dir(root, config.srcDir)
     if not base.is_dir():
         return []
@@ -205,6 +212,8 @@ def pull_webhooks(
 
     remote = webhook_api.list_webhooks(client, config.appUuid, page=1, limit=200)
     remote_items = [i for i in (remote.get("data") or []) if isinstance(i, dict)]
+    if config.is_layout_v21():
+        return _pull_webhooks_v21(root, config, remote_items)
     base = webhooks_dir(root, config.srcDir)
     base.mkdir(parents=True, exist_ok=True)
 
@@ -238,5 +247,52 @@ def pull_webhooks(
         pulled.append({"file": filename, "uuid": item.get("uuid"), "topic": item.get("topic")})
 
     state["webhooks"] = wh_state
+    save_state(root, state)
+    return {"webhooks": pulled}
+
+
+def _pull_webhooks_v21(
+    root: Path, config: ProjectConfig, remote_items: list[dict[str, Any]]
+) -> dict[str, Any]:
+    from caraer_cli.project.code_manifest import parse_code_manifest_file, write_code_manifest
+    from caraer_cli.project.function_files import discover_layout_v21_functions
+    from caraer_cli.project.lifecycle_sync import LIFECYCLE_HOOKS
+
+    lifecycle_topics = {topic for _key, topic in LIFECYCLE_HOOKS.values()}
+    files = {item.name: item for item in discover_layout_v21_functions(root, config)}
+    state = load_state(root)
+    fn_state = state.get("functions") or {}
+    uuid_to_name = {
+        str(meta["uuid"]): name
+        for name, meta in fn_state.items()
+        if isinstance(meta, dict) and meta.get("uuid")
+    }
+    by_function: dict[str, list[dict[str, Any]]] = {}
+    pulled: list[dict[str, Any]] = []
+    for item in remote_items:
+        local = _sanitize_local_webhook(item)
+        topic = str(local.get("topic") or "")
+        if topic in lifecycle_topics:
+            continue
+        sf = local.get("serverlessFunction")
+        name = None
+        if isinstance(sf, dict):
+            name = sf.get("name") or uuid_to_name.get(str(sf.get("uuid") or ""))
+        if not name or name not in files:
+            continue
+        by_function.setdefault(str(name), []).append(
+            {
+                "topic": topic,
+                "deliveryMode": local.get("deliveryMode") or "SERVERLESS",
+                "enabled": local.get("enabled", True),
+                "webhookFormat": local.get("webhookFormat") or "USER_FRIENDLY",
+            }
+        )
+        pulled.append({"function": name, "uuid": item.get("uuid"), "topic": topic})
+    for name, webhooks in by_function.items():
+        item = files[name]
+        current = parse_code_manifest_file(item.path)
+        current["webhooks"] = webhooks
+        write_code_manifest(item.path, current)
     save_state(root, state)
     return {"webhooks": pulled}

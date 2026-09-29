@@ -19,7 +19,9 @@ consent bar.
 
 ## One file
 
-The entry is always `src/app/modules/<name>/index.astro`. The field list is a
+On `2026.2.1` the entry is `src/app/modules/<name>/<name>.astro`. Published
+packages also export `index.astro` as an alias. `2026.2` apps still use
+`index.astro`. The field list is a
 literal `export const manifest` in that file. The CLI reads the object without
 running your code, so it cannot be built by a function.
 
