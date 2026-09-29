@@ -2,7 +2,8 @@
 
 Caraer apps can run code when a company **installs**, **updates**, **uninstalls**, or
 **rotates** credentials. Prefer modular files under `src/app/lifecycle/` that point
-at a local serverless function.
+at a local serverless function. The function itself is a normal
+[serverless function](functions.md).
 
 ## Quick start
 

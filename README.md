@@ -26,15 +26,11 @@ Confirm:
 
 ```bash
 caraer --version
+caraer profile current    # prod, https://api.caraer.com
 ```
 
-The first-run profile is `dev` and points at `http://localhost:8080`. Switch to
-production before you log in:
-
-```bash
-caraer profile use prod
-caraer profile current    # base_url must be https://caraer.com
-```
+A new install uses the `prod` profile. `caraer profile use local`, `dev`, or
+`staging` switches API host.
 
 ### Install from source
 
@@ -45,7 +41,6 @@ python3 -m venv .venv
 source .venv/bin/activate
 ./scripts/install.sh
 caraer --version
-caraer profile use prod
 ```
 
 If install fails with `requires a different Python`, create the venv with
@@ -68,9 +63,9 @@ deploy, install, or publish the app unless I explicitly ask.
 3. If `caraer --version` fails, install the CLI:
    prefer `pipx install caraer-cli`, else `uv tool install caraer-cli`,
    else `pip install caraer-cli`. Confirm with `caraer --version`.
-4. The default profile talks to localhost. Switch to production before login:
-   `caraer profile use prod`
-   Confirm `caraer profile current` shows base_url https://caraer.com.
+4. Confirm the active profile is production before login:
+   `caraer profile current`
+   base_url must be https://api.caraer.com. If it is not, run `caraer profile use prod`.
 5. Install the agent skills so later edits follow Caraer app conventions:
    `caraer skill install`
    Tell me to start a new chat before relying on those skills.
@@ -103,7 +98,6 @@ caraer skill list
 ## Quick start
 
 ```bash
-caraer profile use prod
 caraer auth login
 # CI or password login: caraer auth login --email you@example.com
 caraer company list
@@ -212,6 +206,20 @@ path locally and when deployed, for example `require("../../shared")` from
 See [`examples/webhook-inbox`](examples/webhook-inbox) for a small app with an
 inbound route, settings, lifecycle hooks, and a schedule.
 
+## App pieces
+
+Each piece is a file under `src/app/` that points at a function, except CMS
+modules, which are Astro components published with the app.
+
+| Piece | What it does | Guide |
+|-------|----------------|-------|
+| Serverless functions | The code that runs | [docs/functions.md](docs/functions.md) |
+| CMS modules | Blocks for the website builder | [docs/modules.md](docs/modules.md) |
+| Webhooks | Run a function when a record or relation changes | [docs/webhooks.md](docs/webhooks.md) |
+| Lifecycle | Run a function on install, update, uninstall, or credential rotate | [docs/app_lifecycle.md](docs/app_lifecycle.md) |
+| Schedules | Run a function on a cron | [docs/schedules.md](docs/schedules.md) |
+| Inbound routes | Public HTTP from an outside system into a function | [docs/inbound.md](docs/inbound.md) |
+
 ## Settings
 
 Installation settings are filled in by the admin who installs the app.
@@ -258,14 +266,19 @@ profiles:
 
 | Profile | API |
 |---------|-----|
-| `prod` | `https://caraer.com` |
-| `staging` | `https://staging.caraer.com` |
-| `dev` | `http://localhost:8080` (default until you switch) |
+| `prod` (default) | `https://api.caraer.com` |
+| `staging` | `https://v2.staging.api.caraer.com` |
+| `dev` | `https://v2.dev.api.caraer.com` |
+| `local` | `http://localhost:8080` |
+
+`prod` is the Cloudflare edge. `staging` and `dev` are DNS aliases on Vercel
+(`v2.staging.api` → `staging.api.caraer.com`, `v2.dev.api` → `dev.api.caraer.com`)
+and are not proxied through Cloudflare.
 
 ```bash
 caraer profile list
-caraer profile use prod
-caraer profile set --base-url https://caraer.com --output json
+caraer profile use staging
+caraer profile set --base-url https://api.caraer.com --output json
 ```
 
 `--profile <name>` overrides the active profile for a single command.
@@ -296,8 +309,13 @@ build. Preview a push with `caraer apps push --dry-run` before you deploy.
 
 ## Further reading
 
-- [Platform versioning](docs/platform_versioning.md)
+- [Serverless functions](docs/functions.md)
+- [CMS modules](docs/modules.md)
+- [Webhooks](docs/webhooks.md)
 - [App lifecycle hooks](docs/app_lifecycle.md)
+- [Scheduled functions](docs/schedules.md)
+- [Inbound routes](docs/inbound.md)
+- [Platform versioning](docs/platform_versioning.md)
 - [Backend contract](docs/backend_contract.md)
 - [Changelog](CHANGELOG.md)
 - [Security](SECURITY.md)

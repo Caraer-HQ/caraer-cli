@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +16,33 @@ else:
 
 CONFIG_DIRNAME = "caraer-cli"
 CONFIG_FILENAME = "config.toml"
+DEFAULT_PROFILE = "prod"
+
+# Built-in profiles. `prod` is the default so a new install talks to production.
+PROFILE_BASE_URLS: dict[str, str] = {
+    "local": "http://localhost:8080",
+    "dev": "https://v2.dev.api.caraer.com",
+    "staging": "https://v2.staging.api.caraer.com",
+    "prod": "https://api.caraer.com",
+}
+
+# Earlier releases shipped these hosts. Rewrite them; leave custom URLs alone.
+_LEGACY_PROFILE_URLS: dict[str, frozenset[str]] = {
+    "dev": frozenset(
+        {
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+            "https://dev.api.caraer.com",
+        }
+    ),
+    "staging": frozenset(
+        {
+            "https://staging.caraer.com",
+            "https://staging.api.caraer.com",
+        }
+    ),
+    "prod": frozenset({"https://caraer.com"}),
+}
 
 
 @dataclass
@@ -32,17 +59,16 @@ class ProfileConfig:
 
 @dataclass
 class CliConfig:
-    active_profile: str = "dev"
+    active_profile: str = DEFAULT_PROFILE
     profiles: dict[str, ProfileConfig] = field(default_factory=dict)
 
     @staticmethod
     def default() -> "CliConfig":
         return CliConfig(
-            active_profile="dev",
+            active_profile=DEFAULT_PROFILE,
             profiles={
-                "dev": ProfileConfig(base_url="http://localhost:8080"),
-                "staging": ProfileConfig(base_url="https://staging.caraer.com"),
-                "prod": ProfileConfig(base_url="https://caraer.com"),
+                name: ProfileConfig(base_url=url)
+                for name, url in PROFILE_BASE_URLS.items()
             },
         )
 
@@ -104,8 +130,9 @@ def load_config() -> CliConfig:
         for name, value in profile_block.items():
             if not isinstance(value, dict):
                 continue
+            fallback = PROFILE_BASE_URLS.get(name, PROFILE_BASE_URLS[DEFAULT_PROFILE])
             cfg.profiles[name] = ProfileConfig(
-                base_url=str(value.get("base_url", "http://localhost:8080")),
+                base_url=str(value.get("base_url") or fallback),
                 company_uuid=value.get("company_uuid") or None,
                 sandbox_uuid=value.get("sandbox_uuid") or None,
                 app_uuid=value.get("app_uuid") or None,
@@ -115,9 +142,73 @@ def load_config() -> CliConfig:
                 verify_ssl=bool(value.get("verify_ssl", True)),
             )
 
-    if cfg.active_profile not in cfg.profiles:
-        cfg.active_profile = next(iter(cfg.profiles.keys()), "dev")
+    if apply_builtin_profiles(cfg):
+        save_config(cfg)
     return cfg
+
+
+def _url_key(url: str) -> str:
+    return url.strip().rstrip("/")
+
+
+def _profile_has_selection(profile: ProfileConfig) -> bool:
+    return any(
+        (
+            profile.company_uuid,
+            profile.sandbox_uuid,
+            profile.app_uuid,
+            profile.app_file,
+        )
+    )
+
+
+def apply_builtin_profiles(cfg: CliConfig) -> bool:
+    """Ensure the built-in profiles exist and use the current API hosts.
+
+    Custom base URLs are kept. A config from the old default (`dev` pointed at
+    localhost and was selected) moves that localhost session onto `local` and
+    selects `prod` when nothing was configured yet.
+    """
+    changed = False
+    dev = cfg.profiles.get("dev")
+    if dev is not None and _url_key(dev.base_url) in _LEGACY_PROFILE_URLS["dev"]:
+        local = cfg.profiles.get("local")
+        local_had_selection = local is not None and _profile_has_selection(local)
+        dev_had_selection = _profile_has_selection(dev)
+        if local is None or (dev_had_selection and not local_had_selection):
+            cfg.profiles["local"] = replace(dev, base_url=PROFILE_BASE_URLS["local"])
+        dev.base_url = PROFILE_BASE_URLS["dev"]
+        if dev_had_selection and not local_had_selection:
+            dev.company_uuid = None
+            dev.sandbox_uuid = None
+            dev.app_uuid = None
+            dev.app_file = None
+        if cfg.active_profile == "dev":
+            local_now = cfg.profiles["local"]
+            cfg.active_profile = (
+                "local" if _profile_has_selection(local_now) else DEFAULT_PROFILE
+            )
+        changed = True
+
+    for name, url in PROFILE_BASE_URLS.items():
+        profile = cfg.profiles.get(name)
+        if profile is None:
+            cfg.profiles[name] = ProfileConfig(base_url=url)
+            changed = True
+            continue
+        legacy = _LEGACY_PROFILE_URLS.get(name, frozenset())
+        if _url_key(profile.base_url) in legacy:
+            profile.base_url = url
+            changed = True
+
+    if cfg.active_profile not in cfg.profiles:
+        cfg.active_profile = (
+            DEFAULT_PROFILE
+            if DEFAULT_PROFILE in cfg.profiles
+            else next(iter(cfg.profiles), DEFAULT_PROFILE)
+        )
+        changed = True
+    return changed
 
 
 def save_config(cfg: CliConfig) -> None:
