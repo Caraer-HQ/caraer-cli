@@ -162,10 +162,11 @@ exports.manifest = {
 };
 ```
 
-Caraer expands that per installation when the event fires. Pair it with
-`records.<setting:target_object>.all` on `requiredScopes`. An empty setting
-means the webhook does not fire. `record.<trait:user>.created` expands to
-every object with that trait.
+Caraer writes a company webhook with the concrete topic when the app is
+installed or its settings are saved. The template keeps the placeholder. Pair
+it with `records.<setting:target_object>.all` on `requiredScopes`. An empty
+setting means no company copy. `record.<trait:user>.created` expands to every
+object with that trait.
 
 A path after the field name reads one key. A property single-select stores
 `objectName` and `propertyName`. A mapping stores `mappingValue.objectName`.
@@ -198,7 +199,8 @@ grant that property:
 `records.<setting:due_date.objectName>.property.<setting:due_date.propertyName>.all`.
 
 [`examples/layout-v21`](../examples/layout-v21) declares
-`record.<setting:target_object>.created` on `hello-world`.
+`record.<setting:target_object>.created` on `hello-world`, the due-date path
+on `due-date`, and `<setting:field_map.email>` on `field-map`.
 
 ## App bars
 

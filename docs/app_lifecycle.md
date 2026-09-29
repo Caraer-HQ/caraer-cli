@@ -124,8 +124,17 @@ exports.handler = async (req, res) => {
 ```
 
 Install and update are also where you subscribe to a record object the
-installer chose. Webhook topics cannot embed `records.<setting:…>` —
-build `record.${objectName}.created` and POST it. See [Webhooks](webhooks.md).
+installer chose. Declare the placeholder on the function:
+
+```js
+webhooks: [{ topic: "record.<setting:target_object>.created" }],
+```
+
+Caraer writes the concrete topic on that company's webhook when the app is
+installed or settings are saved. A path reads one key, such as
+`<setting:due_date.propertyName>` or the mapping row `<setting:field_map.email>`.
+POST a webhook from lifecycle only when the topic cannot be expressed as a
+setting or trait reference. See [Webhooks](webhooks.md).
 
 ## What is not a lifecycle webhook today
 

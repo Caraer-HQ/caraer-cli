@@ -2,9 +2,13 @@
 
 ## Unreleased
 
-- Webhook topics accept the same setting and trait placeholders as
-  `requiredScopes` (`record.<setting:target_object>.created`). `date_due`
-  still needs a concrete object name.
+- Webhook topics and required scopes read a key on a setting. A property
+  single-select uses `objectName` and `propertyName`
+  (`record.<setting:due_date.objectName>.date_due.<setting:due_date.propertyName>`,
+  and `records.<setting:due_date.objectName>.property.<setting:due_date.propertyName>.all`).
+  A mapping row is addressed by `fieldName` (`<setting:field_map.email>`).
+  Mapping scopes stay on the object. Caraer stores the concrete topic on the
+  company webhook when the app is installed or settings are saved.
 
 - Example app `examples/layout-v21`: full 2026.2.1 layout with settings,
   inbound, schedule, app bar, CMS module, and a setting-targeted record webhook.

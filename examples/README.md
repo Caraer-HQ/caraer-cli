@@ -3,7 +3,8 @@
 ## layout-v21
 
 Full default-layout (`2026.2.1`) app: named files, settings list, inbound,
-schedule, app bar, CMS module, setting-targeted record webhook, installation SQL.
+schedule, app bar, CMS module, setting-targeted record webhooks (object,
+due date, and a mapping row by `fieldName`), installation SQL.
 
 ```bash
 cd examples/layout-v21

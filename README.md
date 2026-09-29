@@ -260,8 +260,13 @@ Do not ask the installer for the Caraer API base URL. The runtime injects
 `body.caraerApiBase`.
 
 `records.<setting:field>.all` on `requiredScopes` follows the installer's
-object pick. The same placeholder works on webhook topics
-(`record.<setting:field>.created`). See [docs/webhooks.md](docs/webhooks.md).
+object pick. A path reads one key: `<setting:due_date.objectName>` and
+`<setting:due_date.propertyName>` for a property single-select, and
+`<setting:field_map.email>` for the mapping row whose `fieldName` is `email`.
+A property scope is
+`records.<setting:due_date.objectName>.property.<setting:due_date.propertyName>.all`.
+The same placeholders work on webhook topics. See
+[docs/webhooks.md](docs/webhooks.md).
 
 ## Profiles
 

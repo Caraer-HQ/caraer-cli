@@ -243,9 +243,9 @@ exports.manifest = {
 };
 ```
 
-Caraer expands the placeholder from that installation's settings when the
-event fires. Pair it with `records.<setting:target_object>.all`. An empty
-setting means the webhook does not fire. A path reads one key:
+Caraer writes the concrete topic on that company's webhook when the app is
+installed or settings are saved. Pair it with `records.<setting:target_object>.all`.
+An empty setting means no company copy. A path reads one key:
 `record.<setting:due_date.objectName>.date_due.<setting:due_date.propertyName>`
 becomes `record.candidate.date_due.interview_date`. A mapping object is
 `<setting:field_map.objectName>`. A row is `<setting:field_map.email>`, the
