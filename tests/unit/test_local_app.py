@@ -60,19 +60,15 @@ def test_scaffold_app_project_layout(tmp_path: Path) -> None:
     assert not (root / "caraer.project.json").exists()
     manifest = root / "src" / "app" / "app.caraer.yaml"
     assert manifest.is_file()
-    assert (root / "src" / "app" / "functions" / "hello-world" / "main.py").is_file()
+    assert (root / "src" / "app" / "functions" / "hello-world.py").is_file()
     assert not (root / "src" / "app" / "functions" / "hello-world" / "function.caraer.json").exists()
-    assert (root / "src" / "app" / "webhooks").is_dir()
+    assert not (root / "src" / "app" / "webhooks").exists()
     hello_module = root / "src" / "app" / "modules" / "hello_world"
-    assert (hello_module / "index.astro").is_file()
+    assert (hello_module / "hello_world.astro").is_file()
     assert (hello_module / "types.d.ts").is_file()
     assert result["sample_module"].resolve() == hello_module.resolve()
-    webhook = root / "src" / "app" / "webhooks" / "record-candidate-created-serverless.json"
-    assert webhook.is_file()
-    webhook_json = json.loads(webhook.read_text(encoding="utf-8"))
-    assert webhook_json["topic"] == "record.candidate.created"
-    assert webhook_json["deliveryMode"] == "SERVERLESS"
-    assert webhook_json["serverlessFunction"]["name"] == "hello-world"
+    hello_src = (root / "src" / "app" / "functions" / "hello-world.py").read_text(encoding="utf-8")
+    assert "record.candidate.created" in hello_src
     assert (root / ".gitignore").is_file()
 
     lifecycle = root / "src" / "app" / "lifecycle"
@@ -84,16 +80,16 @@ def test_scaffold_app_project_layout(tmp_path: Path) -> None:
         ("rotate", "app.rotated"),
         ("update", "app.updated"),
     ):
-        hook = lifecycle / f"{stem}.json"
+        hook = lifecycle / f"{stem}.py"
         assert hook.is_file()
-        hook_json = json.loads(hook.read_text(encoding="utf-8"))
-        assert hook_json["topic"] == topic
-        assert hook_json["serverlessFunction"]["name"] == f"on-{stem}"
-        assert (root / "src" / "app" / "functions" / f"on-{stem}" / "main.py").is_file()
+        hook_src = hook.read_text(encoding="utf-8")
+        assert topic in hook_src
+        assert f'"lifecycle": "{stem}"' in hook_src or f"lifecycle" in hook_src
+        assert not (root / "src" / "app" / "functions" / f"on-{stem}").exists()
 
     workspace = json.loads((root / "caraer.json").read_text(encoding="utf-8"))
     assert "projectUuid" not in workspace
-    assert workspace["platformVersion"] == "2026.2"
+    assert workspace["platformVersion"] == "2026.2.1"
     assert workspace.get("runtime") == "python312"
 
     text = manifest.read_text(encoding="utf-8")
@@ -146,7 +142,7 @@ def test_node_init_writes_tsconfig_and_module_package_json(tmp_path: Path) -> No
     assert package["scripts"]["push"] == "caraer apps push"
     assert package["dependencies"]["@caraer/cms-runtime"].startswith("github:Caraer-HQ/caraer-cms-runtime")
     assert package["dependencies"]["@caraer/cms-tokens"].startswith("github:Caraer-HQ/caraer-cms-tokens")
-    assert (root / "src" / "app" / "modules" / "hello_world" / "index.astro").is_file()
+    assert (root / "src" / "app" / "modules" / "hello_world" / "hello_world.astro").is_file()
     assert (root / "src" / "app" / "modules" / "hello_world" / "types.d.ts").is_file()
     assert ensure_tsconfig(root) is None
 

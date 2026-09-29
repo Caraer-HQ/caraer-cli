@@ -23,6 +23,14 @@ from caraer_cli.project.sync import list_local_function_names
 def _load_local_function(root: Path, config: ProjectConfig, function_name: str) -> tuple[str, Path]:
     from caraer_cli.project.sync import load_or_conventional_manifest
 
+    if config.is_layout_v21():
+        from caraer_cli.project.function_files import function_file_by_name
+
+        item = function_file_by_name(root, config, function_name)
+        if item is None:
+            raise FileNotFoundError(f"Unknown function '{function_name}'")
+        return item.runtime, item.path
+
     folder = functions_dir(root, config.srcDir) / function_name
     manifest = load_or_conventional_manifest(folder, config)
     entry = folder / manifest.resolved_entry()
@@ -617,6 +625,20 @@ def serve_functions(
                 _save_dev_store(root, current)
                 _json_response(handler, 200, {"message": "Success", "data": True})
                 return True
+
+        if resource == "db" and method == "POST" and isinstance(body, dict):
+            from caraer_cli.project.local_installation_db import run_local_installation_sql
+
+            try:
+                data = run_local_installation_sql(root, config, body)
+            except ValueError as exc:
+                _json_response(handler, 400, {"error": str(exc)})
+                return True
+            except RuntimeError as exc:
+                _json_response(handler, 503, {"error": str(exc)})
+                return True
+            _json_response(handler, 200, {"message": "Success", "data": data})
+            return True
 
         if resource == "jobs":
             jobs = current.setdefault("jobs", {})

@@ -75,6 +75,25 @@ def functions_dir(root: Path, src_dir: str = "src") -> Path:
     return app_dir(root, src_dir) / "functions"
 
 
+def settings_yaml_path(root: Path, src_dir: str = "src") -> Path:
+    return app_dir(root, src_dir) / "settings.yaml"
+
+
+def app_bars_yaml_path(root: Path, src_dir: str = "src") -> Path:
+    return app_dir(root, src_dir) / "app-bars.yaml"
+
+
+def build_manifest_path(root: Path, src_dir: str = "src") -> Path:
+    return app_dir(root, src_dir) / ".build" / "manifest.json"
+
+
+FUNCTION_CODE_SUFFIXES = (".js", ".py")
+
+
+def is_function_code_file(path: Path) -> bool:
+    return path.is_file() and path.suffix.lower() in FUNCTION_CODE_SUFFIXES
+
+
 def webhooks_dir(root: Path, src_dir: str = "src") -> Path:
     return app_dir(root, src_dir) / "webhooks"
 
@@ -106,8 +125,8 @@ def lifecycle_dir(root: Path, src_dir: str = "src") -> Path:
 def modules_dir(root: Path, src_dir: str = "src") -> Path:
     """CMS v2 modules shipped by this app.
 
-    Each subdirectory is one module: ``index.astro`` plus
-    its ``export const manifest``. Unlike functions, modules are not executed by the
+    Each subdirectory is one module: ``<name>.astro`` (or legacy ``index.astro``)
+    plus its ``export const manifest``. Unlike functions, modules are not executed by the
     app runtime; they are published to the Caraer npm registry and compiled
     into each installing company's website build.
     """
@@ -119,6 +138,7 @@ def shared_dir(root: Path, src_dir: str = "src") -> Path:
 
     Deployed at ``shared/`` in the runtime archive root, so functions import
     them with the same relative path as locally, e.g.
+    ``require("../shared")`` from a 2026.2.1 file or
     ``require("../../shared/utils")`` from ``functions/<name>/index.js``.
     """
     return app_dir(root, src_dir) / "shared"

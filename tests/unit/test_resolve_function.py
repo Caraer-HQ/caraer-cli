@@ -23,6 +23,8 @@ def test_resolve_single_local_function(tmp_path: Path) -> None:
     for stem in ("install", "uninstall", "rotate", "update"):
         shutil.rmtree(root / "src" / "app" / "functions" / f"on-{stem}", ignore_errors=True)
         (root / "src" / "app" / "lifecycle" / f"{stem}.json").unlink(missing_ok=True)
+        (root / "src" / "app" / "lifecycle" / f"{stem}.js").unlink(missing_ok=True)
+        (root / "src" / "app" / "lifecycle" / f"{stem}.py").unlink(missing_ok=True)
     config = load_workspace(root)
     scaffold_function(root, config, "hello-world", "nodejs22")
     assert resolve_local_function_name(root, config, None, interactive=False) == "hello-world"
@@ -42,4 +44,4 @@ def test_resolve_requires_flag_when_multiple(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="Multiple functions"):
         resolve_local_function_name(root, config, None, interactive=False)
     assert resolve_local_function_name(root, config, "hello-world") == "hello-world"
-    assert resolve_local_function_name(root, config, "on-install") == "on-install"
+    assert resolve_local_function_name(root, config, "install") == "install"

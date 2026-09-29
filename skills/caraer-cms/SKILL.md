@@ -38,7 +38,7 @@ v1 companies stay on WerkenBij. Never point a v2 preview at a live
 
 ```bash
 caraer apps add module hero
-# edit src/app/modules/<name>/index.astro — literal `export const manifest`
+# edit src/app/modules/<name>/<name>.astro (2026.2.1) or index.astro (2026.2)
 caraer apps validate
 caraer apps local          # sidebar + iframe preview
 caraer apps push --deploy  # only when the user asks

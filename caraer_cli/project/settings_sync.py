@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from caraer_cli.project.paths import settings_dir
+from caraer_cli.project.paths import settings_dir, settings_yaml_path
 from caraer_cli.project.schema import ProjectConfig
 
 LOCAL_SETTING_KEYS = (
@@ -121,13 +121,33 @@ def sanitize_setting(item: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+def _load_settings_yaml(root: Path, config: ProjectConfig) -> dict[str, Any]:
+    path = settings_yaml_path(root, config.srcDir)
+    if not path.is_file():
+        return {}
+    import yaml
+
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return data if isinstance(data, dict) else {}
+
+
 def discover_local_settings(
     root: Path, config: ProjectConfig
 ) -> list[tuple[Path, dict[str, Any]]]:
+    if config.is_layout_v21():
+        path = settings_yaml_path(root, config.srcDir)
+        data = _load_settings_yaml(root, config)
+        items = data.get("settingsSchema") or data.get("settings") or []
+        found: list[tuple[Path, dict[str, Any]]] = []
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, dict) and item.get("name"):
+                    found.append((path, sanitize_setting(item)))
+        return found
     base = settings_dir(root, config.srcDir)
     if not base.is_dir():
         return []
-    found: list[tuple[Path, dict[str, Any]]] = []
+    found = []
     for path in sorted(base.glob("*.json")):
         data = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(data, dict) and data.get("name"):
@@ -135,9 +155,34 @@ def discover_local_settings(
     return found
 
 
+def write_settings_yaml(
+    root: Path,
+    config: ProjectConfig,
+    settings: list[dict[str, Any]],
+    sections: list[dict[str, Any]] | None = None,
+) -> Path:
+    import yaml
+
+    path = settings_yaml_path(root, config.srcDir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing = _load_settings_yaml(root, config)
+    payload = {
+        "settingsSchema": [sanitize_setting(item) for item in settings if isinstance(item, dict)],
+        "settingsSections": sections if sections is not None else existing.get("settingsSections") or [],
+    }
+    path.write_text(
+        yaml.safe_dump(payload, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+    return path
+
+
 def write_settings_files(
     root: Path, config: ProjectConfig, items: list[dict[str, Any]]
 ) -> int:
+    if config.is_layout_v21():
+        write_settings_yaml(root, config, items)
+        return len([item for item in items if isinstance(item, dict) and item.get("name")])
     base = settings_dir(root, config.srcDir)
     base.mkdir(parents=True, exist_ok=True)
     for existing in base.glob("*.json"):

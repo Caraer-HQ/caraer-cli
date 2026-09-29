@@ -21,8 +21,9 @@ def test_scaffold_function_creates_nodejs_folder(tmp_path: Path) -> None:
     folder = scaffold_function(root, config, "my-action", "nodejs22")
     # Conventional functions need no function.caraer.json; discovery uses the
     # folder name and entry file.
-    assert not (folder / "function.caraer.json").exists()
-    assert (folder / "index.js").is_file()
+    assert folder.name == "my-action.js"
+    assert folder.is_file()
+    assert "exports.handler" in folder.read_text(encoding="utf-8")
     from caraer_cli.project.sync import discover_local_functions
 
     discovered = {m.name: m for m, _, _, _ in discover_local_functions(root, config)}

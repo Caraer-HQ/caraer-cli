@@ -19,7 +19,13 @@ from caraer_cli.project.paths import (
     webhooks_dir,
     workspace_file,
 )
-from caraer_cli.project.schema import PLATFORM_VERSION, ProjectConfig, save_project_config
+from caraer_cli.project.schema import (
+    PLATFORM_VERSION,
+    PLATFORM_VERSION_V1,
+    PLATFORM_VERSION_V2,
+    ProjectConfig,
+    save_project_config,
+)
 from caraer_cli.project.state import set_project_uuid
 from caraer_cli.project.sync import scaffold_function
 
@@ -144,7 +150,7 @@ def scaffold_lifecycle_hook(
     enabled: bool = True,
     force: bool = False,
 ) -> dict[str, Any]:
-    """Write ``lifecycle/<event>.json`` and optionally scaffold ``functions/on-<event>/``."""
+    """Write a lifecycle hook file and optionally scaffold its function."""
     stem = event.strip().lower()
     if stem not in LIFECYCLE_HOOKS:
         raise ValueError(
@@ -155,9 +161,28 @@ def scaffold_lifecycle_hook(
     mode = (delivery_mode or "SERVERLESS").strip().upper()
     if mode not in {"SERVERLESS", "HTTP"}:
         raise ValueError("delivery_mode must be SERVERLESS or HTTP")
-    fn_name = (function_name or f"on-{stem}").strip()
+    fn_name = (function_name or (stem if config.is_layout_v21() else f"on-{stem}")).strip()
     base = lifecycle_dir(root, config.srcDir)
     base.mkdir(parents=True, exist_ok=True)
+    if config.is_layout_v21():
+        resolved_runtime = (runtime or config.resolved_runtime("nodejs22")).strip().lower()
+        path = scaffold_function(
+            root,
+            config,
+            fn_name,
+            resolved_runtime,
+            description=f"Handle {topic}",
+            force=force,
+            role="lifecycle",
+            manifest={"lifecycle": stem, "topic": topic},
+        )
+        return {
+            "event": stem,
+            "manifestKey": manifest_key,
+            "lifecycleFile": path,
+            "functionName": fn_name if mode == "SERVERLESS" else None,
+            "functionFolder": path,
+        }
     path = base / f"{stem}.json"
     if path.exists() and not force:
         raise FileExistsError(f"Lifecycle file already exists: {path}. Use --force to overwrite.")
@@ -265,11 +290,15 @@ def scaffold_all_lifecycle_hooks(
     runtime: str | None = None,
     force: bool = False,
 ) -> list[dict[str, Any]]:
-    """Ensure all four lifecycle JSON files + on-* functions exist."""
+    """Ensure all four lifecycle hooks exist."""
     created: list[dict[str, Any]] = []
     resolved_runtime = (runtime or config.resolved_runtime("nodejs22")).strip().lower()
     for stem in ("install", "uninstall", "rotate", "update"):
-        path = lifecycle_dir(root, config.srcDir) / f"{stem}.json"
+        if config.is_layout_v21():
+            suffix = ".py" if resolved_runtime.startswith("python") else ".js"
+            path = lifecycle_dir(root, config.srcDir) / f"{stem}{suffix}"
+        else:
+            path = lifecycle_dir(root, config.srcDir) / f"{stem}.json"
         fn_name = f"on-{stem}"
         fn_folder = functions_dir(root, config.srcDir) / fn_name
         if force or not path.exists():
@@ -283,6 +312,8 @@ def scaffold_all_lifecycle_hooks(
                     force=force,
                 )
             )
+            continue
+        if config.is_layout_v21():
             continue
         # Lifecycle JSON exists; still create a missing on-* function.
         if not fn_folder.exists():
@@ -312,6 +343,7 @@ def scaffold_all_lifecycle_hooks(
 
 GITIGNORE_CONTENTS = """\
 .caraer/
+src/app/.build/
 .env
 .env.*
 !.env.example
@@ -358,8 +390,15 @@ def write_app_manifest(
     from caraer_cli.project.paths import APP_MANIFEST_YAML, app_dir
 
     functions_dir(root, src_dir).mkdir(parents=True, exist_ok=True)
-    webhooks_dir(root, src_dir).mkdir(parents=True, exist_ok=True)
     lifecycle_dir(root, src_dir).mkdir(parents=True, exist_ok=True)
+    from caraer_cli.project.schema import load_workspace
+
+    try:
+        workspace = load_workspace(root)
+    except Exception:
+        workspace = None
+    if workspace is None or not workspace.is_layout_v21():
+        webhooks_dir(root, src_dir).mkdir(parents=True, exist_ok=True)
     # settings/ holds optional modular files; writers create it on demand.
     # Always write preferred YAML for scaffolds / local edits.
     manifest = app_dir(root, src_dir) / APP_MANIFEST_YAML
@@ -525,7 +564,7 @@ def scaffold_app_project(
         name=name,
         appUuid=app_uuid,
         srcDir=src_dir,
-        runtime=runtime if platform_version == PLATFORM_VERSION else None,
+        runtime=runtime if platform_version != PLATFORM_VERSION_V1 else None,
         privateApp=private_app,
     )
     save_project_config(config_path, config)
@@ -534,7 +573,7 @@ def scaffold_app_project(
 
     manifest_payload = dict(app_payload)
     # Keep V2 app runtime on the marketplace manifest as well as caraer.json.
-    if platform_version == PLATFORM_VERSION:
+    if platform_version != PLATFORM_VERSION_V1:
         manifest_payload["runtime"] = runtime or manifest_payload.get("runtime") or "nodejs22"
     elif "runtime" in manifest_payload:
         # V1: runtime lives on each function, not the app document.
@@ -546,8 +585,17 @@ def scaffold_app_project(
         manifest_payload["hideApiKeyField"] = True
     if not manifest_payload.get("oauthRedirectUris"):
         manifest_payload["oauthRedirectUris"] = ["http://localhost:3000/oauth/callback"]
+    if platform_version == PLATFORM_VERSION:
+        for key in ("settingsSchema", "settingsSections", "appBars"):
+            manifest_payload.pop(key, None)
 
     app_file = write_app_manifest(project_root, manifest_payload, src_dir=src_dir)
+    if config.is_layout_v21():
+        from caraer_cli.project.app_bars_sync import write_app_bars_files
+        from caraer_cli.project.settings_sync import write_settings_yaml
+
+        write_settings_yaml(project_root, config, [], [])
+        write_app_bars_files(project_root, config, [])
     ensure_gitignore(project_root)
     ensure_tsconfig(project_root)
     if sample_module or not str(runtime or "").startswith("python"):
@@ -563,19 +611,26 @@ def scaffold_app_project(
     function_folder: Path | None = None
     webhook_file: Path | None = None
     if sample_function:
+        webhook_manifest = (
+            {"webhooks": [{"topic": "record.candidate.created"}]}
+            if config.is_layout_v21()
+            else None
+        )
         function_folder = scaffold_function(
             project_root,
             config,
             sample_function,
             runtime=runtime,
             force=force,
+            manifest=webhook_manifest,
         )
-        webhook_file = scaffold_webhook(
-            project_root,
-            config,
-            function_name=sample_function,
-            force=force,
-        )
+        if not config.is_layout_v21():
+            webhook_file = scaffold_webhook(
+                project_root,
+                config,
+                function_name=sample_function,
+                force=force,
+            )
 
     module_folder = _scaffold_sample_module(
         project_root, config, name=sample_module, force=force

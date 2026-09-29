@@ -2,7 +2,16 @@
 
 A webhook runs a function when something happens in Caraer: a record is
 created, a property changes, a form is submitted, or a relation is added.
-One file under `src/app/webhooks/` is one webhook.
+On `2026.2.1` a webhook is not its own file. The function that should run
+declares it:
+
+```js
+exports.manifest = {
+  webhooks: [{ topic: "record.candidate.created" }],
+};
+```
+
+`2026.2` still uses one JSON file under `src/app/webhooks/`.
 
 ## Add one
 

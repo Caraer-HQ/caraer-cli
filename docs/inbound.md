@@ -2,7 +2,16 @@
 
 An inbound route is a public HTTP endpoint that calls a function. Use it when
 an outside system (Gmail, a payment provider, your own service) needs to reach
-the app. One file under `src/app/inbound/` is one route.
+the app. On `2026.2.1` it is a code file:
+
+```js
+// src/app/inbound/gmail-push.js
+exports.manifest = { authMode: "SHARED_SECRET", enqueue: true };
+```
+
+Keep `sharedSecret` out of the committed file; put it in installation secrets
+or name it with `secretName`. `2026.2` still uses one JSON file under
+`src/app/inbound/`.
 
 ## Add one
 

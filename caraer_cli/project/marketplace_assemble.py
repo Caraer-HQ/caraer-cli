@@ -103,7 +103,11 @@ def assemble_local_manifest(
         str(local.get("runtime") or config.runtime or "").strip() or None
     )
 
-    yaml_settings = out.get("settingsSchema") if isinstance(out.get("settingsSchema"), list) else []
+    yaml_settings = (
+        []
+        if config.is_layout_v21()
+        else (out.get("settingsSchema") if isinstance(out.get("settingsSchema"), list) else [])
+    )
     file_settings = [item for _path, item in discover_local_settings(root, config)]
     out["settingsSchema"] = _merge_by_key(
         yaml_settings,
@@ -126,7 +130,9 @@ def assemble_local_manifest(
         out["settingsSchema"] = resolved_settings
 
     yaml_sections = (
-        out.get("settingsSections") if isinstance(out.get("settingsSections"), list) else []
+        []
+        if config.is_layout_v21()
+        else (out.get("settingsSections") if isinstance(out.get("settingsSections"), list) else [])
     )
     file_sections = [item for _path, item in discover_local_settings_sections(root, config)]
     out["settingsSections"] = _merge_by_key(
@@ -135,7 +141,11 @@ def assemble_local_manifest(
         identity=settings_section_identity,
     )
 
-    yaml_bars = out.get("appBars") if isinstance(out.get("appBars"), list) else []
+    yaml_bars = (
+        []
+        if config.is_layout_v21()
+        else (out.get("appBars") if isinstance(out.get("appBars"), list) else [])
+    )
     file_bars = [item for _path, item in discover_local_app_bars(root, config)]
     merged_bars = _merge_by_key(yaml_bars, file_bars, identity=app_bar_identity)
     if resolve_functions:
@@ -187,15 +197,24 @@ def split_marketplace_to_disk(
 
     settings = out.get("settingsSchema") if isinstance(out.get("settingsSchema"), list) else []
     write_settings_files(root, config, [i for i in settings if isinstance(i, dict)])
-    out["settingsSchema"] = []
+    if config.is_layout_v21():
+        out.pop("settingsSchema", None)
+    else:
+        out["settingsSchema"] = []
 
     sections = out.get("settingsSections") if isinstance(out.get("settingsSections"), list) else []
     write_settings_sections_files(root, config, [i for i in sections if isinstance(i, dict)])
-    out["settingsSections"] = []
+    if config.is_layout_v21():
+        out.pop("settingsSections", None)
+    else:
+        out["settingsSections"] = []
 
     bars = out.get("appBars") if isinstance(out.get("appBars"), list) else []
     write_app_bars_files(root, config, [i for i in bars if isinstance(i, dict)])
-    out["appBars"] = []
+    if config.is_layout_v21():
+        out.pop("appBars", None)
+    else:
+        out["appBars"] = []
 
     hooks = {
         key: out.get(key) if isinstance(out.get(key), dict) else None

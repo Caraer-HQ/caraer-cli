@@ -41,6 +41,13 @@ def inbound_filename(item: dict[str, Any]) -> str:
 
 
 def discover_local_inbound(root: Path, config: ProjectConfig) -> list[tuple[Path, dict[str, Any]]]:
+    if config.is_layout_v21():
+        from caraer_cli.project.function_files import (
+            discover_layout_v21_functions,
+            inbound_items_from_files,
+        )
+
+        return inbound_items_from_files(discover_layout_v21_functions(root, config))
     base = inbound_dir(root, config.srcDir)
     if not base.is_dir():
         return []
@@ -104,6 +111,8 @@ def _resolve_sf(payload: dict[str, Any], *, fn_by_name: dict[str, str]) -> dict[
 def pull_inbound(client: CaraerApiClient, root: Path, config: ProjectConfig) -> int:
     if not config.appUuid:
         raise ValueError("App is not linked.")
+    if config.is_layout_v21():
+        return _pull_inbound_v21(client, root, config)
     response = api.list_inbound_routes(client, config.appUuid)
     items = response.get("data") or []
     if not isinstance(items, list):
@@ -169,7 +178,8 @@ def push_inbound(
             payload["sharedSecret"] = generated
             # Keep locally so Pub/Sub can be configured; not written back after create.
             sanitized["sharedSecret"] = generated
-            path.write_text(json.dumps(sanitized, indent=2) + "\n", encoding="utf-8")
+            if not config.is_layout_v21():
+                path.write_text(json.dumps(sanitized, indent=2) + "\n", encoding="utf-8")
         if existing and existing.get("uuid"):
             resp = api.update_inbound_route(client, config.appUuid, str(existing["uuid"]), payload)
             data = resp.get("data") or existing
@@ -182,7 +192,8 @@ def push_inbound(
                 pushed[str(data["name"])] = str(data["uuid"])
             write_back = _sanitize_remote({**sanitized, **data})
             write_back.pop("sharedSecret", None)
-            path.write_text(json.dumps(write_back, indent=2) + "\n", encoding="utf-8")
+            if not config.is_layout_v21():
+                path.write_text(json.dumps(write_back, indent=2) + "\n", encoding="utf-8")
     if delete_missing:
         for uuid in remote_by_uuid:
             if uuid not in kept_uuids:
@@ -190,3 +201,41 @@ def push_inbound(
     state["inbound"] = pushed
     save_state(root, state)
     return {"pushed": len(pushed), "deletedMissing": delete_missing}
+
+
+def _pull_inbound_v21(client: CaraerApiClient, root: Path, config: ProjectConfig) -> int:
+    from caraer_cli.project.code_manifest import parse_code_manifest_file, write_code_manifest
+    from caraer_cli.project.function_files import function_file_by_name
+    from caraer_cli.project.sync import _v21_function_source
+
+    response = api.list_inbound_routes(client, config.appUuid)
+    items = response.get("data") or []
+    if not isinstance(items, list):
+        items = []
+    base = inbound_dir(root, config.srcDir)
+    base.mkdir(parents=True, exist_ok=True)
+    state = load_state(root)
+    inbound_map: dict[str, str] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        sanitized = _sanitize_remote(item)
+        name = str(sanitized.get("name") or "inbound")
+        existing = function_file_by_name(root, config, name)
+        runtime = config.resolved_runtime("nodejs22")
+        suffix = existing.path.suffix if existing else (".py" if runtime.startswith("python") else ".js")
+        path = existing.path if existing else base / f"{name}{suffix}"
+        if not path.is_file():
+            path.write_text(_v21_function_source(runtime), encoding="utf-8")
+        current = parse_code_manifest_file(path)
+        current["authMode"] = sanitized.get("authMode") or "SHARED_SECRET"
+        current["enqueue"] = sanitized.get("enqueue", True)
+        current["enabled"] = sanitized.get("enabled", True)
+        if sanitized.get("secretName"):
+            current["secretName"] = sanitized["secretName"]
+        write_code_manifest(path, current)
+        if sanitized.get("uuid"):
+            inbound_map[name] = str(sanitized["uuid"])
+    state["inbound"] = inbound_map
+    save_state(root, state)
+    return len(inbound_map)

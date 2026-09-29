@@ -169,11 +169,16 @@ def write_pulled_app(
     private_app: bool = False,
 ) -> Path:
     """Write payload to target, scaffolding an app folder around it when needed."""
-    from caraer_cli.project.schema import PLATFORM_VERSION, PLATFORM_VERSION_V1
+    from caraer_cli.project.schema import (
+        PLATFORM_VERSION,
+        PLATFORM_VERSION_V1,
+        PLATFORM_VERSION_V2,
+        SUPPORTED_PLATFORM_VERSIONS,
+    )
 
     target = target.expanduser().resolve()
     resolved_platform = platform_version or PLATFORM_VERSION
-    if resolved_platform not in {PLATFORM_VERSION, PLATFORM_VERSION_V1}:
+    if resolved_platform not in SUPPORTED_PLATFORM_VERSIONS:
         resolved_platform = PLATFORM_VERSION
     resolved_runtime = (runtime or payload.get("runtime") or "nodejs22")
     if isinstance(resolved_runtime, str):
@@ -227,7 +232,7 @@ def pull_remote_app(
     force: bool = True,
 ) -> tuple[dict[str, Any], Path]:
     """Fetch a remote app and write it to a local app.caraer.yaml."""
-    from caraer_cli.project.schema import PLATFORM_VERSION, PLATFORM_VERSION_V1
+    from caraer_cli.project.schema import PLATFORM_VERSION, PLATFORM_VERSION_V1, PLATFORM_VERSION_V2
 
     response = apps_api.fetch_app(client, app_uuid)
     data = response.get("data")
@@ -240,7 +245,7 @@ def pull_remote_app(
 
     remote_platform = data.get("platformVersion")
     if remote_platform == 2 or remote_platform == "2":
-        platform_version = PLATFORM_VERSION
+        platform_version = PLATFORM_VERSION_V2
     elif remote_platform == 1 or remote_platform == "1":
         platform_version = PLATFORM_VERSION_V1
     else:

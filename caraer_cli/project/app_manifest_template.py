@@ -21,13 +21,13 @@ _EXAMPLE_REQUIRED_SCOPES = """\
 
 _EXAMPLE_SETTINGS_SCHEMA = """\
 # Edit settingsSchema above, or: caraer apps add setting
-# Optional modular files also work: src/app/settings/<name>.json (--modular)
-# Group installer cards with settingsSections or src/app/settings-sections/*.json
+# On 2026.2.1 settings live in src/app/settings.yaml instead of this file.
 """
 
 _EXAMPLE_APP_BARS = """\
 # Edit appBars above when needed (record / tool / trait bars).
-# Lifecycle hooks: src/app/lifecycle/ + functions/on-* (caraer apps add lifecycle-hook)
+# On 2026.2.1 app bars live in src/app/app-bars.yaml.
+# Lifecycle hooks: src/app/lifecycle/<event>.js (caraer apps add lifecycle-hook)
 """
 
 
@@ -39,8 +39,11 @@ def render_app_manifest(payload: dict[str, Any], *, include_examples: bool = Tru
     still checks against the schemas bundled with the CLI.
     """
     data = dict(payload)
-    for key in ("requiredScopes", "settingsSchema", "appBars"):
-        data.setdefault(key, [])
+    data.setdefault("requiredScopes", [])
+    if "settingsSchema" in data:
+        data.setdefault("settingsSchema", [])
+    if "appBars" in data:
+        data.setdefault("appBars", [])
 
     body = (
         f"# yaml-language-server: $schema={APP_MANIFEST_SCHEMA_URL}\n"
@@ -66,4 +69,8 @@ def render_app_manifest(payload: dict[str, Any], *, include_examples: bool = Tru
             out.append(_EXAMPLE_SETTINGS_SCHEMA.rstrip("\n"))
         elif stripped == "appBars: []":
             out.append(_EXAMPLE_APP_BARS.rstrip("\n"))
+    if "settingsSchema" not in data:
+        out.append(_EXAMPLE_SETTINGS_SCHEMA.rstrip("\n"))
+    if "appBars" not in data:
+        out.append(_EXAMPLE_APP_BARS.rstrip("\n"))
     return "\n".join(out) + "\n"

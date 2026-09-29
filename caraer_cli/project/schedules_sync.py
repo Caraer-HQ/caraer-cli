@@ -40,6 +40,13 @@ def schedule_filename(item: dict[str, Any]) -> str:
 
 
 def discover_local_schedules(root: Path, config: ProjectConfig) -> list[tuple[Path, dict[str, Any]]]:
+    if config.is_layout_v21():
+        from caraer_cli.project.function_files import (
+            discover_layout_v21_functions,
+            schedule_items_from_files,
+        )
+
+        return schedule_items_from_files(discover_layout_v21_functions(root, config))
     base = schedules_dir(root, config.srcDir)
     if not base.is_dir():
         return []
@@ -93,6 +100,8 @@ def _resolve_sf(payload: dict[str, Any], *, fn_by_name: dict[str, str]) -> dict[
 def pull_schedules(client: CaraerApiClient, root: Path, config: ProjectConfig) -> int:
     if not config.appUuid:
         raise ValueError("App is not linked.")
+    if config.is_layout_v21():
+        return _pull_schedules_v21(client, root, config)
     response = api.list_schedules(client, config.appUuid)
     items = response.get("data") or []
     if not isinstance(items, list):
@@ -160,7 +169,8 @@ def push_schedules(
                 pushed[str(data["name"])] = str(data["uuid"])
             # write uuid back
             sanitized["uuid"] = data["uuid"]
-            path.write_text(json.dumps(sanitized, indent=2) + "\n", encoding="utf-8")
+            if not config.is_layout_v21():
+                path.write_text(json.dumps(sanitized, indent=2) + "\n", encoding="utf-8")
     if delete_missing:
         for uuid, item in remote_by_uuid.items():
             if uuid not in kept_uuids:
@@ -168,3 +178,38 @@ def push_schedules(
     state["schedules"] = pushed
     save_state(root, state)
     return {"pushed": len(pushed), "deletedMissing": delete_missing}
+
+
+def _pull_schedules_v21(client: CaraerApiClient, root: Path, config: ProjectConfig) -> int:
+    from caraer_cli.project.code_manifest import parse_code_manifest_file, write_code_manifest
+    from caraer_cli.project.function_files import function_file_by_name
+    from caraer_cli.project.sync import _v21_function_source
+
+    response = api.list_schedules(client, config.appUuid)
+    items = response.get("data") or []
+    if not isinstance(items, list):
+        items = []
+    base = schedules_dir(root, config.srcDir)
+    base.mkdir(parents=True, exist_ok=True)
+    state = load_state(root)
+    schedules_map: dict[str, str] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        sanitized = _sanitize(item)
+        name = str(sanitized.get("name") or "schedule").replace("_", "-")
+        existing = function_file_by_name(root, config, name)
+        runtime = config.resolved_runtime("nodejs22")
+        suffix = existing.path.suffix if existing else (".py" if runtime.startswith("python") else ".js")
+        path = existing.path if existing else base / f"{name}{suffix}"
+        if not path.is_file():
+            path.write_text(_v21_function_source(runtime), encoding="utf-8")
+        current = parse_code_manifest_file(path) if path.is_file() else {}
+        current["schedule"] = sanitized.get("schedule")
+        current["enabled"] = sanitized.get("enabled", True)
+        write_code_manifest(path, current)
+        if sanitized.get("uuid"):
+            schedules_map[name] = str(sanitized["uuid"])
+    state["schedules"] = schedules_map
+    save_state(root, state)
+    return len(schedules_map)

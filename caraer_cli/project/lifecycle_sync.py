@@ -57,6 +57,13 @@ def discover_local_lifecycle(
     root: Path, config: ProjectConfig
 ) -> dict[str, dict[str, Any]]:
     """Return manifest_key → sanitized webhook dict for present lifecycle files."""
+    if config.is_layout_v21():
+        from caraer_cli.project.function_files import (
+            discover_layout_v21_functions,
+            lifecycle_items_from_files,
+        )
+
+        return lifecycle_items_from_files(discover_layout_v21_functions(root, config))
     base = lifecycle_dir(root, config.srcDir)
     if not base.is_dir():
         return {}
@@ -74,7 +81,9 @@ def discover_local_lifecycle(
 def write_lifecycle_files(
     root: Path, config: ProjectConfig, hooks: dict[str, dict[str, Any] | None]
 ) -> int:
-    """Write lifecycle/*.json from manifest hook objects. Clears missing files."""
+    """Write lifecycle files from manifest hook objects. Clears missing files."""
+    if config.is_layout_v21():
+        return _write_lifecycle_v21(root, config, hooks)
     base = lifecycle_dir(root, config.srcDir)
     base.mkdir(parents=True, exist_ok=True)
     count = 0
@@ -89,6 +98,34 @@ def write_lifecycle_files(
         if not sanitized.get("topic"):
             sanitized["topic"] = expected_topic
         path.write_text(json.dumps(sanitized, indent=2) + "\n", encoding="utf-8")
+        count += 1
+    return count
+
+
+def _write_lifecycle_v21(
+    root: Path, config: ProjectConfig, hooks: dict[str, dict[str, Any] | None]
+) -> int:
+    from caraer_cli.project.code_manifest import parse_code_manifest_file, write_code_manifest
+    from caraer_cli.project.function_files import function_file_by_name
+    from caraer_cli.project.sync import _v21_function_source
+
+    count = 0
+    for stem, (manifest_key, expected_topic) in LIFECYCLE_HOOKS.items():
+        raw = hooks.get(manifest_key)
+        existing = function_file_by_name(root, config, stem)
+        if not isinstance(raw, dict) or not raw:
+            continue
+        runtime = config.resolved_runtime("nodejs22")
+        suffix = existing.path.suffix if existing else (".py" if runtime.startswith("python") else ".js")
+        path = existing.path if existing else lifecycle_dir(root, config.srcDir) / f"{stem}{suffix}"
+        if not path.is_file():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(_v21_function_source(runtime), encoding="utf-8")
+        current = parse_code_manifest_file(path)
+        current["lifecycle"] = stem
+        current["topic"] = raw.get("topic") or expected_topic
+        current["enabled"] = raw.get("enabled", True)
+        write_code_manifest(path, current)
         count += 1
     return count
 
