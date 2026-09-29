@@ -144,6 +144,25 @@ def test_harness_hides_fields_that_are_not_visible(tmp_path: Path) -> None:
     assert (harness / "src" / "pages" / "api" / "upload.ts").is_file()
 
 
+def test_harness_ready_rejects_broken_cms_package_links(tmp_path: Path) -> None:
+    """A leftover caraer-web symlink must not count as an installed preview."""
+    harness = tmp_path / "cms-dev"
+    (harness / "node_modules" / "@astrojs" / "node").mkdir(parents=True)
+    caraer = harness / "node_modules" / "@caraer"
+    caraer.mkdir(parents=True)
+    (caraer / "cms-runtime").symlink_to(tmp_path / "missing-runtime")
+    (caraer / "cms-tokens").symlink_to(tmp_path / "missing-tokens")
+    assert not _harness_ready(harness)
+
+    (tmp_path / "runtime").mkdir()
+    (tmp_path / "tokens").mkdir()
+    (caraer / "cms-runtime").unlink()
+    (caraer / "cms-tokens").unlink()
+    (caraer / "cms-runtime").symlink_to(tmp_path / "runtime")
+    (caraer / "cms-tokens").symlink_to(tmp_path / "tokens")
+    assert _harness_ready(harness)
+
+
 def test_harness_installs_app_module_libraries(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     _write_module(root, "aurora")
