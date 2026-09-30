@@ -363,6 +363,69 @@ def test_validate_filter_traits_on_other_type_is_invalid(tmp_path: Path) -> None
     assert any("filterTraits" in i.path for i in report.issues)
 
 
+def test_validate_filter_property_types_on_property_select_ok(tmp_path: Path) -> None:
+    report = _settings_report(
+        tmp_path,
+        [
+            {
+                "name": "due_date",
+                "type": "PROPERTY_SINGLE_SELECT",
+                "filterPropertyTypes": ["date"],
+                "filterPropertyFormats": ["date"],
+            }
+        ],
+    )
+    assert report.ok
+
+
+def test_validate_allowed_property_types_alias_ok(tmp_path: Path) -> None:
+    report = _settings_report(
+        tmp_path,
+        [
+            {
+                "name": "title_property",
+                "type": "PROPERTY_SINGLE_SELECT",
+                "allowedPropertyTypes": ["string"],
+            }
+        ],
+    )
+    assert report.ok
+
+
+def test_validate_filter_property_types_on_other_type_is_invalid(
+    tmp_path: Path,
+) -> None:
+    report = _settings_report(
+        tmp_path,
+        [
+            {
+                "name": "due_date",
+                "type": "OBJECT_SINGLE_SELECT",
+                "filterPropertyTypes": ["date"],
+            }
+        ],
+    )
+    assert not report.ok
+    assert any("filterPropertyTypes" in i.path for i in report.issues)
+
+
+def test_validate_filter_property_formats_rejects_blank_entry(
+    tmp_path: Path,
+) -> None:
+    report = _settings_report(
+        tmp_path,
+        [
+            {
+                "name": "due_date",
+                "type": "PROPERTY_MULTI_SELECT",
+                "filterPropertyFormats": [" "],
+            }
+        ],
+    )
+    assert not report.ok
+    assert any("filterPropertyFormats[0]" in i.path for i in report.issues)
+
+
 def test_validate_filter_traits_rejects_blank_entry(tmp_path: Path) -> None:
     report = _settings_report(
         tmp_path,

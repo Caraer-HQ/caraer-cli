@@ -38,10 +38,15 @@ def _manifest_source(name: str, label: str, kind: str, framework: str | None) ->
       defaultValue: '{label}',
     }},
     {{
-      name: 'body',
-      label: 'Text',
-      type: 'MULTI_LINE',
-      helpText: 'Markdown is supported.',
+      group: 'Content',
+      fields: [
+        {{
+          name: 'body',
+          label: 'Text',
+          type: 'MULTI_LINE',
+          helpText: 'Markdown is supported.',
+        }},
+      ],
     }},
   ],
 }} satisfies ModuleManifest;"""
@@ -76,8 +81,10 @@ const {{ fields }} = Astro.props as ModuleProps<{interface}>;
 
 <section class="{name}">
   <div class="caraer-container">
-    <h2>{{fields.heading}}</h2>
-    {{fields.body && <CaraerRichText value={{fields.body}} />}}{island_markup}
+    <h2 data-caraer-field="heading">{{fields.heading}}</h2>
+    <div data-caraer-field="body">
+      {{fields.body && <CaraerRichText value={{fields.body}} />}}
+    </div>{island_markup}
   </div>
 </section>
 

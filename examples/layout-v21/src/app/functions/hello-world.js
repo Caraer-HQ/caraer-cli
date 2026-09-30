@@ -38,5 +38,6 @@ exports.manifest = {
   webhooks: [{
     topic: "record.<setting:target_object>.created",
     label: "Record created",
+    webhookFormat: "USER_FRIENDLY",
   }],
 };

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import shutil
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from caraer_cli.project.paths import (
     app_bars_dir,
@@ -28,6 +29,81 @@ from caraer_cli.project.schema import (
 )
 from caraer_cli.project.sync import _v21_function_source
 
+UPGRADE_PROMPT = (
+    "This app uses the 2026.2 folder layout. Rewrite it to 2026.2.1 "
+    "(flat files) before deploy?"
+)
+
+
+def decide_layout_upgrade(
+    config: ProjectConfig,
+    *,
+    upgrade: bool | None,
+    yes: bool,
+    dry_run: bool,
+    interactive: bool,
+) -> Literal["noop", "announce", "prompt", "apply"]:
+    """How push should treat a workspace that may still be 2026.2."""
+    if config.platformVersion != PLATFORM_VERSION_V2:
+        return "noop"
+    if upgrade is False:
+        return "noop"
+    if dry_run:
+        return "announce"
+    if upgrade is True or yes:
+        return "apply"
+    if interactive:
+        return "prompt"
+    return "announce"
+
+
+def offer_layout_upgrade_on_push(
+    root: Path,
+    *,
+    upgrade: bool | None = None,
+    yes: bool = False,
+    dry_run: bool = False,
+    interactive: bool = False,
+    confirm: Callable[[str], bool] | None = None,
+) -> dict[str, Any]:
+    """Rewrite a 2026.2 tree before push when the operator accepts.
+
+    Interactive push prompts with default yes. ``--yes`` and ``--upgrade``
+    apply the rewrite. ``--no-upgrade`` and a declined prompt leave 2026.2.
+    Dry-run and non-interactive push without ``--yes`` only announce.
+    """
+    config = load_workspace(root)
+    action = decide_layout_upgrade(
+        config,
+        upgrade=upgrade,
+        yes=yes,
+        dry_run=dry_run,
+        interactive=interactive,
+    )
+    if action == "noop":
+        return {"action": "noop"}
+    if action == "announce":
+        return {
+            "action": "announce",
+            "message": (
+                "This workspace is 2026.2. A real push will offer to rewrite "
+                "it to 2026.2.1 (default yes). Run 'caraer apps upgrade' or "
+                "pass --upgrade / --no-upgrade."
+            ),
+        }
+    accepted = True
+    if action == "prompt":
+        if confirm is None:
+            raise ValueError("confirm is required when prompting for a layout upgrade.")
+        accepted = confirm(UPGRADE_PROMPT)
+    if not accepted:
+        return {
+            "action": "declined",
+            "message": "Keeping 2026.2. Run 'caraer apps upgrade' later, or push with --upgrade.",
+        }
+    result = upgrade_layout_to_v21(root)
+    return {"action": "applied", "result": result}
+
 
 def upgrade_layout_to_v21(root: Path) -> dict[str, Any]:
     config = load_workspace(root)
@@ -47,7 +123,7 @@ def upgrade_layout_to_v21(root: Path) -> dict[str, Any]:
     _upgrade_app_bars(root, config, moved)
     _upgrade_modules(root, config, moved)
     _strip_yaml_collections(root, config)
-    _remove_legacy_dirs(root, config)
+    _upgrade_http_webhooks(root, config, moved)
 
     config.platformVersion = PLATFORM_VERSION
     save_project_config(workspace_file(root), config)
@@ -275,10 +351,31 @@ def _strip_yaml_collections(root: Path, config: ProjectConfig) -> None:
         path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
 
 
-def _remove_legacy_dirs(root: Path, config: ProjectConfig) -> None:
-    webhooks = webhooks_dir(root, config.srcDir)
-    if webhooks.is_dir():
-        shutil.rmtree(webhooks)
+def _upgrade_http_webhooks(root: Path, config: ProjectConfig, moved: list[str]) -> None:
+    """Keep HTTP subscriptions as YAML; drop serverless JSON already moved onto functions."""
+    from caraer_cli.project.webhooks_sync import (
+        discover_webhook_files,
+        webhook_yaml_filename,
+        write_webhook_yaml,
+    )
+
+    base = webhooks_dir(root, config.srcDir)
+    if not base.is_dir():
+        return
+    for path, item in discover_webhook_files(root, config):
+        mode = str(item.get("deliveryMode") or "").strip().upper()
+        if mode == "HTTP":
+            dest = path if path.suffix.lower() in {".yaml", ".yml"} else base / webhook_yaml_filename(item)
+            if dest != path:
+                write_webhook_yaml(dest, item)
+                path.unlink()
+                moved.append(f"webhooks/{dest.name}")
+            continue
+        if path.suffix.lower() == ".json":
+            path.unlink()
+    leftover = [entry for entry in base.iterdir() if entry.name != ".gitkeep"]
+    if not leftover:
+        shutil.rmtree(base)
 
 
 def _with_manifest(code: str, manifest: dict[str, Any], runtime: str) -> str:

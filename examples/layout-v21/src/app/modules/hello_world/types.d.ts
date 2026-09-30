@@ -14,4 +14,10 @@ export interface HelloWorldFields {
    * Markdown is supported.
    */
   body: string | null;
+  /**
+   * Tint
+   *
+   * Heading colour. Empty uses the site font colour.
+   */
+  tint: string | null;
 }

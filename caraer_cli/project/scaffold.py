@@ -45,10 +45,23 @@ def scaffold_webhook(
     filename: str | None = None,
     force: bool = False,
 ) -> Path:
-    """Write a webhook JSON under ``src/app/webhooks/``."""
+    """Add a webhook: function manifest or YAML on 2026.2.1, JSON on 2026.2."""
     mode = (delivery_mode or "SERVERLESS").strip().upper()
     if mode not in {"SERVERLESS", "HTTP"}:
         raise ValueError("delivery_mode must be SERVERLESS or HTTP")
+    if config.is_layout_v21():
+        return _scaffold_webhook_v21(
+            root,
+            config,
+            topic=topic,
+            function_name=function_name,
+            delivery_mode=mode,
+            url=url,
+            webhook_format=webhook_format,
+            description=description,
+            filename=filename,
+            force=force,
+        )
     if mode == "SERVERLESS" and (not function_name or not function_name.strip()):
         raise ValueError("function_name is required for SERVERLESS webhooks")
     if mode == "HTTP" and (not url or not url.strip()):
@@ -92,6 +105,210 @@ def scaffold_webhook(
     from caraer_cli.project.json_schemas import WEBHOOK_SCHEMA_URL, dump_json_with_schema
 
     dump_json_with_schema(path, payload, WEBHOOK_SCHEMA_URL)
+    return path
+
+
+def _scaffold_webhook_v21(
+    root: Path,
+    config: ProjectConfig,
+    *,
+    topic: str,
+    function_name: str | None,
+    delivery_mode: str,
+    url: str | None,
+    webhook_format: str,
+    description: str | None,
+    filename: str | None,
+    force: bool,
+) -> Path:
+    if delivery_mode == "HTTP":
+        return _scaffold_http_webhook_yaml(
+            root,
+            config,
+            topic=topic,
+            url=url,
+            webhook_format=webhook_format,
+            description=description,
+            filename=filename,
+            force=force,
+        )
+    if not function_name or not function_name.strip():
+        raise ValueError("SERVERLESS webhooks require --function <name>.")
+    from caraer_cli.project.code_manifest import parse_code_manifest_file, write_code_manifest
+    from caraer_cli.project.function_files import function_file_by_name
+    from caraer_cli.project.webhook_label import label_for_topic
+
+    name = function_name.strip()
+    hook: dict[str, Any] = {
+        "topic": topic.strip(),
+        "webhookFormat": webhook_format.strip() or "USER_FRIENDLY",
+    }
+    label = label_for_topic(topic)
+    if label:
+        hook["label"] = label
+    if description and description.strip():
+        hook["description"] = description.strip()
+
+    existing = function_file_by_name(root, config, name)
+    if existing is None:
+        return scaffold_function(
+            root,
+            config,
+            name,
+            config.resolved_runtime("nodejs22"),
+            description=description,
+            force=force,
+            manifest={"webhooks": [hook]},
+        )
+
+    current = parse_code_manifest_file(existing.path)
+    hooks = [item for item in (current.get("webhooks") or []) if isinstance(item, dict)]
+    already = next(
+        (item for item in hooks if str(item.get("topic") or "") == hook["topic"]),
+        None,
+    )
+    if already is not None and not force:
+        raise FileExistsError(
+            f"Function '{name}' already has topic {hook['topic']}. Use --force to replace it."
+        )
+    hooks = [item for item in hooks if str(item.get("topic") or "") != hook["topic"]]
+    hooks.append(hook)
+    current["webhooks"] = hooks
+    write_code_manifest(existing.path, current)
+    return existing.path
+
+
+def _scaffold_http_webhook_yaml(
+    root: Path,
+    config: ProjectConfig,
+    *,
+    topic: str,
+    url: str | None,
+    webhook_format: str,
+    description: str | None,
+    filename: str | None,
+    force: bool,
+) -> Path:
+    if not url or not url.strip():
+        raise ValueError("url is required for HTTP webhooks")
+    from caraer_cli.project.webhook_label import label_for_topic
+    from caraer_cli.project.webhooks_sync import write_webhook_yaml
+
+    base = webhooks_dir(root, config.srcDir)
+    base.mkdir(parents=True, exist_ok=True)
+    if filename:
+        stem = filename.strip()
+        for suffix in (".yaml", ".yml", ".json"):
+            if stem.endswith(suffix):
+                stem = stem[: -len(suffix)]
+                break
+        path = base / f"{stem}.yaml"
+    else:
+        slug = topic.strip().lower().replace(".", "-").replace("_", "-")
+        path = base / f"{slug}.yaml"
+    if path.exists() and not force:
+        raise FileExistsError(f"Webhook file already exists: {path}. Use --force to overwrite.")
+    payload: dict[str, Any] = {
+        "topic": topic.strip(),
+        "deliveryMode": "HTTP",
+        "url": url.strip(),
+        "webhookFormat": webhook_format.strip() or "USER_FRIENDLY",
+        "enabled": True,
+    }
+    label = label_for_topic(topic)
+    if label:
+        payload["label"] = label
+    if description and description.strip():
+        payload["description"] = description.strip()
+    write_webhook_yaml(path, payload)
+    return path
+
+
+def scaffold_schedule(
+    root: Path,
+    config: ProjectConfig,
+    *,
+    name: str,
+    cron: str,
+    function_name: str | None = None,
+    description: str | None = None,
+    enabled: bool = True,
+    force: bool = False,
+) -> Path:
+    """Write a schedule JS file on 2026.2.1, or JSON on 2026.2."""
+    if config.is_layout_v21():
+        manifest: dict[str, Any] = {"schedule": cron, "enabled": enabled}
+        if description and description.strip():
+            manifest["description"] = description.strip()
+        return scaffold_function(
+            root,
+            config,
+            name,
+            config.resolved_runtime("nodejs22"),
+            description=description,
+            force=force,
+            role="schedules",
+            manifest=manifest,
+        )
+    base = schedules_dir(root, config.srcDir)
+    base.mkdir(parents=True, exist_ok=True)
+    path = base / f"{name}.json"
+    if path.exists() and not force:
+        raise FileExistsError(f"Schedule file already exists: {path}")
+    if not function_name or not function_name.strip():
+        raise ValueError("2026.2 schedules require --function <name>.")
+    payload: dict[str, Any] = {
+        "name": name.replace("-", "_"),
+        "schedule": cron,
+        "enabled": enabled,
+        "serverlessFunction": {"name": function_name.strip()},
+    }
+    if description and description.strip():
+        payload["description"] = description.strip()
+    from caraer_cli.project.json_schemas import SCHEDULE_SCHEMA_URL, dump_json_with_schema
+
+    dump_json_with_schema(path, payload, SCHEDULE_SCHEMA_URL)
+    return path
+
+
+def scaffold_inbound(
+    root: Path,
+    config: ProjectConfig,
+    *,
+    name: str,
+    function_name: str | None = None,
+    auth_mode: str = "SHARED_SECRET",
+    enqueue: bool = True,
+    force: bool = False,
+) -> Path:
+    """Write an inbound JS file on 2026.2.1, or JSON on 2026.2."""
+    mode = auth_mode.strip().upper()
+    if config.is_layout_v21():
+        return scaffold_function(
+            root,
+            config,
+            name,
+            config.resolved_runtime("nodejs22"),
+            force=force,
+            role="inbound",
+            manifest={"authMode": mode, "enqueue": enqueue, "enabled": True},
+        )
+    if not function_name or not function_name.strip():
+        raise ValueError("2026.2 inbound routes require --function <name>.")
+    base = inbound_dir(root, config.srcDir)
+    base.mkdir(parents=True, exist_ok=True)
+    path = base / f"{name}.json"
+    if path.exists() and not force:
+        raise FileExistsError(f"Inbound file already exists: {path}")
+    payload = {
+        "name": name,
+        "authMode": mode,
+        "enqueue": enqueue,
+        "serverlessFunction": {"name": function_name.strip()},
+    }
+    from caraer_cli.project.json_schemas import INBOUND_SCHEMA_URL, dump_json_with_schema
+
+    dump_json_with_schema(path, payload, INBOUND_SCHEMA_URL)
     return path
 
 
@@ -552,20 +769,21 @@ def scaffold_app_project(
     force: bool = False,
 ) -> dict[str, Any]:
     """
-    Create a local app folder:
+    Create a local app folder. On 2026.2.1:
 
         <root>/
           caraer.json
           .gitignore
           src/app/
             app.caraer.yaml
-            lifecycle/{install,uninstall,rotate,update}.json
-            functions/on-{install,uninstall,rotate,update}/
-            functions/<sample>/   (optional)
-            modules/<sample>/     (optional; default hello_world)
+            settings.yaml
+            lifecycle/{install,uninstall,rotate,update}.js
+            functions/<sample>.js   (optional)
+            modules/<sample>/<sample>.astro
             inbound/
             schedules/
-            webhooks/
+
+    2026.2 still uses lifecycle JSON, functions/on-* folders, and webhooks/.
     """
     project_root = resolve_project_root(root, create=True)
     config_path = workspace_file(project_root)

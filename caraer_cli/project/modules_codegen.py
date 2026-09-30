@@ -147,7 +147,7 @@ def render_module_types(module: LocalModule) -> str:
         f"export interface {interface} {{",
     ]
 
-    for item in module.fields:
+    for item in module.field_entries:
         name = str(item.get("name") or "").strip()
         if not name:
             continue

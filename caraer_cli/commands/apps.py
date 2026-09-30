@@ -589,12 +589,19 @@ def init_app(
     )
     if select:
         _select_local_file(app_ctx, app_file)
-    print_success(
-        "Lifecycle hooks (install/uninstall/rotate/update) are under "
-        "src/app/lifecycle/ + functions/on-*. A starter CMS module is under "
-        "src/app/modules/hello_world. Edit files under src/app/, "
-        "then run: caraer apps push"
-    )
+    if platform == "2026.2.1":
+        print_success(
+            "Lifecycle hooks are src/app/lifecycle/{install,uninstall,rotate,update}.js. "
+            "A starter CMS module is under src/app/modules/hello_world. "
+            "Edit files under src/app/, then run: caraer apps push"
+        )
+    else:
+        print_success(
+            "Lifecycle hooks (install/uninstall/rotate/update) are under "
+            "src/app/lifecycle/ + functions/on-*. A starter CMS module is under "
+            "src/app/modules/hello_world. Edit files under src/app/, "
+            "then run: caraer apps push"
+        )
 
 
 @app.command("wizard")
@@ -693,6 +700,50 @@ def _require_app_root(selected_file: str | None) -> Path:
         raise typer.BadParameter(
             "No app folder found. Run 'caraer apps init' or 'cd' into an app directory."
         ) from None
+
+
+def _maybe_upgrade_layout_on_push(
+    root: Path,
+    *,
+    upgrade: bool | None,
+    yes: bool,
+    dry_run: bool,
+) -> None:
+    import sys
+
+    from caraer_cli.project.layout_upgrade import offer_layout_upgrade_on_push
+    from caraer_cli.wizard.prompts import WizardCancelled, ask_confirm
+
+    interactive = sys.stdin.isatty() and sys.stdout.isatty() and not yes
+
+    def _confirm(message: str) -> bool:
+        print_warning(
+            "2026.2 still works, but 2026.2.1 is the current source layout "
+            "(flat functions, JS lifecycle/inbound/schedules, YAML settings)."
+        )
+        return ask_confirm(message, default=True)
+
+    try:
+        outcome = offer_layout_upgrade_on_push(
+            root,
+            upgrade=upgrade,
+            yes=yes,
+            dry_run=dry_run,
+            interactive=interactive,
+            confirm=_confirm if interactive else None,
+        )
+    except WizardCancelled:
+        print_warning("Keeping 2026.2.")
+        return
+    action = str(outcome.get("action") or "")
+    if action == "announce":
+        print_warning(str(outcome.get("message") or ""))
+        return
+    if action == "declined":
+        print_warning(str(outcome.get("message") or ""))
+        return
+    if action == "applied":
+        print_success("Upgraded workspace to 2026.2.1.")
 
 
 def _normalize_release_args(
@@ -846,6 +897,14 @@ def push_public(
         "-y",
         help="Non-interactive: skip confirmation; require --version and --notes when deploying.",
     ),
+    upgrade: bool | None = typer.Option(
+        None,
+        "--upgrade/--no-upgrade",
+        help=(
+            "Rewrite a 2026.2 workspace to 2026.2.1 before push. "
+            "Interactive push asks first (default yes). --yes also upgrades."
+        ),
+    ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
@@ -882,6 +941,9 @@ def push_public(
     )
     selected_file = file or app_ctx.pinned_app_file
     root = _require_app_root(selected_file)
+    _maybe_upgrade_layout_on_push(
+        root, upgrade=upgrade, yes=yes, dry_run=dry_run
+    )
     if target == "sandbox":
         print_warning(
             "Sandbox target isolates Neo4j data via X-Caraer-Sandbox-Uuid, "
@@ -947,7 +1009,11 @@ def app_status(ctx: typer.Context) -> None:
 
 @app.command("upgrade")
 def upgrade_app(ctx: typer.Context) -> None:
-    """Rewrite a 2026.2 workspace into the 2026.2.1 file layout."""
+    """Rewrite a 2026.2 workspace into the 2026.2.1 file layout.
+
+    `caraer apps push` also offers this rewrite (default yes). Use this
+    command to upgrade without deploying.
+    """
     from caraer_cli.app_sync import resolve_app_root
     from caraer_cli.project.layout_upgrade import upgrade_layout_to_v21
 

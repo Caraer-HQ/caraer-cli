@@ -25,11 +25,44 @@ New private apps are always created as V2 (`runtime` defaults to `nodejs22`).
 - Default for `caraer apps init`
 - Flat functions: `src/app/functions/<name>.js` (or `.py`)
 - Lifecycle, schedules, and inbound are code files with `exports.manifest`
-- Webhooks live on the function manifest; there is no `webhooks/` folder
+- Serverless webhooks live on the function manifest
+- HTTP webhooks are one YAML file each under `src/app/webhooks/`
+- Give each webhook a `label`; the CLI fills one from the topic when omitted
+- After install the company Webhooks tab shows the company copy (concrete topic
+  + resolved title), not a setting-token template
+- `date_due` requires `triggerOffsetSeconds` (including `0`)
 - Settings are a single-level field list in `settings.yaml`
 - App bars are `appBars` on a function in `src/app/appbars/`; the file is the handler
-- Modules are `modules/<name>/<name>.astro`
-- Upgrade an existing 2026.2 tree with `caraer apps upgrade`
+- Modules are `modules/<name>/<name>.astro`; CMS v2 companies see them on the app Modules tab
+
+## Upgrade 2026.2 → 2026.2.1
+
+Both versions deploy as `App.platformVersion` 2. The upgrade only rewrites
+**local files** (folders and JSON become flat JS/YAML). The remote app stays
+on the same container runtime.
+
+```bash
+caraer apps upgrade             # rewrite now, no deploy
+caraer apps push                # warns, then asks (default yes)
+caraer apps push --upgrade      # rewrite, then push
+caraer apps push --no-upgrade   # keep the 2026.2 folder layout
+```
+
+`caraer apps validate` warns while the workspace is still `2026.2`.
+`--yes` on push also upgrades unless you pass `--no-upgrade`.
+
+What the rewrite does:
+
+- `functions/<name>/index.js` → `functions/<name>.js` (serverless webhooks move onto that file)
+- HTTP `webhooks/*.json` → `webhooks/<topic>.yaml`
+- `lifecycle/*.json` + `functions/on-<hook>/` → `lifecycle/<hook>.js`
+- `schedules/*.json` / `inbound/*.json` → matching `.js` files
+- settings → `settings.yaml`
+- `app-bars/*.json` → `appbars/<function>.js`
+- `modules/<name>/index.astro` → `modules/<name>/<name>.astro`
+
+Review the diff, then push. See [`examples/layout-v21`](../examples/layout-v21)
+for the target layout.
 
 ## 2026.2
 

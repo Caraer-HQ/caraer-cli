@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Caraer-HQ/caraer-app-schemas/main/schemas/webhook.caraer.schema.json
+topic: record.candidate.updated
+deliveryMode: HTTP
+url: https://example.com/hooks/caraer
+webhookFormat: USER_FRIENDLY
+enabled: true
+label: Candidate updated

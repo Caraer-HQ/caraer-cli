@@ -28,10 +28,11 @@ src/app/functions/my-action.py   # Python
 src/app/shared/                  # require("../shared")
 ```
 
-The filename is the function name. Put webhooks and app bars on
-`exports.manifest` (or Python `manifest = {...}`). The function that declares
-an app bar is the one Caraer runs for `app.bar.triggered`. Helpers used by
-more than one function live in `src/app/shared/`.
+The filename is the function name. Put record webhooks on
+`exports.manifest.webhooks` (or Python `manifest = {...}`). App bars live in
+`src/app/appbars/<name>.js` with `exports.manifest.appBars`; that file is the
+one Caraer runs for `app.bar.triggered`. Helpers used by more than one
+function live in `src/app/shared/` and import as `require("../shared")`.
 
 `2026.2` still uses a folder with `index.js` / `main.py` and
 `require("../../shared")`.

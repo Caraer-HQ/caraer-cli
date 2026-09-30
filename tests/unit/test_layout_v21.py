@@ -7,10 +7,19 @@ import yaml
 from caraer_cli.commands.apps import build_public_app_placeholder
 from caraer_cli.project.code_manifest import parse_code_manifest, upsert_code_manifest
 from caraer_cli.project.function_files import discover_layout_v21_functions, webhook_items_from_files
-from caraer_cli.project.layout_upgrade import upgrade_layout_to_v21
+from caraer_cli.project.layout_upgrade import (
+    decide_layout_upgrade,
+    offer_layout_upgrade_on_push,
+    upgrade_layout_to_v21,
+)
 from caraer_cli.project.marketplace_assemble import assemble_local_manifest
 from caraer_cli.project.scaffold import scaffold_app_project
-from caraer_cli.project.schema import PLATFORM_VERSION, PLATFORM_VERSION_V2, load_workspace
+from caraer_cli.project.schema import (
+    PLATFORM_VERSION,
+    PLATFORM_VERSION_V2,
+    ProjectConfig,
+    load_workspace,
+)
 from caraer_cli.project.validate_app import validate_local_app
 from caraer_cli.project.settings_sections_sync import discover_local_settings_sections
 from caraer_cli.project.settings_sync import (
@@ -164,6 +173,41 @@ def test_upgrade_rewrites_2026_2_tree(tmp_path: Path) -> None:
     assert "settingsSchema" not in settings_yaml
     assert not (root / "src" / "app" / "webhooks").exists()
     hello = (root / "src" / "app" / "functions" / "hello-world.js").read_text(encoding="utf-8")
+    assert "record.candidate.created" in hello
+
+
+def test_upgrade_rewrites_http_webhook_json_to_yaml(tmp_path: Path) -> None:
+    root = tmp_path / "legacy"
+    scaffold_app_project(
+        root,
+        app_payload=build_public_app_placeholder(label="Legacy", name="legacy"),
+        sample_function="hello-world",
+        runtime="nodejs22",
+        platform_version=PLATFORM_VERSION_V2,
+    )
+    webhooks = root / "src" / "app" / "webhooks"
+    webhooks.mkdir(parents=True, exist_ok=True)
+    (webhooks / "record-deleted-http.json").write_text(
+        """{
+  "topic": "record.candidate.deleted",
+  "deliveryMode": "HTTP",
+  "url": "https://example.com/hooks/caraer",
+  "webhookFormat": "USER_FRIENDLY",
+  "enabled": true
+}
+""",
+        encoding="utf-8",
+    )
+    upgrade_layout_to_v21(root)
+    yaml_path = webhooks / "record-candidate-deleted.yaml"
+    assert yaml_path.is_file()
+    assert not (webhooks / "record-deleted-http.json").exists()
+    payload = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    assert payload["deliveryMode"] == "HTTP"
+    assert payload["url"] == "https://example.com/hooks/caraer"
+    hello = (root / "src" / "app" / "functions" / "hello-world.js").read_text(
+        encoding="utf-8"
+    )
     assert "record.candidate.created" in hello
 
 
@@ -434,3 +478,78 @@ def test_example_documents_function_body_shapes() -> None:
     assert "Installed" in install
     assert "scheduleName" in heartbeat or "body.payload" in heartbeat
     assert "body.payload" in echo or "ctx.body" in echo
+
+
+def test_example_module_marks_clickable_fields() -> None:
+    astro = (
+        EXAMPLE / "src" / "app" / "modules" / "hello_world" / "hello_world.astro"
+    ).read_text(encoding="utf-8")
+    assert 'data-caraer-field="heading"' in astro
+    assert 'data-caraer-field="body"' in astro
+    assert "group: 'Content'" in astro or 'group: "Content"' in astro
+    assert "group: 'Style'" in astro or 'group: "Style"' in astro
+    assert "name: 'body'" in astro
+    assert "name: 'tint'" in astro
+    assert "group: 'Content'," in astro or 'group: "Content",' in astro
+    assert "fields: [" in astro
+
+
+def test_example_ships_an_http_webhook_yaml() -> None:
+    path = EXAMPLE / "src" / "app" / "webhooks" / "candidate-updated.yaml"
+    assert path.is_file()
+    from caraer_cli.project.webhooks_sync import discover_local_webhooks
+
+    found = discover_local_webhooks(EXAMPLE, load_workspace(EXAMPLE))
+    http = [item for _path, item in found if item.get("deliveryMode") == "HTTP"]
+    assert len(http) == 1
+    assert http[0]["topic"] == "record.candidate.updated"
+    assert http[0]["url"] == "https://example.com/hooks/caraer"
+    assert http[0]["label"] == "Candidate updated"
+
+
+def test_decide_layout_upgrade() -> None:
+    v21 = ProjectConfig(name="demo", platformVersion=PLATFORM_VERSION)
+    v2 = ProjectConfig(name="demo", platformVersion=PLATFORM_VERSION_V2)
+    assert decide_layout_upgrade(v21, upgrade=None, yes=False, dry_run=False, interactive=True) == "noop"
+    assert decide_layout_upgrade(v2, upgrade=False, yes=True, dry_run=False, interactive=True) == "noop"
+    assert decide_layout_upgrade(v2, upgrade=None, yes=False, dry_run=True, interactive=True) == "announce"
+    assert decide_layout_upgrade(v2, upgrade=True, yes=False, dry_run=False, interactive=False) == "apply"
+    assert decide_layout_upgrade(v2, upgrade=None, yes=True, dry_run=False, interactive=False) == "apply"
+    assert decide_layout_upgrade(v2, upgrade=None, yes=False, dry_run=False, interactive=True) == "prompt"
+    assert decide_layout_upgrade(v2, upgrade=None, yes=False, dry_run=False, interactive=False) == "announce"
+
+
+def test_offer_layout_upgrade_on_push_respects_prompt(tmp_path: Path) -> None:
+    root = tmp_path / "legacy"
+    scaffold_app_project(
+        root,
+        app_payload=build_public_app_placeholder(label="Legacy", name="legacy"),
+        sample_function="hello-world",
+        runtime="nodejs22",
+        platform_version=PLATFORM_VERSION_V2,
+    )
+    declined = offer_layout_upgrade_on_push(
+        root, interactive=True, confirm=lambda _message: False
+    )
+    assert declined["action"] == "declined"
+    assert load_workspace(root).platformVersion == PLATFORM_VERSION_V2
+
+    applied = offer_layout_upgrade_on_push(
+        root, interactive=True, confirm=lambda _message: True
+    )
+    assert applied["action"] == "applied"
+    assert load_workspace(root).platformVersion == PLATFORM_VERSION
+    assert (root / "src" / "app" / "functions" / "hello-world.js").is_file()
+
+
+def test_validate_warns_on_2026_2_layout(tmp_path: Path) -> None:
+    root = tmp_path / "legacy"
+    scaffold_app_project(
+        root,
+        app_payload=build_public_app_placeholder(label="Legacy", name="legacy"),
+        sample_function="hello-world",
+        runtime="nodejs22",
+        platform_version=PLATFORM_VERSION_V2,
+    )
+    report = validate_local_app(root)
+    assert any("2026.2.1" in issue.message for issue in report.issues if issue.severity == "warning")

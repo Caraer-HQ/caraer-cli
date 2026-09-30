@@ -2,9 +2,9 @@
 name: caraer-cms
 description: >-
   Builds and edits Caraer CMS v2 modules and page field values. Use when the
-  company is on cmsVersion 2, or when creating Astro modules, module.caraer.json
-  fields, local CMS preview, or caraer-core page modules. Do not use for CMS v1
-  PageContent trees.
+  company is on cmsVersion 2, or when creating Astro modules
+  (src/app/modules/<name>/<name>.astro), local CMS preview, or caraer-core
+  page modules. Do not use for CMS v1 PageContent trees.
 ---
 
 # Caraer CMS v2
@@ -60,7 +60,9 @@ export const manifest = {
   fields: [
     { name: 'heading', label: 'Heading', type: 'SINGLE_LINE', required: true },
     { name: 'image', label: 'Image', type: 'IMAGE' },
-    { name: 'tint', label: 'Tint', type: 'COLOR', advanced: true },
+    { group: 'Style', fields: [
+      { name: 'tint', label: 'Tint', type: 'COLOR' },
+    ]},
   ],
 } satisfies ModuleManifest;
 
@@ -74,6 +76,9 @@ const { fields } = Astro.props as ModuleProps<HeroFields>;
 
 `types.d.ts` is generated. Do not edit it by hand.
 
+On a CMS v2 company the Caraer app page has a read-only **Modules** tab that
+lists every module this app publishes (private and public, including retired).
+
 ## Field rules
 
 Allowed: `SINGLE_LINE`, `MULTI_LINE`, `SINGLE_SELECT`, `MULTI_SELECT`,
@@ -84,7 +89,8 @@ Rejected: `SECRET`, `ACTION`, serverless `optionsSource`, nested `REPEATABLE`.
 
 | Flag / type | Meaning |
 | --- | --- |
-| `advanced: true` | Collapsed under **Advanced settings** |
+| `{ group: "Style", fields: [...] }` | Expandable sidebar group. Do not set `group` on a field |
+| `advanced: true` | Collapsed under **Advanced settings** when the field is not inside a group |
 | `FORM_SINGLE_SELECT` | Picks one Form record |
 | `REPEATABLE` | List of objects. Set `itemFields`, optional `min` / `max` / `itemLabel` |
 | `IMAGE` | Image-only upload + thumbnail. Keep `FILE` for generic files |

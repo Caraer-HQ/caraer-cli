@@ -303,6 +303,26 @@
           "items": { "type": "string", "minLength": 1 },
           "description": "OBJECT_SINGLE_SELECT / OBJECT_MULTI_SELECT only: limit the picker to objects that have every listed trait (for example [\"event\"])."
         },
+        "filterPropertyTypes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "PROPERTY_SINGLE_SELECT / PROPERTY_MULTI_SELECT only: limit the picker to properties whose type is in this list (for example [\"date\"]). CMS modules may use allowedPropertyTypes."
+        },
+        "filterPropertyFormats": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "PROPERTY_SINGLE_SELECT / PROPERTY_MULTI_SELECT only: limit the picker to properties whose format name or format type is in this list (for example [\"date\"]). CMS modules may use allowedPropertyFormats."
+        },
+        "allowedPropertyTypes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Alias of filterPropertyTypes for CMS modules."
+        },
+        "allowedPropertyFormats": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Alias of filterPropertyFormats for CMS modules."
+        },
         "options": {
           "type": "array",
           "description": "Static choices for SINGLE_SELECT / MULTI_SELECT / RECORD_* when optionsSource is omitted.",

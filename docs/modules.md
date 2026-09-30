@@ -5,7 +5,10 @@ does not run in the app container. `caraer apps push` publishes it to the
 Caraer npm registry, and each installing company's site build compiles it in.
 
 Modules are for companies on CMS v2. A company still on CMS v1 keeps the older
-page editor.
+page editor. On a CMS v2 company the app page in Caraer also has a **Modules**
+tab (private and public apps). It lists every module the app publishes,
+including retired ones: label, kind, category, and `ref · version`. The
+company library picker still hides retired modules.
 
 ## Add one
 
@@ -38,6 +41,9 @@ export const manifest = {
   fields: [
     { name: "heading", label: "Heading", type: "SINGLE_LINE", required: true },
     { name: "image", label: "Image", type: "IMAGE" },
+    { group: "Style", fields: [
+      { name: "tint", label: "Tint", type: "COLOR" },
+    ]},
   ],
 } satisfies ModuleManifest;
 
@@ -62,10 +68,18 @@ without calling your app. Use static `options`.
 
 `PROPERTY_SINGLE_SELECT` gives the module the **value** of the chosen property
 on the page's record. Use `rawFields` when a listing needs the property
-**name**.
+**name**. Limit the picker with `filterPropertyTypes` / `filterPropertyFormats`
+(or the CMS aliases `allowedPropertyTypes` / `allowedPropertyFormats`).
+`OBJECT_*` fields may set `filterTraits` so only objects with those traits
+appear.
 
 Style with `--caraer-*` design tokens. Hard-coded colours and spacing stay
 wrong on every site except the one you wrote against.
+
+A `{ group: "Style", fields: [...] }` object in `fields` is a sidebar
+expandable in `caraer apps local` and the CMS builder. Do not set `group`
+on a field. Ungrouped fields stay at the top.
+`advanced: true` (outside a group) still collapses under **Advanced settings**.
 
 For anything that needs the platform (rich text, images, links, menus, forms,
 record lists), import the component from `@caraer/cms-runtime`. A module does
@@ -79,3 +93,8 @@ caraer apps local dev
 
 The preview top bar switches between sample data and any company you can
 reach, so you can check the module against real branding before you push.
+
+Mark rendered nodes with `data-caraer-field="<name>"` (and
+`data-caraer-item="<index>"` on a REPEATABLE row). In `caraer apps local`
+and the CMS builder, clicking that node focuses the matching sidebar
+field. The live site ignores the attributes.

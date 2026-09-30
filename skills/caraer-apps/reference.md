@@ -72,9 +72,10 @@ from caraer_client import LifecyclePayload, WebhookPayload
 
 Lifecycle `event` values: `Installed`, `Updated`, `Uninstalled`, `Rotated`.
 
-Set `waitUntilComplete: true` on `lifecycle/install.json` (and `update.json` if
-settings save must show hook-written mappings) so the install request waits for
-the function and returns filled settings. Default is fire-and-forget.
+Set `waitUntilComplete: true` on `src/app/lifecycle/install.js` (and `update.js`
+if settings save must show hook-written mappings) so the install request waits
+for the function and returns filled settings. Default is fire-and-forget.
+`2026.2` still uses `lifecycle/install.json`.
 
 Connect / Disconnect for external OAuth are **not** lifecycle webhooks — read
 secrets from the payload / secrets API after the user connects.
@@ -95,6 +96,12 @@ Base: `{caraerApiBase}` (no trailing slash).
 `RECORD_SINGLE_SELECT`, `RECORD_MULTI_SELECT`, `OBJECT_SINGLE_SELECT`,
 `OBJECT_MULTI_SELECT`, `PROPERTY_SINGLE_SELECT`, `PROPERTY_MULTI_SELECT`,
 `SWITCH`, `MAPPING`, `FILE`, `MULTI_FILE`, `IMAGE`, `COLOR`, `SECRET`.
+
+`OBJECT_*` may set `filterTraits: ["user"]` so the picker only lists objects
+that have every listed trait. `PROPERTY_*` may set `filterPropertyTypes`
+(`["date"]`) and/or `filterPropertyFormats` (`["date"]`, `["datetime"]`).
+CMS modules may use `allowedPropertyTypes` / `allowedPropertyFormats`
+instead.
 
 CMS modules also allow `FORM_SINGLE_SELECT` and `REPEATABLE`. They reject
 `SECRET` and `ACTION`. See the `caraer-cms` skill.
@@ -231,8 +238,9 @@ const settings = body.settingsValues
 
 ## Record webhook topics
 
-On `2026.2.1` declare a static topic on `exports.manifest.webhooks`. On
-`2026.2` use one JSON file under `src/app/webhooks/`.
+On `2026.2.1` declare a serverless topic on `exports.manifest.webhooks`. An
+HTTP webhook is one YAML file under `src/app/webhooks/`. On `2026.2` use
+one JSON file under `src/app/webhooks/` for either mode.
 
 The object (and property) may be a literal name or a setting/trait
 placeholder, the same tokens as `requiredScopes`:
@@ -242,19 +250,23 @@ exports.manifest = {
   webhooks: [{
     topic: "record.<setting:target_object>.created",
     label: "Record created",
+    webhookFormat: "USER_FRIENDLY",
   }],
 };
 ```
 
 Caraer writes the concrete topic on that company's webhook when the app is
-installed or settings are saved. Pair it with `records.<setting:target_object>.all`.
+installed or settings are saved. The company Webhooks tab lists that copy
+(title **Candidate created**, topic `record.candidate.created`), not the
+token template. Pair it with `records.<setting:target_object>.all`.
 An empty setting means no company copy. A path reads one key:
 `record.<setting:due_date.objectName>.date_due.<setting:due_date.propertyName>`
-becomes `record.candidate.date_due.interview_date`. A mapping object is
-`<setting:field_map.objectName>`. A row is `<setting:field_map.email>`, the
-`fieldName` key. Caraer stores the
+becomes `record.candidate.date_due.interview_date` titled **Interview date due**.
+A mapping object is `<setting:field_map.objectName>`. A row is
+`<setting:field_map.email>`, the `fieldName` key. Caraer stores the
 concrete topic on that company's webhook when settings are saved, and
-schedules that copy. The template still needs `triggerOffsetSeconds`.
+schedules that copy. The template still needs `triggerOffsetSeconds`
+(including `0`).
 
 | Topic | Fires on |
 |-------|----------|
@@ -272,16 +284,14 @@ needed when the topic cannot be expressed as a setting or trait reference.
 
 ## Inbound routes
 
-`src/app/inbound/<name>.json`:
+On `2026.2.1` the route is the file:
 
-```json
-{
-  "name": "catch",
-  "authMode": "SHARED_SECRET",
-  "enqueue": true,
-  "serverlessFunction": { "name": "catch" }
-}
+```js
+// src/app/inbound/catch.js
+exports.manifest = { authMode: "SHARED_SECRET", enqueue: true };
 ```
+
+`2026.2` still uses `src/app/inbound/<name>.json` that points at a function.
 
 Public URL shape (after deploy):
 
@@ -299,21 +309,18 @@ Scaffold interactively or with flags:
 ```bash
 caraer apps add schedule                         # wizard: presets + custom cron
 caraer apps add schedule heartbeat \
-  --function heartbeat \
   --cron "0 0 */12 * * *" \
   --description "12h ping"
 ```
 
-Example every 12 hours:
+Example every 12 hours on `2026.2.1`:
 
-```json
-{
-  "name": "heartbeat",
-  "schedule": "0 0 */12 * * *",
-  "enabled": true,
-  "serverlessFunction": { "name": "heartbeat" }
-}
+```js
+// src/app/schedules/heartbeat.js
+exports.manifest = { schedule: "0 0 */12 * * *", enabled: true };
 ```
+
+`2026.2` still uses `src/app/schedules/<name>.json` that points at a function.
 
 ## App bars
 
@@ -356,8 +363,8 @@ Use `options` or `optionsSource`, plus `visibleWhen`, `advanced`, `hidden`,
 `required`, `helpText`, `defaultValue`, and `filterTraits`. `icon` is a
 Font Awesome name (`bolt`). Iframe locations take `iframeUrl` and no dialog.
 
-`examples/layout-v21` `hello-world.js` declares every location and every
-dialog field on `ping_overview`.
+`examples/layout-v21` `src/app/appbars/ping.js` declares every location and
+every dialog field on `ping_overview`.
 
 In the handler the dialog values arrive as **`appBarSettingsValues`** (flat
 `name → value`) and `appBarSettingsSchema`. `settingsSchema` always carries the
@@ -435,9 +442,11 @@ The same tokens work in webhook `topic` strings
 ```bash
 caraer apps current
 caraer apps validate
+caraer apps upgrade             # 2026.2 → 2026.2.1 files, no deploy
 caraer apps push --dry-run
-caraer apps push
+caraer apps push                # offers 2026.2 → 2026.2.1 (default yes)
 caraer apps status
+caraer apps delete              # private app, creator company only
 caraer apps local logs --follow
 caraer apps state get
 caraer apps jobs list

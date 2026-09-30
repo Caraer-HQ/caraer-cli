@@ -14,21 +14,22 @@
 - name: target_object
   type: OBJECT_SINGLE_SELECT
   label: Record object
-  helpText: Install and update subscribe hello-world to record.<this>.created.
+  helpText: hello-world runs on record.<this>.created. After install the Webhooks tab shows that object (for example Candidate created).
   required: true
   section: Records
-  sectionSubtitle: Object chosen at install time. Not a webhook topic placeholder.
+  sectionSubtitle: Object used in the record-created webhook topic
 - name: due_date
   type: PROPERTY_SINGLE_SELECT
   label: Due date
-  helpText: Fills record.<this.objectName>.date_due.<this.propertyName> on due-date.
+  helpText: due-date runs on record.<this.objectName>.date_due.<this.propertyName> at offset 0. The Webhooks tab shows the resolved title (for example Availability date due).
   required: true
   section: Records
+  filterPropertyTypes:
+    - date
 - name: field_map
   type: MAPPING
   label: Field map
-  helpText: Maps the email and phone keys onto properties of the chosen object.
-  required: true
+  helpText: Optional mapping example. Grants records.<this.objectName>.all. No webhook uses these rows.
   section: Records
   mappingValue:
     items:

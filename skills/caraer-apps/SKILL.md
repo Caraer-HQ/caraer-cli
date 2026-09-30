@@ -67,23 +67,28 @@ tsconfig.json               # resolves module npm imports from package.json
 src/app/
   app.caraer.yaml           # identity, scopes, auth, details
   settings.yaml             # installer setting fields (optional section grouping)
-  functions/<name>.js       # name is the filename; webhooks and app bars in exports.manifest
+  functions/<name>.js       # name is the filename; serverless webhooks in exports.manifest
+  appbars/<name>.js         # appBars on this file; handler for app.bar.triggered
   lifecycle/<hook>.js       # install|uninstall|rotate|update
   schedules/<name>.js
   inbound/<name>.js
+  webhooks/<name>.yaml      # HTTP webhooks (no function)
   shared/                   # require("../shared")
   modules/<name>/<name>.astro
 ```
 
-`2026.2` apps keep folders and JSON. Rewrite them with `caraer apps upgrade`.
+`2026.2` apps keep folders and JSON. `caraer apps push` warns and offers to
+rewrite them to `2026.2.1` (default yes). `caraer apps upgrade` does the
+same rewrite without deploying. Pass `--no-upgrade` to keep 2026.2.
 
 Payload types: import from `@caraer/client` (Node) or `caraer-client` (Python),
 e.g. `LifecyclePayload`, `WebhookPayload`, `SchedulePayload`.
 
-On `2026.2.1` the filename is the function name. Webhooks, app bars, schedules,
-inbound, and lifecycle are `exports.manifest` / `manifest = {...}` literals.
-The function that declares an app bar is the handler. `2026.2` still uses
-folders and JSON.
+On `2026.2.1` the filename is the function name. Serverless webhooks, app bars,
+schedules, inbound, and lifecycle are `exports.manifest` / `manifest = {...}`
+literals. Record webhooks that run a function live on that function. HTTP
+webhooks are one YAML file each under `src/app/webhooks/`. App bars live in
+`src/app/appbars/`. `2026.2` still uses folders and JSON.
 
 Add this line at the top of `app.caraer.yaml` so the editor loads the public
 schema (also emitted by `caraer apps init`):
@@ -131,6 +136,9 @@ Installation settings are for **admins installing the app**, not developers.
 
 - Use clear labels + `helpText`. Prefer `SWITCH`, `OBJECT_SINGLE_SELECT`,
   `SINGLE_SELECT` over free-text when possible.
+- Limit `OBJECT_*` pickers with `filterTraits` and `PROPERTY_*` pickers with
+  `filterPropertyTypes` / `filterPropertyFormats` (CMS aliases
+  `allowedPropertyTypes` / `allowedPropertyFormats`).
 - Do **not** add `caraer_api_base` or other platform URLs — runtime injects
   `body.caraerApiBase`.
 - Do **not** ask for object/property names as raw strings when a select type exists.
@@ -149,8 +157,12 @@ Installation settings are for **admins installing the app**, not developers.
   path: `record.<setting:due_date.objectName>.date_due.<setting:due_date.propertyName>`.
   Mapping fields use `<setting:field_map.objectName>` for the object and
   `<setting:field_map.email>` for the row whose `fieldName` is `email`.
-  Scopes stay `records.<setting:field_map.objectName>.all`. The template still needs
-  `triggerOffsetSeconds`.
+  Scopes stay `records.<setting:field_map.objectName>.all`. A `date_due`
+  template still needs `triggerOffsetSeconds` (including `0`). Give each
+  webhook a `label`; the CLI fills one from the topic when you omit it.
+  After install the company Webhooks tab shows the company copy (concrete
+  topic + resolved title such as **Candidate created**), not the token
+  template.
 - Group related fields into installer cards with `section` / `sectionSubtitle`
   on each field in `settings.yaml`. On 2026.2 use `settings-sections/*.json`.
   Do not invent a grid; Caraer lays cards out left-to-right, top-to-bottom,
@@ -177,9 +189,10 @@ Installation settings are for **admins installing the app**, not developers.
 - Node: `exports.handler = async (req, res) => { ... }`.
 - Python: `def handler(request): ...` returning `{statusCode, body}`.
 - Shared helpers live in `src/app/shared/` and are imported with the same
-  relative path locally and deployed:
-  `require("../../shared")` / `require("../../shared/<file>")` from
-  `functions/<name>/index.js` (platform 2026.2 build pushes only).
+  relative path locally and deployed: `require("../shared")` from
+  `functions/<name>.js`, `appbars/`, `lifecycle/`, `schedules/`, or
+  `inbound/` (2026.2.1). `2026.2` folders still use
+  `require("../../shared")`.
 - Read settings via flattened `body.settingsSchema` (`name` → `value`).
 - Use `body.installationToken` (short-lived `inst_…` Bearer) + `body.appUuid`
   for `/v2/apps/{appUuid}/installation/state|secrets|jobs`.
@@ -197,10 +210,11 @@ Installation settings are for **admins installing the app**, not developers.
 | Options loader | `caraer apps add options-function` (or `function --template options`) |
 | Inbound route | `caraer apps add inbound` |
 | Schedule | `caraer apps add schedule` (wizard prompts for cron presets / custom) |
-| Webhook | `caraer apps add webhook` |
+| Webhook | `caraer apps add webhook --topic … --function <name>` (function manifest) or `--mode HTTP --url …` (`webhooks/<name>.yaml`) |
 | Setting | `caraer apps add setting` (`settings.yaml` on 2026.2.1; `--modular` → `settings/` on 2026.2) |
-| CMS module | `caraer apps add module` (Astro + `module.caraer.json` fields) |
-| Lifecycle | `caraer apps add lifecycle-hook` |
+| CMS module | `caraer apps add module` (`<name>.astro` + `export const manifest`; mark preview nodes with `data-caraer-field`; use `{ group: "Style", fields: [...] }` for sidebar expandables) |
+| Lifecycle | `caraer apps add lifecycle-hook` (`src/app/lifecycle/<hook>.js`) |
+| Delete private app | `caraer apps delete` (creator company only; uninstall is separate) |
 
 ### Validate loop
 
@@ -215,6 +229,8 @@ to leave for the installer when documented in README.
 
 ### Deploy safety
 
+- On a CMS v2 company the app page has a read-only **Modules** tab (private
+  and public). It lists every module the app publishes.
 - Never push/deploy/install unless the user asks.
 - Use `caraer apps push --dry-run` first for non-trivial changes.
 - Do not commit secrets (`.env`, OAuth client secrets, inbound shared secrets).
@@ -234,5 +250,6 @@ to leave for the installer when documented in README.
 ## Dig deeper
 
 - Payload shapes, lifecycle events, settings flattening: [reference.md](reference.md)
-- CLI docs in the caraer-cli repo: `docs/app_lifecycle.md`, `docs/platform_versioning.md`
+- CLI docs in the caraer-cli repo: `docs/webhooks.md`, `docs/app_lifecycle.md`, `docs/platform_versioning.md`
+- Reference example: `examples/layout-v21`
 - Schemas: `schemas/*.caraer.schema.json`

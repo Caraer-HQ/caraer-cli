@@ -106,7 +106,7 @@ def add_function(
     ),
     force: bool = typer.Option(False, "--force", help="Overwrite existing scaffold files."),
 ) -> None:
-    """Scaffold a local function folder under src/app/functions/<name>/."""
+    """Scaffold a local function file (2026.2.1) or folder (2026.2)."""
     from caraer_cli.app_sync import resolve_app_root
     from caraer_cli.project.schema import load_workspace
     from caraer_cli.project.sync import scaffold_function
@@ -225,11 +225,11 @@ def add_webhook(
     filename: str | None = typer.Option(
         None,
         "--filename",
-        help="Output file name under webhooks/ (default: <topic>-serverless.json).",
+        help="Output file name under webhooks/ (HTTP YAML on 2026.2.1, JSON on 2026.2).",
     ),
     force: bool = typer.Option(False, "--force", help="Overwrite an existing webhook file."),
 ) -> None:
-    """Scaffold a local webhook JSON under src/app/webhooks/."""
+    """Add a serverless webhook to a function, or an HTTP webhook file."""
     from caraer_cli.app_sync import resolve_app_root
     from caraer_cli.project.scaffold import scaffold_webhook
     from caraer_cli.project.schema import load_workspace
@@ -277,7 +277,7 @@ def add_schedule(
         None,
         "--function",
         "-f",
-        help="Local function name to invoke.",
+        help="Function to invoke on 2026.2. Unused on 2026.2.1 (the schedule file is the handler).",
         autocompletion=complete_local_function,
     ),
     schedule: str | None = typer.Option(
@@ -300,9 +300,9 @@ def add_schedule(
     ),
     force: bool = typer.Option(False, "--force", help="Overwrite existing file."),
 ) -> None:
-    """Scaffold a local schedule JSON under src/app/schedules/."""
+    """Scaffold a schedule file (JS on 2026.2.1, JSON on 2026.2)."""
     from caraer_cli.app_sync import resolve_app_root
-    from caraer_cli.project.paths import schedules_dir
+    from caraer_cli.project.scaffold import scaffold_schedule
     from caraer_cli.project.schema import load_workspace
     from caraer_cli.project.sync import list_local_function_names
     from caraer_cli.wizard.marketplace import prompt_schedule
@@ -313,34 +313,31 @@ def add_schedule(
     config = load_workspace(root)
     try:
         answers = prompt_schedule(
-            name=name,
+            name=name or (function if config.is_layout_v21() else None),
             function_name=function,
             cron=schedule,
             description=description,
             enabled=enabled,
             function_choices=list_local_function_names(root, config),
+            require_function=not config.is_layout_v21(),
         )
     except WizardCancelled:
         raise typer.Exit(1) from None
 
-    function_name = normalize_function_name(str(answers["function_name"]))
     schedule_key = normalize_function_name(str(answers["name"]))
-    base = schedules_dir(root, config.srcDir)
-    base.mkdir(parents=True, exist_ok=True)
-    path = base / f"{schedule_key}.json"
-    if path.exists() and not force:
-        raise ValueError(f"Schedule file already exists: {path}")
-    payload = {
-        "name": schedule_key.replace("-", "_"),
-        "schedule": answers["schedule"],
-        "enabled": bool(answers.get("enabled", True)),
-        "serverlessFunction": {"name": function_name},
-    }
-    if answers.get("description"):
-        payload["description"] = answers["description"]
-    from caraer_cli.project.json_schemas import SCHEDULE_SCHEMA_URL, dump_json_with_schema
-
-    dump_json_with_schema(path, payload, SCHEDULE_SCHEMA_URL)
+    try:
+        path = scaffold_schedule(
+            root,
+            config,
+            name=schedule_key,
+            cron=str(answers["schedule"]),
+            function_name=normalize_function_name(str(answers.get("function_name") or "")),
+            description=answers.get("description"),
+            enabled=bool(answers.get("enabled", True)),
+            force=force,
+        )
+    except FileExistsError as exc:
+        raise ValueError(str(exc)) from None
     print_success(f"Created schedule scaffold at {path}")
 
 
@@ -352,7 +349,7 @@ def add_inbound(
         None,
         "--function",
         "-f",
-        help="Local function name to invoke.",
+        help="Function to invoke on 2026.2. Unused on 2026.2.1 (the inbound file is the handler).",
         autocompletion=complete_local_function,
     ),
     auth: str = typer.Option(
@@ -363,33 +360,37 @@ def add_inbound(
     enqueue: bool = typer.Option(True, "--enqueue/--sync", help="Enqueue as app job (default) or sync invoke."),
     force: bool = typer.Option(False, "--force", help="Overwrite existing file."),
 ) -> None:
-    """Scaffold a local inbound route JSON under src/app/inbound/."""
+    """Scaffold an inbound route (JS on 2026.2.1, JSON on 2026.2)."""
     from caraer_cli.app_sync import resolve_app_root
-    from caraer_cli.project.paths import inbound_dir
+    from caraer_cli.project.scaffold import scaffold_inbound
     from caraer_cli.project.schema import load_workspace
     from caraer_cli.wizard.prompts import require_text
 
     app_ctx: AppContext = ctx.obj
-    name = require_text(name, "Inbound route name", flag="name")
-    function_name = normalize_function_name(
-        require_text(function, "Function name", flag="--function")
-    )
     root = resolve_app_root(app_file=app_ctx.pinned_app_file)
     config = load_workspace(root)
-    base = inbound_dir(root, config.srcDir)
-    base.mkdir(parents=True, exist_ok=True)
-    path = base / f"{normalize_function_name(name)}.json"
-    if path.exists() and not force:
-        raise ValueError(f"Inbound file already exists: {path}")
-    payload = {
-        "name": normalize_function_name(name),
-        "authMode": auth.strip().upper(),
-        "enqueue": enqueue,
-        "serverlessFunction": {"name": function_name},
-    }
-    from caraer_cli.project.json_schemas import INBOUND_SCHEMA_URL, dump_json_with_schema
-
-    dump_json_with_schema(path, payload, INBOUND_SCHEMA_URL)
+    route_name = require_text(
+        name or (function if config.is_layout_v21() else None),
+        "Inbound route name",
+        flag="name",
+    )
+    function_name = None
+    if not config.is_layout_v21():
+        function_name = normalize_function_name(
+            require_text(function, "Function name", flag="--function")
+        )
+    try:
+        path = scaffold_inbound(
+            root,
+            config,
+            name=normalize_function_name(route_name),
+            function_name=function_name,
+            auth_mode=auth,
+            enqueue=enqueue,
+            force=force,
+        )
+    except FileExistsError as exc:
+        raise ValueError(str(exc)) from None
     print_success(f"Created inbound scaffold at {path}")
 
 

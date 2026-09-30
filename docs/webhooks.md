@@ -1,44 +1,77 @@
 # Webhooks
 
-A webhook runs a function when something happens in Caraer: a record is
-created, a property changes, a form is submitted, or a relation is added.
-On `2026.2.1` a webhook is not its own file. The function that should run
-declares it:
+A webhook fires when something happens in Caraer: a record is created, a
+property changes, a form is submitted, or a relation is added. Delivery is
+either a function in this app or an HTTP POST to a URL you own.
+
+On `2026.2.1` a **serverless** webhook lives on the function that should run:
 
 ```js
 exports.manifest = {
   webhooks: [{
     topic: "record.<setting:target_object>.created",
     label: "Record created",
+    webhookFormat: "USER_FRIENDLY",
   }],
 };
 ```
 
-`2026.2` still uses one JSON file under `src/app/webhooks/`.
+`label` is the title on the app's Webhooks tab. The CLI fills it from the
+topic when you omit it (`record.candidate.created` → **Candidate created**).
+`webhookFormat: USER_FRIENDLY` is the normal payload. The CLI also defaults
+it on push. A webhook created without a format shows a **LEGACY** chip in
+the UI. `RAW` is the platform event as stored.
+
+An **HTTP** webhook is one YAML file under `src/app/webhooks/`:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Caraer-HQ/caraer-app-schemas/main/schemas/webhook.caraer.schema.json
+topic: record.candidate.updated
+deliveryMode: HTTP
+url: https://example.com/hooks/caraer
+webhookFormat: USER_FRIENDLY
+enabled: true
+label: Candidate updated
+```
+
+`2026.2` still uses one JSON file under `src/app/webhooks/` for both modes.
+
+## What the company list shows
+
+A topic may contain a setting or trait placeholder
+(`record.<setting:target_object>.created`). Caraer keeps that template on the
+app and writes a **company copy** with the concrete topic when the app is
+installed or settings are saved.
+
+On the app's Webhooks tab you see the company copy:
+
+- Title: the resolved label (**Candidate created**, **Availability date due**)
+- Metadata: the concrete topic (`record.candidate.created`)
+- Chips: delivery mode and format (`USER_FRIENDLY`)
+
+The token template stays in your source. It is not listed once a copy exists.
+An empty setting means no copy, so nothing is listed and nothing is
+scheduled.
 
 ## Add one
 
 ```bash
-caraer apps add webhook --topic record.candidate.created --function my-action
-caraer apps add webhook --topic app.bar.triggered --mode HTTP --url https://example.com/hook
+caraer apps add webhook --topic record.<setting:target_object>.created --function hello-world
 ```
+
+On `2026.2.1` that writes (or updates) `src/app/functions/hello-world.js`
+and puts the topic on `exports.manifest.webhooks`. HTTP delivery writes
+`src/app/webhooks/<topic>.yaml` instead:
+
+```bash
+caraer apps add webhook --mode HTTP --topic record.candidate.updated --url https://example.com/hooks/caraer
+```
+
+On `2026.2` both modes write `src/app/webhooks/*.json`.
 
 `deliveryMode` is `SERVERLESS` (call a function in this app) or `HTTP` (POST
-to a URL you own).
-
-```json
-{
-  "topic": "record.candidate.created",
-  "deliveryMode": "SERVERLESS",
-  "webhookFormat": "USER_FRIENDLY",
-  "enabled": true,
-  "serverlessFunction": { "name": "my-action" }
-}
-```
-
-`USER_FRIENDLY` is the normal payload. `RAW` is the platform event as stored.
-The function receives that object as `req.body`. It is not nested under
-`payload`. Lifecycle hooks use a different envelope; see
+to a URL you own). The function receives the event as `req.body`. It is not
+nested under `payload`. Lifecycle hooks use a different envelope; see
 [functions](functions.md).
 
 ## What the function receives
@@ -164,6 +197,7 @@ exports.manifest = {
   webhooks: [{
     topic: "record.<setting:target_object>.created",
     label: "Record created",
+    webhookFormat: "USER_FRIENDLY",
   }],
 };
 ```
@@ -183,17 +217,19 @@ exports.manifest = {
   webhooks: [{
     topic: "record.<setting:due_date.objectName>.date_due.<setting:due_date.propertyName>",
     label: "Due date",
-    triggerOffsetSeconds: 86400,
+    webhookFormat: "USER_FRIENDLY",
+    triggerOffsetSeconds: 0,
     scheduleDirection: "BEFORE",
   }],
 };
 ```
 
-When the company picks candidate / `interview_date`, Caraer stores
-`record.candidate.date_due.interview_date` on that company's webhook and
-builds the schedule from it. The template is not scheduled. It still needs
-`triggerOffsetSeconds`. A missing key removes the company copy, so nothing is
-scheduled. A fixed property stays literal:
+`date_due` requires `triggerOffsetSeconds` (including `0` for “when the date
+is due”). When the company picks candidate / `availability_date`, Caraer
+stores `record.candidate.date_due.availability_date` on that company's
+webhook, titles it **Availability date due**, and builds the schedule from
+the copy. The template is not scheduled. A missing key removes the company
+copy, so nothing is scheduled. A fixed property stays literal:
 `record.<setting:target_object>.date_due.interview_date`.
 
 `<setting:field_map.objectName>` reads the mapping's object. A row is addressed

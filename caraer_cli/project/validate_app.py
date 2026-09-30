@@ -27,10 +27,11 @@ from caraer_cli.project.modules_sync import (
     MODULE_KINDS,
     PINNED_FRAMEWORK_MAJORS,
     discover_local_modules,
+    is_module_field_group,
     parse_major,
 )
 from caraer_cli.project.schedules_sync import discover_local_schedules
-from caraer_cli.project.schema import ProjectConfig, load_workspace
+from caraer_cli.project.schema import PLATFORM_VERSION_V2, ProjectConfig, load_workspace
 from caraer_cli.project.settings_sections_sync import discover_local_settings_sections
 from caraer_cli.project.settings_sync import discover_local_settings
 from caraer_cli.project.app_bars_sync import discover_local_app_bars
@@ -81,6 +82,12 @@ OBJECT_SELECT_FIELD_TYPES = frozenset(
     {
         "OBJECT_SINGLE_SELECT",
         "OBJECT_MULTI_SELECT",
+    }
+)
+PROPERTY_SELECT_FIELD_TYPES = frozenset(
+    {
+        "PROPERTY_SINGLE_SELECT",
+        "PROPERTY_MULTI_SELECT",
     }
 )
 CONDITION_OPERATORS = frozenset(
@@ -384,6 +391,15 @@ def validate_local_app(
         _issue(issues, "error", rel_manifest, f"Could not parse manifest: {exc}")
         return ValidationReport(ok=False, root=str(root), issues=issues)
 
+    if config.platformVersion == PLATFORM_VERSION_V2:
+        _issue(
+            issues,
+            "warning",
+            "caraer.json",
+            "This app is 2026.2. Run 'caraer apps upgrade' or accept the "
+            "default-yes prompt on the next 'caraer apps push' to rewrite "
+            "it to 2026.2.1.",
+        )
     _validate_manifest(manifest, config, rel_manifest, issues)
     functions_count = _validate_functions(root, config, issues)
     webhooks_count = _validate_webhooks(root, config, issues)
@@ -765,7 +781,7 @@ def _validate_webhooks(
         if not topic:
             _issue(issues, "error", f"{rel}:topic", "topic is required.")
         elif topic in seen_topics:
-            _issue(issues, "error", f"{rel}:topic", f"Topic '{topic}' is declared on more than one function.")
+            _issue(issues, "error", f"{rel}:topic", f"Topic '{topic}' is declared more than once.")
         else:
             seen_topics.add(topic)
 
@@ -1061,6 +1077,7 @@ def _validate_settings(
         seen.add(key)
         _validate_visible_when(item, name, known_names, action_names, rel, issues)
         _validate_filter_traits(item, rel, issues)
+        _validate_property_filters(item, rel, issues)
         value_scope = str(item.get("valueScope") or "").strip().upper()
         if value_scope and value_scope not in ("COMPANY", "USER"):
             _issue(
@@ -1266,6 +1283,72 @@ def _validate_filter_traits(
             )
 
 
+def _validate_property_filters(
+    item: dict[str, Any],
+    rel: str,
+    issues: list[ValidationIssue],
+) -> None:
+    """Validate property type/format filters on one settings or module field."""
+    _validate_property_filter_list(
+        item,
+        rel,
+        issues,
+        canonical="filterPropertyTypes",
+        alias="allowedPropertyTypes",
+        noun="type",
+    )
+    _validate_property_filter_list(
+        item,
+        rel,
+        issues,
+        canonical="filterPropertyFormats",
+        alias="allowedPropertyFormats",
+        noun="format",
+    )
+
+
+def _validate_property_filter_list(
+    item: dict[str, Any],
+    rel: str,
+    issues: list[ValidationIssue],
+    *,
+    canonical: str,
+    alias: str,
+    noun: str,
+) -> None:
+    values = item.get(canonical)
+    used = canonical
+    if values is None:
+        values = item.get(alias)
+        used = alias
+    if values is None:
+        return
+    where = f"{rel}:{used}"
+    if not isinstance(values, list):
+        _issue(issues, "error", where, f"{used} must be a list of property {noun} names.")
+        return
+
+    field_type = str(item.get("type") or "").strip().upper()
+    if field_type and field_type not in PROPERTY_SELECT_FIELD_TYPES:
+        _issue(
+            issues,
+            "error",
+            where,
+            f"{used} only applies to PROPERTY_SINGLE_SELECT and "
+            "PROPERTY_MULTI_SELECT fields.",
+        )
+        return
+
+    for index, value in enumerate(values):
+        if not isinstance(value, str) or not value.strip():
+            _issue(
+                issues,
+                "error",
+                f"{where}[{index}]",
+                f"Each {used} entry must be a non-empty property {noun} name.",
+            )
+
+
 def _validate_visible_when(
     item: dict[str, Any],
     name: str,
@@ -1464,6 +1547,7 @@ def _validate_app_bar_settings(
         seen.add(key)
         _validate_visible_when(item, name, known_names, action_names, where, issues)
         _validate_filter_traits(item, where, issues)
+        _validate_property_filters(item, where, issues)
         field_type = str(item.get("type") or "").strip().upper()
         if not field_type:
             _issue(issues, "error", f"{where}:type", "type is required.")
@@ -1655,66 +1739,61 @@ def _validate_module_fields(
     field_names: set[str] = set()
 
     for item in module.fields:
-        name = str(item.get("name") or "").strip()
-        if not name:
-            _issue(issues, "error", rel_config, "A field is missing 'name'.")
+        if is_module_field_group(item):
+            title = str(item.get("group") or "").strip()
+            if not title:
+                _issue(issues, "error", rel_config, "A field group is missing 'group'.")
+            nested = item.get("fields") or []
+            if not nested:
+                _issue(
+                    issues,
+                    "error",
+                    rel_config,
+                    f"Field group '{title or '?'}' has no fields.",
+                )
+            if item.get("name") or item.get("type"):
+                _issue(
+                    issues,
+                    "error",
+                    rel_config,
+                    f"Field group '{title}' is not a field. Put name and type on the fields inside it.",
+                )
+            for child in nested:
+                if not isinstance(child, dict):
+                    _issue(
+                        issues,
+                        "error",
+                        rel_config,
+                        f"Field group '{title}' has an entry that is not a field object.",
+                    )
+                    continue
+                if is_module_field_group(child):
+                    _issue(
+                        issues,
+                        "error",
+                        rel_config,
+                        f"Field group '{title}' cannot contain another group.",
+                    )
+                    continue
+                if child.get("group") is not None:
+                    _issue(
+                        issues,
+                        "error",
+                        rel_config,
+                        f"Field group '{title}' contains a field with 'group'. Nest fields instead.",
+                    )
+                _validate_one_module_field(child, rel_config, field_names, issues)
             continue
-        if not SETTING_FIELD_NAME_RE.match(name):
+        if item.get("group") is not None:
             _issue(
                 issues,
                 "error",
                 rel_config,
-                f"field '{name}' must be snake_case (a-z, 0-9, underscore).",
+                "Do not set 'group' on a field. Use { group: \"Style\", fields: [...] }.",
             )
-        if name in field_names:
-            _issue(issues, "error", rel_config, f"Duplicate field '{name}'.")
-        field_names.add(name)
+        _validate_one_module_field(item, rel_config, field_names, issues)
 
-        if not str(item.get("label") or "").strip():
-            _issue(issues, "error", rel_config, f"field '{name}' is missing 'label'.")
-
-        field_type = str(item.get("type") or "").strip()
-        if not field_type:
-            _issue(issues, "error", rel_config, f"field '{name}' is missing 'type'.")
-        elif field_type in DISALLOWED_MODULE_FIELD_TYPES:
-            _issue(
-                issues,
-                "error",
-                rel_config,
-                f"field '{name}' uses {field_type}, which is not available on modules. "
-                "A page document is public, so it must not hold a secret, and an "
-                "ACTION button belongs on a settings screen.",
-            )
-        elif field_type not in MODULE_FIELD_TYPES:
-            _issue(
-                issues,
-                "error",
-                rel_config,
-                f"field '{name}' has unknown type '{field_type}'.",
-            )
-        elif field_type in SELECT_FIELD_TYPES and not item.get("options"):
-            _issue(
-                issues,
-                "error",
-                rel_config,
-                f"field '{name}' is {field_type} and needs 'options'. "
-                "Modules cannot use a serverless optionsSource; the builder renders "
-                "field inputs without invoking the app runtime.",
-            )
-
-        if item.get("optionsSource"):
-            _issue(
-                issues,
-                "error",
-                rel_config,
-                f"field '{name}' declares optionsSource, which modules do not support. "
-                "Use static 'options' instead.",
-            )
-
-        if field_type == "REPEATABLE":
-            _validate_repeatable_field(item, name, rel_config, issues)
-
-    for item in module.fields:
+    for item in module.field_entries:
         for condition in item.get("visibleWhen") or []:
             if not isinstance(condition, dict):
                 continue
@@ -1791,6 +1870,75 @@ def _validate_module_fields(
                         rel_config,
                         f"field '{scoped}' uses {operator}, which needs a list 'value'.",
                     )
+
+
+def _validate_one_module_field(
+    item: dict,
+    rel_config: str,
+    field_names: set[str],
+    issues: list[ValidationIssue],
+) -> None:
+    name = str(item.get("name") or "").strip()
+    if not name:
+        _issue(issues, "error", rel_config, "A field is missing 'name'.")
+        return
+    if not SETTING_FIELD_NAME_RE.match(name):
+        _issue(
+            issues,
+            "error",
+            rel_config,
+            f"field '{name}' must be snake_case (a-z, 0-9, underscore).",
+        )
+    if name in field_names:
+        _issue(issues, "error", rel_config, f"Duplicate field '{name}'.")
+    field_names.add(name)
+
+    if not str(item.get("label") or "").strip():
+        _issue(issues, "error", rel_config, f"field '{name}' is missing 'label'.")
+
+    field_type = str(item.get("type") or "").strip()
+    if not field_type:
+        _issue(issues, "error", rel_config, f"field '{name}' is missing 'type'.")
+    elif field_type in DISALLOWED_MODULE_FIELD_TYPES:
+        _issue(
+            issues,
+            "error",
+            rel_config,
+            f"field '{name}' uses {field_type}, which is not available on modules. "
+            "A page document is public, so it must not hold a secret, and an "
+            "ACTION button belongs on a settings screen.",
+        )
+    elif field_type not in MODULE_FIELD_TYPES:
+        _issue(
+            issues,
+            "error",
+            rel_config,
+            f"field '{name}' has unknown type '{field_type}'.",
+        )
+    elif field_type in SELECT_FIELD_TYPES and not item.get("options"):
+        _issue(
+            issues,
+            "error",
+            rel_config,
+            f"field '{name}' is {field_type} and needs 'options'. "
+            "Modules cannot use a serverless optionsSource; the builder renders "
+            "field inputs without invoking the app runtime.",
+        )
+
+    if item.get("optionsSource"):
+        _issue(
+            issues,
+            "error",
+            rel_config,
+            f"field '{name}' declares optionsSource, which modules do not support. "
+            "Use static 'options' instead.",
+        )
+
+    if field_type == "REPEATABLE":
+        _validate_repeatable_field(item, name, rel_config, issues)
+
+    _validate_filter_traits(item, f"{rel_config}:{name}", issues)
+    _validate_property_filters(item, f"{rel_config}:{name}", issues)
 
 
 def _validate_repeatable_field(

@@ -15,25 +15,19 @@ function by name.
 
 ```bash
 caraer apps add schedule
-caraer apps add schedule heartbeat --function my-action --cron "0 0 */6 * * *"
+caraer apps add schedule heartbeat --cron "0 0 */6 * * *"
 ```
+
+On `2026.2.1` that writes `src/app/schedules/<name>.js` (see
+[`examples/layout-v21`](../examples/layout-v21/src/app/schedules/heartbeat.js)).
+The filename is the schedule name and the handler. `--function` is only
+used on `2026.2`, where the command writes JSON that points at a function.
 
 Without flags, the command asks for a preset or a custom expression, the
 function, a description, and whether it starts enabled.
 
-```json
-{
-  "name": "heartbeat",
-  "schedule": "0 0 */6 * * *",
-  "enabled": true,
-  "description": "Run every 6 hours",
-  "serverlessFunction": { "name": "my-action" }
-}
-```
-
-The `name` field is what `--invoke-schedule` matches. A name with a hyphen
-is stored with underscores (`renew-watch` becomes `renew_watch`) while the
-file stays `schedules/renew-watch.json`.
+A name with a hyphen is stored with underscores (`renew-watch` becomes
+`renew_watch`). `--invoke-schedule` matches that stored name.
 
 ## Cron
 

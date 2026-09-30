@@ -1,4 +1,4 @@
-"""Sync webhooks between src/app/webhooks/*.json and the remote API."""
+"""Sync webhooks between local files / function manifests and the remote API."""
 
 from __future__ import annotations
 
@@ -16,13 +16,20 @@ from caraer_cli.project.state import load_state, save_state
 LOCAL_WEBHOOK_KEYS = (
     "uuid",
     "topic",
+    "label",
     "deliveryMode",
     "webhookFormat",
     "description",
     "url",
+    "secret",
     "serverlessFunction",
     "enabled",
+    "triggerOffsetSeconds",
+    "scheduleDirection",
+    "includeRelations",
 )
+
+WEBHOOK_FILE_SUFFIXES = {".json", ".yaml", ".yml"}
 
 
 def _slug(value: str) -> str:
@@ -31,7 +38,7 @@ def _slug(value: str) -> str:
     return text.strip("-") or "webhook"
 
 
-def webhook_filename(item: dict[str, Any]) -> str:
+def webhook_filename(item: dict[str, Any], *, suffix: str = ".json") -> str:
     topic = str(item.get("topic") or "webhook")
     mode = str(item.get("deliveryMode") or "").lower()
     uuid = str(item.get("uuid") or "")[:8]
@@ -40,26 +47,73 @@ def webhook_filename(item: dict[str, Any]) -> str:
         parts.append(_slug(mode))
     if uuid:
         parts.append(uuid)
-    return "-".join(parts) + ".json"
+    return "-".join(parts) + suffix
 
 
-def discover_local_webhooks(root: Path, config: ProjectConfig) -> list[tuple[Path, dict[str, Any]]]:
-    if config.is_layout_v21():
-        from caraer_cli.project.function_files import (
-            discover_layout_v21_functions,
-            webhook_items_from_files,
-        )
+def webhook_yaml_filename(item: dict[str, Any] | str) -> str:
+    if isinstance(item, str):
+        return f"{_slug(item)}.yaml"
+    return f"{_slug(str(item.get('topic') or 'webhook'))}.yaml"
 
-        return webhook_items_from_files(discover_layout_v21_functions(root, config))
+
+def write_webhook_yaml(path: Path, item: dict[str, Any]) -> None:
+    import yaml
+
+    from caraer_cli.project.json_schemas import WEBHOOK_SCHEMA_URL
+
+    payload = _sanitize_local_webhook(item)
+    payload.pop("uuid", None)
+    payload.pop("serverlessFunction", None)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"# yaml-language-server: $schema={WEBHOOK_SCHEMA_URL}\n"
+        + yaml.safe_dump(
+            payload,
+            sort_keys=False,
+            allow_unicode=True,
+            default_flow_style=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _load_webhook_file(path: Path) -> dict[str, Any] | None:
+    text = path.read_text(encoding="utf-8")
+    if path.suffix.lower() in {".yaml", ".yml"}:
+        import yaml
+
+        data = yaml.safe_load(text)
+    else:
+        data = json.loads(text)
+    return data if isinstance(data, dict) else None
+
+
+def discover_webhook_files(
+    root: Path, config: ProjectConfig
+) -> list[tuple[Path, dict[str, Any]]]:
     base = webhooks_dir(root, config.srcDir)
     if not base.is_dir():
         return []
     found: list[tuple[Path, dict[str, Any]]] = []
-    for path in sorted(base.glob("*.json")):
-        data = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(data, dict):
+    for path in sorted(base.iterdir()):
+        if not path.is_file() or path.suffix.lower() not in WEBHOOK_FILE_SUFFIXES:
+            continue
+        data = _load_webhook_file(path)
+        if data is not None:
             found.append((path, data))
     return found
+
+
+def discover_local_webhooks(root: Path, config: ProjectConfig) -> list[tuple[Path, dict[str, Any]]]:
+    files = discover_webhook_files(root, config)
+    if not config.is_layout_v21():
+        return files
+    from caraer_cli.project.function_files import (
+        discover_layout_v21_functions,
+        webhook_items_from_files,
+    )
+
+    return webhook_items_from_files(discover_layout_v21_functions(root, config)) + files
 
 
 def _sanitize_local_webhook(item: dict[str, Any]) -> dict[str, Any]:
@@ -270,10 +324,21 @@ def _pull_webhooks_v21(
     }
     by_function: dict[str, list[dict[str, Any]]] = {}
     pulled: list[dict[str, Any]] = []
+    http_items: list[dict[str, Any]] = []
+    wh_state: dict[str, Any] = dict(state.get("webhooks") or {})
     for item in remote_items:
         local = _sanitize_local_webhook(item)
         topic = str(local.get("topic") or "")
         if topic in lifecycle_topics:
+            continue
+        if str(local.get("deliveryMode") or "").strip().upper() == "HTTP":
+            http_items.append(local)
+            pulled.append({"file": webhook_yaml_filename(local), "uuid": item.get("uuid"), "topic": topic})
+            if item.get("uuid"):
+                wh_state[Path(webhook_yaml_filename(local)).stem] = {
+                    "uuid": item["uuid"],
+                    "topic": topic,
+                }
             continue
         sf = local.get("serverlessFunction")
         name = None
@@ -281,19 +346,37 @@ def _pull_webhooks_v21(
             name = sf.get("name") or uuid_to_name.get(str(sf.get("uuid") or ""))
         if not name or name not in files:
             continue
-        by_function.setdefault(str(name), []).append(
-            {
-                "topic": topic,
-                "deliveryMode": local.get("deliveryMode") or "SERVERLESS",
-                "enabled": local.get("enabled", True),
-                "webhookFormat": local.get("webhookFormat") or "USER_FRIENDLY",
-            }
-        )
+        hook: dict[str, Any] = {
+            "topic": topic,
+            "deliveryMode": local.get("deliveryMode") or "SERVERLESS",
+            "enabled": local.get("enabled", True),
+            "webhookFormat": local.get("webhookFormat") or "USER_FRIENDLY",
+        }
+        if local.get("label"):
+            hook["label"] = local["label"]
+        by_function.setdefault(str(name), []).append(hook)
         pulled.append({"function": name, "uuid": item.get("uuid"), "topic": topic})
     for name, webhooks in by_function.items():
         item = files[name]
         current = parse_code_manifest_file(item.path)
         current["webhooks"] = webhooks
         write_code_manifest(item.path, current)
+    base = webhooks_dir(root, config.srcDir)
+    if http_items:
+        base.mkdir(parents=True, exist_ok=True)
+        for existing in (*base.glob("*.yaml"), *base.glob("*.yml")):
+            existing.unlink()
+        for local in http_items:
+            write_webhook_yaml(base / webhook_yaml_filename(local), local)
+    elif base.is_dir():
+        for existing in (*base.glob("*.yaml"), *base.glob("*.yml")):
+            existing.unlink()
+        leftover = [path for path in base.iterdir() if path.name != ".gitkeep"]
+        if not leftover:
+            for keep in base.glob(".gitkeep"):
+                keep.unlink()
+            if not any(base.iterdir()):
+                base.rmdir()
+    state["webhooks"] = wh_state
     save_state(root, state)
     return {"webhooks": pulled}

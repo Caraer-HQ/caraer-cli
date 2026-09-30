@@ -115,6 +115,8 @@ def test_harness_preview_uses_an_iframe_so_media_queries_see_the_frame_width(
     assert 'class="hx-frame__doc"' in page
     assert "HTMLIFrameElement" in page
     assert "querySelectorAll('.hx-bar .hx-seg button')" in page
+    assert "closest('[data-caraer-field]')" in page
+    assert "focusSidebarField" in page
 
 
 def test_harness_hides_fields_that_are_not_visible(tmp_path: Path) -> None:
@@ -136,7 +138,10 @@ def test_harness_hides_fields_that_are_not_visible(tmp_path: Path) -> None:
     assert ".hx-field[hidden] { display: none; }" in page
     assert "Advanced settings" in page
     assert 'class="hx-advanced"' in page
-    assert "field.advanced !== true" in page
+    assert "item.advanced === true" in page
+    assert "isModuleFieldGroup" in page
+    assert "flattenModuleFields" in page
+    assert 'class="hx-advanced hx-group"' in page
     assert "field.type === 'FILE' || field.type === 'MULTI_FILE' || field.type === 'IMAGE'" in page
     assert 'class="hx-file"' in page
     assert "/api/upload" in page

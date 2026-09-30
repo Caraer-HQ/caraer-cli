@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
 from caraer_cli.main import app
+from caraer_cli.project.code_manifest import parse_code_manifest_file
 from caraer_cli.project.scaffold import scaffold_app_project
 from caraer_cli.project.schema import load_workspace
 from caraer_cli.project.sync import scaffold_function
@@ -45,6 +45,19 @@ def test_prompt_schedule_noninteractive_uses_defaults(
     assert result["schedule"] == DEFAULT_SCHEDULE_CRON
     assert result["enabled"] is True
     assert "description" not in result
+
+
+def test_prompt_schedule_skips_function_when_not_required(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("caraer_cli.wizard.marketplace._is_tty", lambda: False)
+    result = prompt_schedule(
+        name="heartbeat",
+        cron="0 0 */12 * * *",
+        require_function=False,
+    )
+    assert result["name"] == "heartbeat"
+    assert result["function_name"] == "heartbeat"
 
 
 def test_prompt_schedule_noninteractive_requires_name(
@@ -160,13 +173,11 @@ def test_add_schedule_cli_noninteractive(
         ],
     )
     assert invoke.exit_code == 0, invoke.stdout + str(invoke.exception)
-    path = root / "src" / "app" / "schedules" / "renew-watch.json"
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    assert payload["name"] == "renew_watch"
+    path = root / "src" / "app" / "schedules" / "renew-watch.js"
+    payload = parse_code_manifest_file(path)
     assert payload["schedule"] == "0 0 9 * * 1-5"
     assert payload["enabled"] is False
     assert payload["description"] == "Weekday renew"
-    assert payload["serverlessFunction"]["name"] == "my-action"
 
 
 def test_add_schedule_cli_default_cron_without_tty(
@@ -183,9 +194,7 @@ def test_add_schedule_cli_default_cron_without_tty(
         ["apps", "add", "schedule", "heartbeat", "--function", "my-action"],
     )
     assert invoke.exit_code == 0, invoke.stdout + str(invoke.exception)
-    payload = json.loads(
-        (root / "src" / "app" / "schedules" / "heartbeat.json").read_text(
-            encoding="utf-8"
-        )
+    payload = parse_code_manifest_file(
+        root / "src" / "app" / "schedules" / "heartbeat.js"
     )
     assert payload["schedule"] == DEFAULT_SCHEDULE_CRON

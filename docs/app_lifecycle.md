@@ -1,17 +1,19 @@
 # App lifecycle hooks
 
 Caraer apps can run code when a company **installs**, **updates**, **uninstalls**, or
-**rotates** credentials. Prefer modular files under `src/app/lifecycle/` that point
-at a local serverless function. The function itself is a normal
-[serverless function](functions.md).
+**rotates** credentials. On `2026.2.1` each hook is a named file under
+`src/app/lifecycle/`. The file is a normal [serverless function](functions.md)
+with `exports.manifest` (or Python `manifest = {...}`).
+
+`2026.2` still uses `src/app/lifecycle/*.json` plus a matching
+`functions/on-<hook>/` folder.
 
 ## Quick start
 
-`caraer apps init` always scaffolds all four hooks and matching functions:
+`caraer apps init` always scaffolds all four hooks:
 
 ```text
-src/app/lifecycle/{install,uninstall,rotate,update}.json
-src/app/functions/on-{install,uninstall,rotate,update}/
+src/app/lifecycle/{install,uninstall,rotate,update}.js
 ```
 
 Edit the stubs, then push:
@@ -28,34 +30,40 @@ caraer apps add lifecycle-hook uninstall
 
 ## Files
 
-| File | Manifest field | Topic |
-|------|----------------|-------|
-| `lifecycle/install.json` | `installWebhook` | `app.installed` |
-| `lifecycle/uninstall.json` | `uninstallWebhook` | `app.uninstalled` |
-| `lifecycle/rotate.json` | `rotateWebhook` | `app.rotated` |
-| `lifecycle/update.json` | `updateWebhook` | `app.updated` |
+| File | Manifest field | Topic | Default label |
+|------|----------------|-------|---------------|
+| `lifecycle/install.js` | `installWebhook` | `app.installed` | App installed |
+| `lifecycle/uninstall.js` | `uninstallWebhook` | `app.uninstalled` | App uninstalled |
+| `lifecycle/rotate.js` | `rotateWebhook` | `app.rotated` | Credentials rotated |
+| `lifecycle/update.js` | `updateWebhook` | `app.updated` | App updated |
 
-SERVERLESS example:
+```js
+// src/app/lifecycle/install.js
+exports.handler = async (req, res) => {
+  const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
+  res.status(200).json({ ok: true, event: body.event || null });
+};
 
-```json
-{
-  "topic": "app.installed",
-  "deliveryMode": "SERVERLESS",
-  "enabled": true,
-  "waitUntilComplete": true,
-  "serverlessFunction": { "name": "on-install" }
-}
+exports.manifest = {
+  lifecycle: "install",
+  topic: "app.installed",
+  label: "App installed",
+  waitUntilComplete: true,
+};
 ```
+
+`label` is the title on the app's Webhooks tab. The CLI fills it from the
+topic when you omit it.
 
 Set `waitUntilComplete: true` when the installer UI must show settings the hook
 writes (object mappings, workspace ids). The install / settings-save request then
 invokes the function on the request thread and returns the filled app. Leave it
 off (the default) for fire-and-forget hooks that can finish after the UI returns.
 
-HTTP receivers are also supported (`deliveryMode: HTTP`, `url`).
+HTTP receivers are also supported (`deliveryMode: HTTP`, `url`) on `2026.2`
+JSON hooks.
 
-On `caraer apps push`, the CLI merges these files into the public app manifest and
-resolves `serverlessFunction.name` to the remote function UUID (after functions are synced).
+On `caraer apps push`, the CLI merges these files into the app manifest.
 
 ## When hooks fire
 
@@ -65,6 +73,9 @@ resolves `serverlessFunction.name` to the remote function UUID (after functions 
 | **Updated** | Re-save of an already-installed app (settings / scopes / filters) |
 | **Uninstalled** | Company uninstalls the app |
 | **Rotated** | Installation token / credentials rotate |
+
+Uninstall removes one company's install. It does not delete the app.
+`caraer apps delete` deletes a **private** app owned by the active company.
 
 ## Payload (SERVERLESS / HTTP)
 
@@ -127,11 +138,16 @@ Install and update are also where you subscribe to a record object the
 installer chose. Declare the placeholder on the function:
 
 ```js
-webhooks: [{ topic: "record.<setting:target_object>.created" }],
+webhooks: [{
+  topic: "record.<setting:target_object>.created",
+  label: "Record created",
+}],
 ```
 
 Caraer writes the concrete topic on that company's webhook when the app is
-installed or settings are saved. A path reads one key, such as
+installed or settings are saved. The company list shows that copy (for example
+`record.candidate.created` titled **Candidate created**), not the token
+template. A path reads one key, such as
 `<setting:due_date.propertyName>` or the mapping row `<setting:field_map.email>`.
 POST a webhook from lifecycle only when the topic cannot be expressed as a
 setting or trait reference. See [Webhooks](webhooks.md).
@@ -152,6 +168,6 @@ provision after the user saves USER-scoped settings (`userSettingsChanged`).
 |----------------|---------|---------|
 | `settings.yaml` field list (or `settings/*.json` on 2026.2) | `caraer apps add setting` | Installation settings |
 | `section` / `sectionSubtitle` on a field (or `settings-sections/*.json` on 2026.2) | edit settings | Installer setting cards |
-| `appBars` on the function manifest | edit the function | Record / tool / trait bars |
+| `appBars` on a file in `src/app/appbars/` | edit that file | Record / tool / trait bars |
 
 Validate with `caraer apps validate`.

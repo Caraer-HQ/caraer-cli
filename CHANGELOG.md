@@ -1,6 +1,30 @@
 # Changelog
 
-## Unreleased
+## 0.1.4
+
+- HTTP webhooks are first-class on 2026.2.1: one YAML file each under
+  `src/app/webhooks/`. `caraer apps add webhook --mode HTTP --url …` writes
+  that file. Serverless webhooks stay on the function manifest.
+
+- Module `fields` is a list of field objects or `{ group: "Style", fields:
+  [...] }` expandables. Do not set `group` on a field. `advanced: true`
+  stays the unnamed Advanced settings group.
+
+- Clicking a `data-caraer-field` node in the CMS preview focuses that
+  sidebar field (local `caraer apps local` harness and the Flutter builder).
+  `examples/layout-v21` and new `caraer apps add module` scaffolds mark heading
+  and body.
+
+- `caraer apps push` warns when the workspace is still 2026.2 and offers to
+  rewrite it to 2026.2.1 (default yes). `--upgrade` / `--no-upgrade` skip the
+  prompt. `caraer apps upgrade` still rewrites without deploying.
+
+- Docs and `examples/layout-v21` match the 2026.2.1 layout: flat functions,
+  `src/app/appbars/`, JS lifecycle / inbound / schedules, webhook `label` and
+  `webhookFormat`, company-copy topics on the Webhooks tab, CMS Modules tab,
+  and `caraer apps delete` versus uninstall. `caraer apps add webhook`,
+  `add schedule`, and `add inbound` write 2026.2.1 code files (function
+  manifest / JS). JSON remains only on a 2026.2 workspace.
 
 - Webhook topics and required scopes read a key on a setting. A property
   single-select uses `objectName` and `propertyName`
@@ -61,6 +85,10 @@
   and runs `npm install` so the default `hello_world` module resolves. They no
   longer add `three` / `@types/three`. Add those only when a module imports
   them.
+
+- Settings schema `filterPropertyTypes` / `filterPropertyFormats` on
+  `PROPERTY_SINGLE_SELECT` / `PROPERTY_MULTI_SELECT` (CMS alias
+  `allowedPropertyTypes` / `allowedPropertyFormats`)
 
 ## 0.1.3
 

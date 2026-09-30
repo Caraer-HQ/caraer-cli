@@ -19,10 +19,26 @@ export const manifest = {
       defaultValue: 'Hello world',
     },
     {
-      name: 'body',
-      label: 'Text',
-      type: 'MULTI_LINE',
-      helpText: 'Markdown is supported.',
+      group: 'Content',
+      fields: [
+        {
+          name: 'body',
+          label: 'Text',
+          type: 'MULTI_LINE',
+          helpText: 'Markdown is supported.',
+        },
+      ],
+    },
+    {
+      group: 'Style',
+      fields: [
+        {
+          name: 'tint',
+          label: 'Tint',
+          type: 'COLOR',
+          helpText: 'Heading colour. Empty uses the site font colour.',
+        },
+      ],
     },
   ],
 } satisfies ModuleManifest;
@@ -32,8 +48,15 @@ const { fields } = Astro.props as ModuleProps<HelloWorldFields>;
 
 <section class="hello_world">
   <div class="caraer-container">
-    <h2>{fields.heading}</h2>
-    {fields.body && <CaraerRichText value={fields.body} />}
+    <h2
+      data-caraer-field="heading"
+      style={fields.tint ? { color: fields.tint } : undefined}
+    >
+      {fields.heading}
+    </h2>
+    <div data-caraer-field="body">
+      {fields.body && <CaraerRichText value={fields.body} />}
+    </div>
   </div>
 </section>
 

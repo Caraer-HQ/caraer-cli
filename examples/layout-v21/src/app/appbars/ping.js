@@ -115,6 +115,8 @@ exports.manifest = {
           name: "status_property",
           label: "Status property",
           type: "PROPERTY_SINGLE_SELECT",
+          helpText: "filterPropertyTypes keeps properties of those types.",
+          filterPropertyTypes: ["string"],
         },
         {
           name: "copied_properties",

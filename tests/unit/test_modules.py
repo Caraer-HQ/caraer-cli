@@ -7,7 +7,11 @@ from pathlib import Path
 
 from caraer_cli.project.modules_codegen import render_module_types
 from caraer_cli.project.modules_scaffold import scaffold_module
-from caraer_cli.project.modules_sync import discover_local_modules, parse_major
+from caraer_cli.project.modules_sync import (
+    discover_local_modules,
+    flatten_module_fields,
+    parse_major,
+)
 from caraer_cli.project.schema import load_workspace
 from caraer_cli.project.validate_app import validate_local_app
 
@@ -65,6 +69,54 @@ def test_discovers_modules_and_reads_kind(tmp_path: Path) -> None:
     modules = discover_local_modules(root, load_workspace(root))
     assert [m.name for m in modules] == ["hero", "site_footer"]
     assert modules[1].kind == "footer"
+
+
+def test_nested_field_group_validates_and_flattens(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _write_module(
+        root,
+        "hero",
+        {
+            "name": "hero",
+            "label": "Hero",
+            "kind": "section",
+            "fields": [
+                {"name": "heading", "label": "Heading", "type": "SINGLE_LINE"},
+                {
+                    "group": "Style",
+                    "fields": [
+                        {"name": "tint", "label": "Tint", "type": "COLOR"},
+                    ],
+                },
+            ],
+        },
+    )
+    module = discover_local_modules(root, load_workspace(root))[0]
+    assert [field["name"] for field in module.field_entries] == ["heading", "tint"]
+    assert flatten_module_fields(module.fields)[1]["name"] == "tint"
+    assert _errors(root) == []
+
+
+def test_group_on_a_field_is_rejected(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _write_module(
+        root,
+        "hero",
+        {
+            "name": "hero",
+            "label": "Hero",
+            "kind": "section",
+            "fields": [
+                {
+                    "name": "tint",
+                    "label": "Tint",
+                    "type": "COLOR",
+                    "group": "Style",
+                }
+            ],
+        },
+    )
+    assert any("Do not set 'group' on a field" in error for error in _errors(root))
 
 
 def test_valid_module_passes(tmp_path: Path) -> None:
@@ -302,7 +354,10 @@ def test_scaffold_creates_a_valid_module(tmp_path: Path) -> None:
     scaffold_module(root, config, name="feature_grid", kind="section")
 
     directory = root / "src/app/modules/feature_grid"
+    astro = (directory / "index.astro").read_text(encoding="utf-8")
     assert [p.name for p in directory.iterdir()] == ["index.astro"]
+    assert 'data-caraer-field="heading"' in astro
+    assert 'data-caraer-field="body"' in astro
     assert _errors(root) == []
 
 

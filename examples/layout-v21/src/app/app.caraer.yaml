@@ -14,6 +14,7 @@ requiredScopes:
 webhookRateLimitPerMinute: 100
 jobRateLimitPerMinute: 60
 # Settings: src/app/settings.yaml
-# App bars: appBars on the function that runs them
-# Functions: src/app/functions/<name>.js
+# App bars: src/app/appbars/<name>.js (exports.manifest.appBars)
+# Functions: src/app/functions/<name>.js (serverless webhooks on that file)
+# HTTP webhooks: src/app/webhooks/<name>.yaml
 # Lifecycle / inbound / schedules: matching folders of named files

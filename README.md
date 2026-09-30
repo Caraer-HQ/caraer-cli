@@ -145,16 +145,31 @@ Run these inside the app folder:
 caraer apps add function my-action
 caraer apps add options-function list-items   # dynamic select options
 caraer apps add webhook --topic record.candidate.created --function my-action
-caraer apps add schedule renew-watch --function my-action --cron "0 0 */6 * * *"
-caraer apps add inbound gmail-push --function my-action --auth SHARED_SECRET
+caraer apps add webhook --mode HTTP --topic record.candidate.updated --url https://example.com/hooks/caraer
+caraer apps add schedule heartbeat --cron "0 0 */12 * * *"
+caraer apps add inbound echo --auth NONE --sync
 caraer apps add setting
 caraer apps add lifecycle-hook
 caraer apps add module hello --kind section
 ```
 
-`caraer apps init` already creates lifecycle files (`install`, `uninstall`,
-`rotate`, `update`) and a starter `modules/hello_world`. Existing `2026.2`
-apps stay as they are until you run `caraer apps upgrade`.
+On `2026.2.1` those write code files (see
+[`examples/layout-v21`](examples/layout-v21)):
+
+- Webhook: `exports.manifest.webhooks` on `src/app/functions/<name>.js`
+  (HTTP: `src/app/webhooks/<name>.yaml`)
+- Schedule: `src/app/schedules/<name>.js`
+- Inbound: `src/app/inbound/<name>.js`
+
+On `2026.2` `add webhook|schedule|inbound` still write JSON under
+`src/app/webhooks/`, `schedules/`, and `inbound/`.
+
+`caraer apps init` already creates lifecycle files
+(`src/app/lifecycle/{install,uninstall,rotate,update}.js`) and a starter
+`modules/hello_world`. A `2026.2` app is rewritten to `2026.2.1` on the
+next `caraer apps push` unless you decline the prompt (default yes) or
+pass `--no-upgrade`. `caraer apps upgrade` does the same rewrite without
+deploying. See [docs/platform_versioning.md](docs/platform_versioning.md).
 
 `add schedule` and `add setting` open a wizard when you omit flags.
 `add setting` writes into `src/app/settings.yaml`.
@@ -168,10 +183,12 @@ my_app/
   src/app/
     app.caraer.yaml           # identity, scopes, auth, details
     settings.yaml             # installer setting fields (optional section grouping)
-    functions/<name>.js       # name is the filename; webhooks and app bars live in its manifest
+    functions/<name>.js       # name is the filename; serverless webhooks live in exports.manifest
+    appbars/<name>.js         # appBars on this file; Caraer runs it for app.bar.triggered
     lifecycle/<hook>.js       # install | uninstall | rotate | update
     schedules/<name>.js
     inbound/<name>.js
+    webhooks/<name>.yaml      # HTTP webhooks (POST to a URL, no function)
     shared/                   # require("../shared") from each of the above
     modules/<name>/<name>.astro
 ```
@@ -201,9 +218,20 @@ path locally and when deployed, for example `require("../shared")` from
 `functions/<name>.js`.
 
 See [`examples/layout-v21`](examples/layout-v21) for a full `2026.2.1` app
-(named files, settings list, inbound, schedule, app bar, CMS module, and a
-setting-targeted record webhook). [`examples/webhook-inbox`](examples/webhook-inbox)
-is the older `2026.2` folder layout.
+(named files, settings list, inbound, schedule, app bars, CMS module, and
+setting-targeted record and due-date webhooks).
+[`examples/webhook-inbox`](examples/webhook-inbox) is the older `2026.2`
+folder layout.
+
+A private app can be removed from the company that created it:
+
+```bash
+caraer apps delete            # selected private app; asks first
+caraer apps delete --yes      # no prompt
+```
+
+Uninstall is a different action: it removes one company's install and leaves
+the app in place. Delete is creator-company only, and only for private apps.
 
 ## App pieces
 
@@ -310,7 +338,7 @@ build. Preview a push with `caraer apps push --dry-run` before you deploy.
 ## Command groups
 
 - `auth`, `company`, `profile` — session and which API you talk to
-- `apps` — scaffold, validate, push, logs, local dev
+- `apps` — scaffold, validate, push, logs, local dev, delete (private apps)
 - `webhooks` — formats, events, and test helpers
 - `publish` — marketplace review for public apps
 - `sandbox` — Neo4j clone of the selected company

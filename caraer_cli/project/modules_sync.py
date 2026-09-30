@@ -23,6 +23,30 @@ from caraer_cli.project.schema import ProjectConfig
 #: Superseded by `export const manifest` in index.astro. Still named so
 #: validation can point at a leftover and say what to do with it.
 LEGACY_MODULE_CONFIG_FILE = "module.caraer.json"
+
+
+def is_module_field_group(item: Any) -> bool:
+    if not isinstance(item, dict):
+        return False
+    title = str(item.get("group") or "").strip()
+    return bool(title) and isinstance(item.get("fields"), list)
+
+
+def flatten_module_fields(items: list[Any]) -> list[dict[str, Any]]:
+    """Unwrap `{ group, fields }` nodes. Values and types stay on the fields."""
+    out: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if is_module_field_group(item):
+            out.extend(
+                child for child in item.get("fields") or [] if isinstance(child, dict)
+            )
+        else:
+            out.append(item)
+    return out
+
+
 MODULE_ENTRY_FILE = "index.astro"
 
 
@@ -32,6 +56,8 @@ def module_entry_path(directory: Path) -> Path:
     if named.is_file():
         return named
     return directory / MODULE_ENTRY_FILE
+
+
 GENERATED_TYPES_FILE = "types.d.ts"
 
 #: What the module renders as, which decides where it may be placed.
@@ -131,6 +157,11 @@ class LocalModule:
     def fields(self) -> list[dict[str, Any]]:
         raw = self.config.get("fields")
         return [item for item in raw if isinstance(item, dict)] if isinstance(raw, list) else []
+
+    @property
+    def field_entries(self) -> list[dict[str, Any]]:
+        """Declared fields only. Group wrappers are unwrapped."""
+        return flatten_module_fields(self.fields)
 
     @property
     def frameworks(self) -> dict[str, str]:

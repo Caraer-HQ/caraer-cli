@@ -18,6 +18,7 @@ exports.manifest = {
     {
       topic: "record.<setting:due_date.objectName>.date_due.<setting:due_date.propertyName>",
       label: "Due date",
+      webhookFormat: "USER_FRIENDLY",
       triggerOffsetSeconds: 0,
     },
   ],

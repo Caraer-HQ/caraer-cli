@@ -659,6 +659,7 @@ def prompt_schedule(
     description: str | None = None,
     enabled: bool | None = None,
     function_choices: list[str] | None = None,
+    require_function: bool = True,
 ) -> dict[str, Any]:
     """Prompt for a local schedule scaffold (name, function, cron, …)."""
     interactive = _is_tty()
@@ -671,7 +672,9 @@ def prompt_schedule(
 
     names = list(function_choices or [])
     resolved_function = (function_name or "").strip()
-    if not resolved_function:
+    if not require_function:
+        resolved_function = resolved_function or resolved_name
+    elif not resolved_function:
         if not interactive:
             raise ValueError("Missing required value: --function")
         if names:

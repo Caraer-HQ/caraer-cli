@@ -167,6 +167,8 @@ def webhook_items_from_files(
                 continue
             payload = dict(webhook)
             payload.setdefault("deliveryMode", "SERVERLESS")
+            if str(payload.get("deliveryMode") or "").strip().upper() == "HTTP":
+                continue
             payload.setdefault("enabled", True)
             payload.setdefault("webhookFormat", "USER_FRIENDLY")
             payload["serverlessFunction"] = {"name": item.name}
