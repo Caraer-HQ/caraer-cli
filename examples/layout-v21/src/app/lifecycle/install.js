@@ -38,5 +38,6 @@ exports.handler = async (req, res) => {
 exports.manifest = {
   lifecycle: "install",
   topic: "app.installed",
+  label: "App installed",
   waitUntilComplete: true,
 };

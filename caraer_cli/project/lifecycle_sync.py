@@ -31,6 +31,7 @@ LOCAL_LIFECYCLE_KEYS = (
     "secret",
     "serverlessFunction",
     "waitUntilComplete",
+    "label",
 )
 
 
@@ -125,6 +126,8 @@ def _write_lifecycle_v21(
         current["lifecycle"] = stem
         current["topic"] = raw.get("topic") or expected_topic
         current["enabled"] = raw.get("enabled", True)
+        if isinstance(raw.get("label"), str) and raw["label"].strip():
+            current["label"] = raw["label"].strip()
         write_code_manifest(path, current)
         count += 1
     return count

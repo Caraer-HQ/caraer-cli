@@ -239,7 +239,10 @@ placeholder, the same tokens as `requiredScopes`:
 
 ```js
 exports.manifest = {
-  webhooks: [{ topic: "record.<setting:target_object>.created" }],
+  webhooks: [{
+    topic: "record.<setting:target_object>.created",
+    label: "Record created",
+  }],
 };
 ```
 

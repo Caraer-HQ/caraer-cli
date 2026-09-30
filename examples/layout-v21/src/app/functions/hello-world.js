@@ -35,5 +35,8 @@ exports.handler = async (req, res) => {
 
 exports.manifest = {
   description: "Runs when a record is created on the installer-chosen object.",
-  webhooks: [{ topic: "record.<setting:target_object>.created" }],
+  webhooks: [{
+    topic: "record.<setting:target_object>.created",
+    label: "Record created",
+  }],
 };

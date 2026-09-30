@@ -12,4 +12,5 @@ exports.handler = async (req, res) => {
 exports.manifest = {
   lifecycle: "rotate",
   topic: "app.rotated",
+  label: "Credentials rotated",
 };

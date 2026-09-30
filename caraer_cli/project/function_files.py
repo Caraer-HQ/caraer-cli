@@ -170,6 +170,12 @@ def webhook_items_from_files(
             payload.setdefault("enabled", True)
             payload.setdefault("webhookFormat", "USER_FRIENDLY")
             payload["serverlessFunction"] = {"name": item.name}
+            if not str(payload.get("label") or "").strip():
+                from caraer_cli.project.webhook_label import label_for_topic
+
+                derived = label_for_topic(str(payload.get("topic") or ""))
+                if derived:
+                    payload["label"] = derived
             items.append((item.path, payload))
     return items
 
@@ -236,13 +242,20 @@ def lifecycle_items_from_files(
         if hook not in LIFECYCLE_HOOKS:
             continue
         manifest_key, topic = LIFECYCLE_HOOKS[hook]
+        from caraer_cli.project.webhook_label import label_for_topic
+
+        resolved_topic = item.manifest.get("topic") or topic
+        label = item.manifest.get("label")
+        if not isinstance(label, str) or not label.strip():
+            label = label_for_topic(str(resolved_topic))
         payload = sanitize_lifecycle(
             {
-                "topic": item.manifest.get("topic") or topic,
+                "topic": resolved_topic,
                 "deliveryMode": "SERVERLESS",
                 "enabled": bool(item.manifest.get("enabled", True)),
                 "serverlessFunction": {"name": item.name},
                 "waitUntilComplete": item.manifest.get("waitUntilComplete"),
+                "label": label,
             }
         )
         found[manifest_key] = payload

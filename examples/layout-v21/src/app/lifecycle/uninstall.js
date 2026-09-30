@@ -11,4 +11,5 @@ exports.handler = async (req, res) => {
 exports.manifest = {
   lifecycle: "uninstall",
   topic: "app.uninstalled",
+  label: "App uninstalled",
 };

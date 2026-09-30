@@ -7,7 +7,10 @@ declares it:
 
 ```js
 exports.manifest = {
-  webhooks: [{ topic: "record.<setting:target_object>.created" }],
+  webhooks: [{
+    topic: "record.<setting:target_object>.created",
+    label: "Record created",
+  }],
 };
 ```
 
@@ -158,7 +161,10 @@ same setting/trait placeholders as `requiredScopes`:
 
 ```js
 exports.manifest = {
-  webhooks: [{ topic: "record.<setting:target_object>.created" }],
+  webhooks: [{
+    topic: "record.<setting:target_object>.created",
+    label: "Record created",
+  }],
 };
 ```
 
@@ -176,6 +182,7 @@ A row is selected by its `fieldName`, so `field.email` is that key's target.
 exports.manifest = {
   webhooks: [{
     topic: "record.<setting:due_date.objectName>.date_due.<setting:due_date.propertyName>",
+    label: "Due date",
     triggerOffsetSeconds: 86400,
     scheduleDirection: "BEFORE",
   }],

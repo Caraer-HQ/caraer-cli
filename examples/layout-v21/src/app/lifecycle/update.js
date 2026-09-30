@@ -18,5 +18,6 @@ exports.handler = async (req, res) => {
 exports.manifest = {
   lifecycle: "update",
   topic: "app.updated",
+  label: "App updated",
   waitUntilComplete: true,
 };
