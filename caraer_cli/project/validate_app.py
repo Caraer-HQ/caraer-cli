@@ -1718,6 +1718,15 @@ def _validate_modules(
                 f"category '{category}' is not one of {sorted(MODULE_CATEGORIES)}.",
             )
 
+        if module.config.get("components") is not None:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                "Do not use 'components'. Put groups in fields as "
+                '{ group: "Style", fields: [...] }.',
+            )
+
         _validate_module_fields(module, rel_config, issues)
         _validate_module_frameworks(module, rel_dir, rel_config, issues)
 

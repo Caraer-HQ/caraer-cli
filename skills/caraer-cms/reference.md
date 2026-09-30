@@ -51,5 +51,6 @@ Live site ignores these attributes when the bridge is off.
 - Do not edit `caraer-cms-runtime` on `main` as the source of truth.
 - Do not add `SECRET` or `ACTION` to a module.
 - Do not invent a field type named `GROUP`. Use `REPEATABLE` for lists and
-  `{ group: "Style", fields: [...] }` for a sidebar expandable.
+  `{ group: "Style", fields: [...] }` for a sidebar expandable. Do not add a
+  top-level `components` list.
 - Do not push or deploy unless the user asks.

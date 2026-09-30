@@ -119,6 +119,32 @@ def test_group_on_a_field_is_rejected(tmp_path: Path) -> None:
     assert any("Do not set 'group' on a field" in error for error in _errors(root))
 
 
+def test_manifest_components_are_rejected(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _write_module(
+        root,
+        "hero",
+        {
+            "name": "hero",
+            "label": "Hero",
+            "kind": "section",
+            "fields": [
+                {"name": "heading", "label": "Heading", "type": "SINGLE_LINE"},
+            ],
+            "components": [
+                {
+                    "name": "layout",
+                    "label": "Layout",
+                    "fields": [
+                        {"name": "width", "label": "Width", "type": "SINGLE_LINE"},
+                    ],
+                }
+            ],
+        },
+    )
+    assert any("Do not use 'components'" in error for error in _errors(root))
+
+
 def test_valid_module_passes(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     _write_module(

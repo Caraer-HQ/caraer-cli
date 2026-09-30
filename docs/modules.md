@@ -78,8 +78,9 @@ wrong on every site except the one you wrote against.
 
 A `{ group: "Style", fields: [...] }` object in `fields` is a sidebar
 expandable in `caraer apps local` and the CMS builder. Do not set `group`
-on a field. Ungrouped fields stay at the top.
-`advanced: true` (outside a group) still collapses under **Advanced settings**.
+on a field, and do not use a top-level `components` list. Ungrouped fields
+stay at the top. `advanced: true` (outside a group) still collapses under
+**Advanced settings**.
 
 For anything that needs the platform (rich text, images, links, menus, forms,
 record lists), import the component from `@caraer/cms-runtime`. A module does

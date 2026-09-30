@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Module sidebar groups stay `{ group: "Style", fields: [...] }` in `fields`.
+  A top-level `components` list is rejected.
+
 ## 0.1.4
 
 - HTTP webhooks are first-class on 2026.2.1: one YAML file each under
