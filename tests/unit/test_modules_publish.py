@@ -54,9 +54,15 @@ def test_publish_modules_uses_caraer_api_not_env_tokens(tmp_path: Path, monkeypa
         return packed
 
     monkeypatch.setattr("caraer_cli.project.modules_publish.pack_tarball", fake_pack)
+    captured: dict = {}
+
+    def fake_publish(_client, app_uuid, payload):
+        captured.update(payload)
+        return {"data": {"appUuid": app_uuid, **payload}}
+
     monkeypatch.setattr(
         "caraer_cli.api.modules.publish_module_package",
-        lambda _client, app_uuid, payload: {"data": {"appUuid": app_uuid, **payload}},
+        fake_publish,
     )
 
     config = ProjectConfig(platformVersion="2026.2", name="demo", srcDir="src", appUuid="app-1")
@@ -65,6 +71,7 @@ def test_publish_modules_uses_caraer_api_not_env_tokens(tmp_path: Path, monkeypa
         config,
         app_name="demo",
         version="0.1.0",
+        release_notes="Fixed the hero.",
         client=client,
     )
 
@@ -72,6 +79,7 @@ def test_publish_modules_uses_caraer_api_not_env_tokens(tmp_path: Path, monkeypa
     assert summary["via"] == "api"
     assert summary["package"] == "@caraer/demo"
     assert "tarballBase64" not in summary
+    assert captured["releaseNotes"] == "Fixed the hero."
 
 
 def test_published_package_includes_app_dependencies(tmp_path: Path) -> None:

@@ -315,6 +315,7 @@ def publish_modules(
     *,
     app_name: str,
     version: str,
+    release_notes: str | None = None,
     registry_url: str | None = None,
     token: str | None = None,
     dry_run: bool = False,
@@ -367,6 +368,7 @@ def publish_modules(
                 {
                     "package": summary["package"],
                     "version": version,
+                    "releaseNotes": release_notes,
                     "modules": summary["modules"],
                     "tarballBase64": base64.b64encode(tarball.read_bytes()).decode("ascii"),
                     "filename": tarball.name,

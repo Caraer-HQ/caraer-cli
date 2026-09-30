@@ -692,6 +692,7 @@ def push_app(
         config,
         functions_result=functions_result,
         version=version,
+        release_notes=release_notes,
     )
 
     return {
@@ -718,6 +719,7 @@ def push_cms_modules(
     *,
     functions_result: dict[str, Any] | None = None,
     version: str | None = None,
+    release_notes: str | None = None,
 ) -> dict[str, Any]:
     """Publish CMS modules to the registry and register the catalog.
 
@@ -748,12 +750,14 @@ def push_cms_modules(
             "reason": "No build version available to publish modules against.",
         }
 
+    resolved_notes = release_notes or _resolved_release_notes(functions_result)
     print_success(f"Publishing {len(modules)} CMS module(s) at v{resolved_version}…")
     summary = publish_modules(
         root,
         config,
         app_name=app_name,
         version=resolved_version,
+        release_notes=resolved_notes,
         private=bool(config.privateApp),
         company=_selected_company_subdomain(client),
         client=client,
@@ -775,6 +779,7 @@ def push_cms_modules(
                 {
                     "package": summary["package"],
                     "version": resolved_version,
+                    "releaseNotes": resolved_notes,
                     "modules": summary["modules"],
                 },
             )
@@ -868,6 +873,16 @@ def _resolved_build_version(
     state = load_state(root)
     value = state.get("lastBuildVersion")
     return str(value) if value else None
+
+
+def _resolved_release_notes(functions_result: dict[str, Any] | None) -> str | None:
+    if not isinstance(functions_result, dict):
+        return None
+    build = functions_result.get("build")
+    if isinstance(build, dict) and build.get("releaseNotes"):
+        notes = str(build["releaseNotes"]).strip()
+        return notes or None
+    return None
 
 
 def pull_app_full(
