@@ -31,6 +31,29 @@ def is_greater(candidate: str, previous: str) -> bool:
     return parse_semver(candidate) > parse_semver(previous)
 
 
+def push_conflict_message(local_base: str | None, remote_version: str | None) -> str | None:
+    """Warn when a push would replace a newer deployed version.
+
+    ``local_base`` is the version this folder last pulled or built. ``remote_version``
+    is the highest version already on the project.
+    """
+    remote = (remote_version or "").strip()
+    if not is_semver(remote):
+        return None
+    local = (local_base or "").strip()
+    if is_semver(local):
+        if not is_greater(remote, local):
+            return None
+        base = f"v{local}"
+    else:
+        base = "an unrecorded local base"
+    return (
+        f"CONFLICT (content): remote v{remote} is newer than {base}.\n"
+        f"Pushing replaces the deployed source at v{remote}.\n"
+        "Pull first if you need that version: caraer apps pull"
+    )
+
+
 def next_version(previous: str | None) -> str:
     if previous and is_semver(previous):
         return bump_patch(previous)

@@ -471,8 +471,12 @@ def push_functions(
     release_notes: str | None = None,
     interactive: bool = True,
 ) -> dict[str, Any]:
-    from caraer_cli.formatters.output import print_success
-    from caraer_cli.project.release import resolve_release_for_build
+    from caraer_cli.formatters.output import print_conflict, print_success
+    from caraer_cli.project.release import (
+        latest_build_version,
+        push_conflict_message,
+        resolve_release_for_build,
+    )
     from caraer_cli.wizard.prompts import WizardCancelled
 
     project_uuid = get_cached_project_uuid(root)
@@ -496,6 +500,13 @@ def push_functions(
             "mode": "legacy",
             **upload_functions(client, root, config, delete_missing=delete_missing),
         }
+
+    conflict = push_conflict_message(
+        str(load_state(root).get("lastBuildVersion") or "") or None,
+        latest_build_version(client, project_uuid),
+    )
+    if conflict:
+        print_conflict(conflict)
 
     try:
         version, release_notes = resolve_release_for_build(
@@ -989,5 +1000,39 @@ def restore_deployed_source(client: CaraerApiClient, root: Path) -> dict[str, An
         print_warning(str(exc))
         return {"restored": False, "reason": str(exc)}
     count = extract_deployed_archive(root, payload)
-    print_success(f"Restored {count} files from the deployed source.")
-    return {"restored": True, "files": count}
+    version = _remember_deployed_version(client, root, project_uuid)
+    label = f" (v{version})" if version else ""
+    print_success(f"Restored {count} files from the deployed source{label}.")
+    return {"restored": True, "files": count, "version": version}
+
+
+def _remember_deployed_version(
+    client: CaraerApiClient, root: Path, project_uuid: str
+) -> str | None:
+    """Record the live version so a later push can see if the remote moved ahead."""
+    from caraer_cli.project.release import latest_build_version
+
+    version: str | None = None
+    build_uuid: str | None = None
+    try:
+        project = projects_api.get_project(client, project_uuid).get("data") or {}
+        if isinstance(project, dict):
+            raw = project.get("activeVersion")
+            version = str(raw).strip() if raw else None
+            raw_build = project.get("activeBuildUuid")
+            build_uuid = str(raw_build).strip() if raw_build else None
+    except ApiError:
+        version = None
+    if not version:
+        try:
+            version = latest_build_version(client, project_uuid)
+        except ApiError:
+            version = None
+    if not version:
+        return None
+    state = load_state(root)
+    state["lastBuildVersion"] = version
+    if build_uuid:
+        state["lastBuildUuid"] = build_uuid
+    save_state(root, state)
+    return version

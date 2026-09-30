@@ -157,6 +157,18 @@ def print_warning(message: str) -> None:
     console.print(f"[yellow]{message}[/yellow]")
 
 
+def print_conflict(message: str) -> None:
+    """A push that would replace a newer remote version."""
+    console.print(
+        Panel(
+            Text(message, style="bold red"),
+            title="CONFLICT",
+            title_align="left",
+            border_style="red",
+        )
+    )
+
+
 def print_error(message: str) -> None:
     console.print(f"[red]{message}[/red]")
 

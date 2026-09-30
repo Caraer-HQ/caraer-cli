@@ -9,8 +9,22 @@ from caraer_cli.project.release import (
     is_greater,
     latest_build_version,
     next_version,
+    push_conflict_message,
     resolve_release_for_build,
 )
+
+
+def test_push_conflict_when_remote_is_newer() -> None:
+    message = push_conflict_message("0.1.185", "0.1.200")
+    assert message is not None
+    assert message.startswith("CONFLICT (content): remote v0.1.200")
+    assert "v0.1.185" in message
+    assert push_conflict_message("0.1.200", "0.1.200") is None
+    assert push_conflict_message("0.1.201", "0.1.200") is None
+    assert push_conflict_message(None, None) is None
+    unknown = push_conflict_message(None, "0.1.200")
+    assert unknown is not None
+    assert "unrecorded local base" in unknown
 
 
 def test_bump_and_compare() -> None:
