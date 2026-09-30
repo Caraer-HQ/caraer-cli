@@ -167,6 +167,39 @@ def test_harness_ready_rejects_broken_cms_package_links(tmp_path: Path) -> None:
     (caraer / "cms-tokens").symlink_to(tmp_path / "tokens")
     assert _harness_ready(harness)
 
+    (harness / "package.json").write_text(
+        json.dumps(
+            {
+                "dependencies": {
+                    "@caraer/cms-runtime": "github:Caraer-HQ/caraer-cms-runtime#v0.1.3",
+                    "@caraer/cms-tokens": "github:Caraer-HQ/caraer-cms-tokens#v0.1.1",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert not _harness_ready(harness)
+    (harness / "node_modules" / ".caraer-cms-specs.json").write_text(
+        json.dumps(
+            {
+                "@caraer/cms-runtime": "github:Caraer-HQ/caraer-cms-runtime#v0.1.2",
+                "@caraer/cms-tokens": "github:Caraer-HQ/caraer-cms-tokens#v0.1.1",
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert not _harness_ready(harness)
+    (harness / "node_modules" / ".caraer-cms-specs.json").write_text(
+        json.dumps(
+            {
+                "@caraer/cms-runtime": "github:Caraer-HQ/caraer-cms-runtime#v0.1.3",
+                "@caraer/cms-tokens": "github:Caraer-HQ/caraer-cms-tokens#v0.1.1",
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert _harness_ready(harness)
+
 
 def test_harness_installs_app_module_libraries(tmp_path: Path) -> None:
     root = _workspace(tmp_path)

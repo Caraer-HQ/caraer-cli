@@ -166,7 +166,7 @@ def fetch_form(client: Any, company_uuid: str, form_ref: str) -> dict[str, Any] 
     return raw if isinstance(raw, dict) and raw.get("uuid") else None
 
 
-PUBLISHED_RUNTIME_SPEC = "github:Caraer-HQ/caraer-cms-runtime#v0.1.1"
+PUBLISHED_RUNTIME_SPEC = "github:Caraer-HQ/caraer-cms-runtime#v0.1.3"
 PUBLISHED_TOKENS_SPEC = "github:Caraer-HQ/caraer-cms-tokens#v0.1.1"
 
 
@@ -2583,14 +2583,69 @@ def _harness_package_resolves(harness: Path, *parts: str) -> bool:
     return dest.is_dir()
 
 
+_CMS_SPEC_PACKAGES = ("@caraer/cms-runtime", "@caraer/cms-tokens")
+_CMS_SPEC_MARKER = Path("node_modules") / ".caraer-cms-specs.json"
+
+
+def _wanted_cms_specs(harness: Path) -> dict[str, str] | None:
+    """Specs ``package.json`` asks for. None when that file is absent."""
+    path = harness / "package.json"
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    deps = payload.get("dependencies")
+    if not isinstance(deps, dict):
+        return None
+    return {name: str(deps.get(name) or "") for name in _CMS_SPEC_PACKAGES}
+
+
+def _recorded_cms_specs(harness: Path) -> dict[str, str] | None:
+    path = harness / _CMS_SPEC_MARKER
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return {name: str(payload.get(name) or "") for name in _CMS_SPEC_PACKAGES}
+
+
+def _record_cms_specs(harness: Path) -> None:
+    wanted = _wanted_cms_specs(harness)
+    if wanted is None:
+        return
+    path = harness / _CMS_SPEC_MARKER
+    path.write_text(json.dumps(wanted, indent=2) + "\n", encoding="utf-8")
+
+
+def _cms_specs_current(harness: Path) -> bool:
+    """True when the installed CMS packages match ``package.json``.
+
+    A harness with no ``package.json`` is a unit fixture that only plants
+    ``node_modules``. The real preview always writes ``package.json`` first.
+    """
+    wanted = _wanted_cms_specs(harness)
+    if wanted is None:
+        return True
+    return _recorded_cms_specs(harness) == wanted
+
+
 def _harness_ready(harness: Path) -> bool:
     # ``@astrojs/node`` is the previous gate. After cms-runtime / cms-tokens
     # moved out of caraer-web, that left a working Astro install pointing at
     # broken ``@caraer/*`` links and Vite then cannot resolve the tokens.
+    # The spec marker catches a pin bump (for example cms-runtime 0.1.2 to
+    # 0.1.3) while those directories still exist, so install is not skipped.
     return (
         _harness_package_resolves(harness, "@astrojs", "node")
         and _harness_package_resolves(harness, "@caraer", "cms-runtime")
         and _harness_package_resolves(harness, "@caraer", "cms-tokens")
+        and _cms_specs_current(harness)
     )
 
 
@@ -2599,9 +2654,12 @@ def install_harness(harness: Path, *, force: bool = False) -> int:
     if not force and _harness_ready(harness):
         return 0
 
-    return subprocess.run(
+    code = subprocess.run(
         _harness_install_command(), cwd=harness, env={**os.environ}, check=False
     ).returncode
+    if code == 0:
+        _record_cms_specs(harness)
+    return code
 
 
 def start_harness(

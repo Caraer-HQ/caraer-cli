@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- CMS preview installs `@caraer/cms-runtime` v0.1.3, which exports
+  `flattenModuleFields`. A preview that already has the packages reinstalls
+  when that pin changes.
+
 ## 0.1.5
 
 - The first `caraer apps push` of a new app no longer sends lifecycle and

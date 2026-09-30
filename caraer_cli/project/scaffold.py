@@ -697,7 +697,7 @@ def ensure_package_json(root: Path, name: str) -> Path | None:
             "logs": "caraer apps local logs --all",
         },
         "dependencies": {
-            "@caraer/cms-runtime": "github:Caraer-HQ/caraer-cms-runtime#v0.1.1",
+            "@caraer/cms-runtime": "github:Caraer-HQ/caraer-cms-runtime#v0.1.3",
             "@caraer/cms-tokens": "github:Caraer-HQ/caraer-cms-tokens#v0.1.1",
         },
         "devDependencies": {
