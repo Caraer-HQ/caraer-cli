@@ -23,6 +23,7 @@ def test_visible_apps_groups_and_golden_path_leaves() -> None:
         "clear",
         "current",
         "get",
+        "delete",
         "init",
         "wizard",
         "pull",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -388,6 +389,37 @@ def get_app(
         print_app_detail(data, full=full)
         return
     print_data(data, app_ctx.output)
+
+
+@app.command("delete")
+def delete_app(
+    ctx: typer.Context,
+    app_uuid: str | None = typer.Argument(None, help="Private app UUID (defaults to the selected app)."),
+    yes: bool = typer.Option(False, "--yes", help="Delete without a confirmation prompt."),
+) -> None:
+    """Delete a private app owned by the active company."""
+    from caraer_cli.wizard.prompts import WizardCancelled, ask_confirm
+
+    app_ctx: AppContext = ctx.obj
+    resolved = resolve_app_uuid(app_ctx, app_uuid)
+    current = apps_api.get_app(app_ctx.api_client(), resolved)
+    data = current.get("data") if isinstance(current, dict) else None
+    if not isinstance(data, dict) or not data.get("privateApp"):
+        raise typer.BadParameter("Only private apps can be deleted.")
+    label = str(data.get("label") or data.get("name") or resolved)
+    if not yes:
+        if not sys.stdin.isatty() or not sys.stdout.isatty():
+            raise typer.BadParameter("Pass --yes to delete a private app without a prompt.")
+        try:
+            if not ask_confirm(f'Delete private app "{label}"?', default=False):
+                print_warning("Delete cancelled.")
+                raise typer.Exit(code=1)
+        except WizardCancelled:
+            raise typer.Exit(code=1) from None
+    apps_api.delete_private_app(app_ctx.api_client(), resolved)
+    if app_ctx.profile.app_uuid == resolved:
+        _save_selection(app_ctx, clear_uuid=True)
+    print_success(f"Deleted private app {label}.")
 
 
 @app.command("init")

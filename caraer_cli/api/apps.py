@@ -66,6 +66,10 @@ def update_private_app(client: CaraerApiClient, app_uuid: str, payload: dict[str
     return client.request("PUT", f"/api/v2/apps/private/{app_uuid}", json_body=payload)
 
 
+def delete_private_app(client: CaraerApiClient, app_uuid: str) -> dict[str, Any]:
+    return client.request("DELETE", f"/api/v2/apps/private/{app_uuid}")
+
+
 def fetch_app(
     client: CaraerApiClient,
     app_uuid: str,

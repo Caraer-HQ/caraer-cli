@@ -3,11 +3,18 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from caraer_cli.api.apps import fetch_app
+from caraer_cli.api.apps import delete_private_app, fetch_app
 from caraer_cli.commands.apps import build_public_app_placeholder
 from caraer_cli.errors import NotFoundError
 from caraer_cli.project.scaffold import scaffold_app_project
 from caraer_cli.project.schema import load_workspace
+
+
+def test_delete_private_app_calls_delete() -> None:
+    client = MagicMock()
+    client.request.return_value = {"data": {"uuid": "priv-1", "privateApp": True}}
+    assert delete_private_app(client, "priv-1")["data"]["uuid"] == "priv-1"
+    client.request.assert_called_once_with("DELETE", "/api/v2/apps/private/priv-1")
 
 
 def test_fetch_app_falls_back_to_company_app_for_private() -> None:
