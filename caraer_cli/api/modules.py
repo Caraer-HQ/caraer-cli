@@ -23,7 +23,7 @@ def publish_module_package(
         "POST",
         f"/api/v2/apps/{app_uuid}/cms-modules/package",
         json_body=payload,
-        timeout_seconds=180.0,
+        timeout_seconds=300.0,
     )
 
 
