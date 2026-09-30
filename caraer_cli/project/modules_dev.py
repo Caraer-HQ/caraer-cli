@@ -166,7 +166,7 @@ def fetch_form(client: Any, company_uuid: str, form_ref: str) -> dict[str, Any] 
     return raw if isinstance(raw, dict) and raw.get("uuid") else None
 
 
-PUBLISHED_RUNTIME_SPEC = "github:Caraer-HQ/caraer-cms-runtime#v0.1.1"
+PUBLISHED_RUNTIME_SPEC = "github:Caraer-HQ/caraer-cms-runtime#v0.1.2"
 PUBLISHED_TOKENS_SPEC = "github:Caraer-HQ/caraer-cms-tokens#v0.1.1"
 
 
@@ -380,6 +380,50 @@ export default defineConfig({{
     }},
   }},
 }});
+"""
+
+
+def _harness_responsive_type() -> str:
+    """Shim for tablet/desktop typography when the pinned tokens package lags caraer-web."""
+    return """import { TYPE_ROLES } from "@caraer/cms-tokens";
+
+/**
+ * Tablet and desktop typography overrides for the module preview harness.
+ *
+ * Production sites import `toResponsiveTypeCss` from `@caraer/cms-tokens`, but
+ * the harness often pins an older published tokens package that does not export
+ * it yet. This file mirrors the current token-package implementation.
+ */
+
+type TypeRole = (typeof TYPE_ROLES)[number];
+type TokenSet = {
+  responsiveType?: {
+    tablet: Partial<Record<TypeRole, string>>;
+    desktop: Partial<Record<TypeRole, string>>;
+  };
+};
+
+const SAFE_CSS_LENGTH = /^-?\\d*\\.?\\d+(px|rem|em|%|vw|vh)$/;
+
+export function toResponsiveTypeCss(set: TokenSet): string {
+  const blocks: Array<[string, Partial<Record<TypeRole, string>> | undefined]> = [
+    ["768px", set.responsiveType?.tablet],
+    ["1024px", set.responsiveType?.desktop],
+  ];
+  return blocks
+    .map(([minWidth, sizes]) => {
+      if (!sizes) return "";
+      const lines = TYPE_ROLES.flatMap((role) => {
+        const size = sizes[role];
+        if (!size || !SAFE_CSS_LENGTH.test(size)) return [];
+        return [`    --caraer-size-${role}: ${size} !important;`];
+      });
+      if (lines.length === 0) return "";
+      return `@media (min-width: ${minWidth}) {\\n  :root {\\n${lines.join("\\n")}\\n  }\\n}`;
+    })
+    .filter(Boolean)
+    .join("\\n");
+}
 """
 
 
@@ -985,8 +1029,24 @@ def _harness_file_field_markup() -> str:
 """
 
 
-def _harness_field_rows(fields_expr: str) -> str:
+def _harness_field_rows(fields_expr: str, *, help_on_hover: bool = True) -> str:
     """One sidebar field list. Used for both normal and advanced fields."""
+    # Inserted via {help_markup}: use single braces so Astro sees {field...}, not {{field...}}.
+    help_markup = (
+        """                {field.helpText && (
+                  <span
+                    class="hx-help-tip"
+                    tabIndex="0"
+                    role="img"
+                    aria-label={field.helpText}
+                    data-tip={field.helpText}
+                  >i</span>
+                )}
+"""
+        if help_on_hover
+        else """              {field.helpText && <small class="hx-help">{field.helpText}</small>}
+"""
+    )
     return f"""          {{{fields_expr}.map((field) => (
             <div
               class="hx-field"
@@ -995,10 +1055,10 @@ def _harness_field_rows(fields_expr: str) -> str:
               hidden={{!isFieldVisible(field, stored)}}
             >
               <label class="hx-field__label" for={{`f-${{field.name}}`}}>
-                <span>
+                <span class="hx-field__title">
                   {{field.label}}
                   {{field.required && <em class="hx-req" title="Required">*</em>}}
-                </span>
+{help_markup if help_on_hover else ""}                </span>
                 <code>{{field.type.toLowerCase().replace(/_/g, ' ')}}</code>
               </label>
 
@@ -1044,8 +1104,7 @@ def _harness_field_rows(fields_expr: str) -> str:
                 />
               )}}
 
-              {{field.helpText && <small class="hx-help">{{field.helpText}}</small>}}
-            </div>
+{help_markup if not help_on_hover else ""}            </div>
           ))}}
 """
 
@@ -1536,6 +1595,7 @@ def _harness_page(modules: list[LocalModule], app_label: str) -> str:
             "kind": m.kind,
             "description": m.config.get("description") or "",
             "fields": m.fields,
+            "components": m.components,
             "frameworks": m.frameworks,
         }
         for m in modules
@@ -1564,6 +1624,70 @@ const selected = modules.find((m) => m.name === active) ?? modules[0];
 const manifestFields = selected?.fields ?? [];
 const normalFields = manifestFields.filter((field) => field.advanced !== true);
 const advancedFields = manifestFields.filter((field) => field.advanced === true);
+
+const declaredComponents = (selected?.components ?? []).filter(
+  (component) => String(component?.name ?? '').trim(),
+);
+const settingsGroups = (() => {{
+  if (declaredComponents.length === 0) return null;
+  const grouped = new Set();
+  for (const component of declaredComponents) {{
+    for (const name of component.fields ?? []) grouped.add(name);
+  }}
+  const extrasByBase = {{}};
+  for (const field of manifestFields) {{
+    const name = String(field.name ?? '');
+    if (!name.endsWith('_smart')) continue;
+    const base = name.slice(0, -'_smart'.length);
+    if (!grouped.has(base)) continue;
+    if (!extrasByBase[base]) extrasByBase[base] = [];
+    extrasByBase[base].push(name);
+    grouped.add(name);
+  }}
+  const groups = declaredComponents.map((component) => ({{
+    name: String(component.name ?? '').trim(),
+    label: String(component.label ?? '').trim() || String(component.name ?? '').trim(),
+    fieldNames: (component.fields ?? []).flatMap((name) => [name, ...(extrasByBase[name] ?? [])]),
+  }}));
+  const leftover = manifestFields
+    .filter((field) => {{
+      const name = String(field.name ?? '').trim();
+      return name && !grouped.has(name) && field.hidden !== true;
+    }})
+    .map((field) => field.name);
+  if (leftover.length > 0) {{
+    groups.push({{ name: '__general', label: 'General', fieldNames: leftover }});
+  }}
+  return groups;
+}})();
+
+const generalGroup =
+  settingsGroups?.find((group) => group.name === '__general') ?? null;
+const componentNavGroups =
+  settingsGroups?.filter((group) => group.name !== '__general') ?? [];
+const useComponentNav = componentNavGroups.length > 0;
+
+const fieldsForGroup = (group) => {{
+  if (!group) return {{ normal: [], advanced: [] }};
+  const names = new Set(group.fieldNames);
+  const visible = manifestFields.filter((field) => names.has(field.name));
+  return {{
+    normal: visible.filter((field) => field.advanced !== true),
+    advanced: visible.filter((field) => field.advanced === true),
+  }};
+}};
+
+const accordionGroups = useComponentNav
+  ? componentNavGroups.map((group) => ({{
+      ...group,
+      fields: fieldsForGroup(group),
+    }}))
+  : [];
+
+const generalSidebarFields = fieldsForGroup(generalGroup);
+
+const sidebarNormalFields = normalFields;
+const sidebarAdvancedFields = advancedFields;
 
 /*
  * Query strings carry everything as text, but a field's declared type is what
@@ -1774,6 +1898,46 @@ const embedSrc = (() => {{
         </header>
 
         <div class="hx-panel" data-panel="fields">
+        {{useComponentNav ? (
+          <form method="get" class="harness__fields">
+            <input type="hidden" name="module" value={{selected?.name}} />
+            <input type="hidden" name="company" value={{subdomain}} />
+
+            {{manifestFields.length === 0 && (
+              <p class="hx-empty">This module has no editable fields.</p>
+            )}}
+
+            {{accordionGroups.map((group) => (
+              <details class="hx-component-panel">
+                <summary class="hx-component-panel__summary">{{group.label}}</summary>
+                <div class="hx-component-panel__body">
+{_harness_field_rows("group.fields.normal")}
+                  {{group.fields.advanced.length > 0 && (
+                    <details class="hx-advanced">
+                      <summary>Advanced settings</summary>
+{_harness_field_rows("group.fields.advanced")}
+                    </details>
+                  )}}
+                </div>
+              </details>
+            ))}}
+
+            {{generalGroup && (
+              <>
+                <h3 class="hx-general__title">{{generalGroup.label}}</h3>
+{_harness_field_rows("generalSidebarFields.normal")}
+                {{generalSidebarFields.advanced.length > 0 && (
+                  <details class="hx-advanced">
+                    <summary>Advanced settings</summary>
+{_harness_field_rows("generalSidebarFields.advanced")}
+                  </details>
+                )}}
+              </>
+            )}}
+
+            <button type="submit" class="hx-apply">Apply</button>
+          </form>
+        ) : (
         <form method="get" class="harness__fields">
           <input type="hidden" name="module" value={{selected?.name}} />
           <input type="hidden" name="company" value={{subdomain}} />
@@ -1783,16 +1947,17 @@ const embedSrc = (() => {{
           )}}
 
           {{/* Note: a textarea's tag content is its value, so it stays on one line. */}}
-{_harness_field_rows("normalFields")}
-          {{advancedFields.length > 0 && (
+{_harness_field_rows("sidebarNormalFields")}
+          {{sidebarAdvancedFields.length > 0 && (
             <details class="hx-advanced">
               <summary>Advanced settings</summary>
-{_harness_field_rows("advancedFields")}
+{_harness_field_rows("sidebarAdvancedFields")}
             </details>
           )}}
 
           <button type="submit" class="hx-apply">Apply</button>
         </form>
+        )}}
         </div>
 
         <div class="hx-panel" data-panel="tokens" hidden>
@@ -1842,7 +2007,10 @@ const embedSrc = (() => {{
         let inFlight;
 
         const render = async () => {{
-          const params = new URLSearchParams(new FormData(form));
+          const params = new URLSearchParams(window.location.search);
+          new FormData(form).forEach((value, key) => {{
+            params.set(key, String(value));
+          }});
 
           // An unchecked checkbox submits nothing, so the value would fall back
           // to the sample and a switch could never be turned off.
@@ -2351,7 +2519,100 @@ const embedSrc = (() => {{
         font-size: 0.75rem; font-weight: 600;
       }}
       .hx-req {{ color: #f87171; font-style: normal; }}
+      .hx-field__title {{
+        display: inline-flex; align-items: center; gap: 0.35rem;
+      }}
+      .hx-help-tip {{
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 1rem; height: 1rem;
+        font-size: 0.625rem; font-weight: 700; font-style: italic;
+        color: var(--hx-muted);
+        border: 1px solid var(--hx-line);
+        border-radius: 999px;
+        cursor: help;
+        position: relative;
+      }}
+      .hx-help-tip::after {{
+        content: attr(data-tip);
+        position: absolute;
+        left: 50%; bottom: calc(100% + 6px);
+        transform: translateX(-50%);
+        width: min(280px, 70vw);
+        padding: 0.45rem 0.55rem;
+        font-size: 0.6875rem; font-weight: 400; font-style: normal;
+        line-height: 1.4; text-align: left;
+        color: var(--hx-text);
+        background: var(--hx-panel-2);
+        border: 1px solid var(--hx-line);
+        border-radius: 8px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        opacity: 0; pointer-events: none;
+        transition: opacity 120ms ease;
+        z-index: 5;
+      }}
+      .hx-help-tip:hover::after,
+      .hx-help-tip:focus-visible::after {{
+        opacity: 1;
+      }}
       .hx-help {{ font-size: 0.6875rem; color: var(--hx-muted); line-height: 1.4; }}
+      .hx-components ul {{
+        list-style: none; margin: 0; padding: 0;
+        border: 1px solid var(--hx-line); border-radius: 8px;
+        overflow: hidden;
+      }}
+      .hx-components__row {{
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 0.5rem;
+        padding: 0.75rem 0.85rem;
+        font-size: 0.8125rem; font-weight: 500;
+        color: var(--hx-text); text-decoration: none;
+        border-bottom: 1px solid var(--hx-line);
+      }}
+      .hx-components li:last-child .hx-components__row {{ border-bottom: 0; }}
+      .hx-components__row:hover {{ background: var(--hx-panel-2); }}
+      .hx-components__chev {{ color: var(--hx-muted); font-size: 1rem; }}
+      .hx-components__head {{
+        display: flex; align-items: center; gap: 0.5rem;
+        margin-bottom: 0.75rem;
+        font-size: 0.8125rem; font-weight: 600;
+      }}
+      .hx-components__back {{
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 1.75rem; height: 1.75rem;
+        border-radius: 6px;
+        color: var(--hx-text); text-decoration: none;
+        border: 1px solid var(--hx-line);
+        background: var(--hx-panel-2);
+      }}
+      .hx-components__back:hover {{ border-color: var(--hx-accent); }}
+      .hx-component-panel {{
+        border-bottom: 1px solid var(--hx-line);
+      }}
+      .hx-component-panel:last-of-type {{ border-bottom: 0; }}
+      .hx-component-panel__summary {{
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0.75rem 0;
+        font-size: 0.8125rem; font-weight: 600;
+        cursor: pointer;
+        list-style: none;
+      }}
+      .hx-component-panel__summary::-webkit-details-marker {{ display: none; }}
+      .hx-component-panel__summary::after {{
+        content: '›';
+        color: var(--hx-muted);
+        font-size: 1rem;
+        transition: transform 150ms ease;
+      }}
+      .hx-component-panel[open] > .hx-component-panel__summary::after {{
+        transform: rotate(90deg);
+      }}
+      .hx-component-panel__body {{
+        padding-bottom: 0.75rem;
+      }}
+      .hx-general__title {{
+        margin: 1rem 0 0.5rem;
+        font-size: 0.8125rem; font-weight: 600;
+      }}
       .hx-empty {{ font-size: 0.75rem; color: var(--hx-muted); }}
 
       .harness__fields input[type="text"],
@@ -2474,6 +2735,10 @@ def write_harness(
         encoding="utf-8",
     )
     (harness / "src" / "pages" / "index.astro").write_text(_harness_page(modules, app_name), encoding="utf-8")
+    (harness / "src" / "responsive-type.ts").write_text(
+        _harness_responsive_type(),
+        encoding="utf-8",
+    )
     (harness / "src" / "pages" / "api").mkdir(parents=True, exist_ok=True)
     (harness / "public" / "uploads").mkdir(parents=True, exist_ok=True)
     (harness / "src" / "pages" / "api" / "upload.ts").write_text(_harness_upload_api(), encoding="utf-8")

@@ -22,6 +22,37 @@ Kinds: `section`, `page`, `header`, `footer` (and `cookie_banner` for consent).
 Categories: `hero`, `content`, `listing`, `layout`, `media`, `form`, `cta`,
 `social_proof`.
 
+## Module settings components
+
+Group sidebar fields with `components` on the manifest when a block has enough
+settings to deserve its own row (photo + name + styling, image + fit + alt).
+Keep routine copy and layout on top-level `fields`; they show under **General**,
+always open below the component rows. Component rows expand in place. To make a
+block collapsible, declare a manifest `components` entry instead of top-level
+`fields`.
+Each component has `name`, `label`, and full field objects. Values stay a flat
+`fields` map at runtime.
+
+```ts
+export const manifest = {
+  name: "hero",
+  label: "Hero",
+  kind: "section",
+  category: "hero",
+  fields: [widthField],
+  components: [
+    {
+      name: "heading",
+      label: "Heading",
+      fields: [headingField, headingColorField],
+    },
+  ],
+} satisfies ModuleManifest;
+```
+
+On push, field definitions flatten into `fields` and each component is stored
+with `fields: ["heading", "heading_color", …]` (names only).
+
 ## Contract package
 
 Import types and platform components from `@caraer/cms-runtime`:

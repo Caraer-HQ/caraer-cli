@@ -466,7 +466,7 @@ def ensure_package_json(root: Path, name: str) -> Path | None:
             "logs": "caraer apps local logs --all",
         },
         "dependencies": {
-            "@caraer/cms-runtime": "github:Caraer-HQ/caraer-cms-runtime#v0.1.1",
+            "@caraer/cms-runtime": "github:Caraer-HQ/caraer-cms-runtime#v0.1.2",
             "@caraer/cms-tokens": "github:Caraer-HQ/caraer-cms-tokens#v0.1.1",
         },
         "devDependencies": {
@@ -508,17 +508,44 @@ def install_npm_dependencies(root: Path) -> bool:
     return True
 
 
+def _tsconfig_include_needs_astro_files(include: object) -> bool:
+    """True when ``include`` omits ``.astro`` module entries (legacy scaffold)."""
+    if not isinstance(include, list) or not include:
+        return False
+    if "src/**/*" in include:
+        return False
+    return "src/**/*.ts" in include
+
+
 def ensure_tsconfig(root: Path) -> Path | None:
     """Write the CMS-module TypeScript project file used by caraer-core.
 
     Module entries import browser libraries from ``package.json``. The editor
-    only resolves those when a tsconfig sits at the app root. Existing files
-    are left alone.
+    only resolves those when a tsconfig sits at the app root. Missing files are
+    created from the template. Legacy ``include`` values that only matched
+    ``src/**/*.ts`` are upgraded so ``index.astro`` modules typecheck.
     """
     path = root / "tsconfig.json"
-    if path.exists():
+    if not path.is_file():
+        path.write_text(TSCONFIG_CONTENTS, encoding="utf-8")
+        return path
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
         return None
-    path.write_text(TSCONFIG_CONTENTS, encoding="utf-8")
+    if not isinstance(data, dict):
+        return None
+
+    include = data.get("include")
+    if not _tsconfig_include_needs_astro_files(include):
+        return None
+
+    upgraded = [pattern for pattern in include if pattern != "src/**/*.ts"]
+    if "src/**/*" not in upgraded:
+        upgraded.append("src/**/*")
+    data["include"] = upgraded
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return path
 
 

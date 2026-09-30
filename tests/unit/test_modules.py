@@ -294,6 +294,7 @@ def test_codegen_runs_during_validation(tmp_path: Path) -> None:
     assert "HeroFields" in generated.read_text(encoding="utf-8")
     tsconfig = json.loads((root / "tsconfig.json").read_text(encoding="utf-8"))
     assert tsconfig["compilerOptions"]["moduleResolution"] == "bundler"
+    assert "src/**/*" in tsconfig["include"]
 
 
 def test_scaffold_creates_a_valid_module(tmp_path: Path) -> None:
@@ -603,6 +604,104 @@ export const manifest = {
         }
     ]
     assert _errors(root) == []
+
+
+def test_components_flatten_into_fields_and_publish_as_names(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _write_module(
+        root,
+        "hero",
+        {
+            "name": "hero",
+            "label": "Hero",
+            "kind": "section",
+            "fields": [
+                {"name": "id", "label": "Id", "type": "SINGLE_LINE"},
+            ],
+            "components": [
+                {
+                    "name": "layout",
+                    "label": "Layout",
+                    "fields": [
+                        {"name": "width", "label": "Width", "type": "SINGLE_LINE"},
+                    ],
+                },
+                {
+                    "name": "heading",
+                    "label": "Heading",
+                    "fields": [
+                        {"name": "heading", "label": "Heading", "type": "MULTI_LINE"},
+                    ],
+                },
+            ],
+        },
+    )
+
+    module = discover_local_modules(root, load_workspace(root))[0]
+    assert [field["name"] for field in module.fields] == ["width", "heading", "id"]
+    entry = module.to_manifest_entry()
+    assert entry["components"] == [
+        {"name": "layout", "label": "Layout", "fields": ["width"]},
+        {"name": "heading", "label": "Heading", "fields": ["heading"]},
+    ]
+    assert [field["name"] for field in entry["fields"]] == ["width", "heading", "id"]
+    assert _errors(root) == []
+
+
+def test_duplicate_field_across_components_is_rejected(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _write_module(
+        root,
+        "hero",
+        {
+            "name": "hero",
+            "label": "Hero",
+            "kind": "section",
+            "fields": [],
+            "components": [
+                {
+                    "name": "layout",
+                    "label": "Layout",
+                    "fields": [
+                        {"name": "width", "label": "Width", "type": "SINGLE_LINE"},
+                    ],
+                },
+                {
+                    "name": "heading",
+                    "label": "Heading",
+                    "fields": [
+                        {"name": "width", "label": "Width", "type": "SINGLE_LINE"},
+                    ],
+                },
+            ],
+        },
+    )
+
+    assert any("Duplicate field 'width'" in error for error in _errors(root))
+
+
+def test_a_component_needs_a_label(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _write_module(
+        root,
+        "hero",
+        {
+            "name": "hero",
+            "label": "Hero",
+            "kind": "section",
+            "fields": [],
+            "components": [
+                {
+                    "name": "layout",
+                    "fields": [
+                        {"name": "width", "label": "Width", "type": "SINGLE_LINE"},
+                    ],
+                },
+            ],
+        },
+    )
+
+    assert any("component 'layout' is missing 'label'" in error for error in _errors(root))
 
 
 def test_a_module_without_a_manifest_says_what_is_missing(tmp_path: Path) -> None:

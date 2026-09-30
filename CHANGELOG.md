@@ -21,35 +21,63 @@
   `#main`, so section modules fill the frame instead of shrink-wrapping
   in a centered flex row.
 
-- CMS module manifests can import shared field objects (for example
-  `widthField` from `src/app/modules/settings.ts`) instead of repeating
-  options in every module. Field groups can be spread (`...backgroundFields`).
-  Shared files at the modules root, and `_`-prefixed folders, are included
-  in the published package. Nested settings files may reuse exported arrays
-  such as `COLORS`.
+### CMS module tooling
 
-- `caraer apps push` is the one command for private and public apps: it
-  deploys by default, publishes CMS modules, and installs on the selected
-  company. `--no-deploy` syncs without a build. `--wait` blocks on function
-  runtime provisioning; the default skips that wait.
+- App ``tsconfig.json`` scaffolds include ``src/**/*`` so ``.astro`` modules
+  resolve ``@caraer/cms-runtime`` imports. ``caraer apps validate`` upgrades
+  legacy ``src/**/*.ts`` includes automatically.
 
-- App `package.json` `dev` is `caraer apps local dev`, so `npm run dev` /
-  `pnpm dev` starts functions and the CMS preview. A missing `dev` script
-  is filled in; an existing one is left alone.
+## 0.1.4
 
-- `apps local dev --cms` isolates the preview harness from the app
-  `package.json`, so pnpm does not skip `@astrojs/node`.
+### CMS v2 local preview
 
-- `apps init` scaffolds `src/app/modules/hello_world` (entry + `fields.d.ts`),
-  the same starter CMS module `apps add module` would create.
+- Preview uses an **iframe** so `@media` breakpoints match the selected
+  Mobile / Tablet / Desktop frame width.
+- Preview **middleware** fills `Astro.locals` (tokens, company, menus, forms,
+  records) from sample data or, when signed in, a company picker and optional
+  `--company` / live public API (`CARAER_SUBDOMAIN`, `CARAER_API_BASE_URL`).
+- Harness loads each module **on demand** so a syntax error in one module does
+  not break the preview chrome.
+- Sidebar honours **`visibleWhen`** (including on `REPEATABLE` item fields),
+  **`advanced`** fields, and **`REPEATABLE`** lists with paginated tiles.
+- Optional **`components`** groups in the manifest split the sidebar; leftover
+  top-level fields appear under General. Published `module.caraer.json` lists
+  component names and field keys only.
+- **FILE** / **MULTI_FILE** uploads go to a local `/api/upload` endpoint;
+  **FORM_SINGLE_SELECT** picks forms from the CLI-authenticated forms API for
+  the selected company.
+- **`/caraer/records`** proxy and **`listRecords`** support modules that use
+  `CaraerRecordList` against live or sample data.
+- Company branding in the preview includes **social links** from company details.
+- Company **subdomain** for preview and published module package naming is taken
+  from website settings when present, with a slug fallback from the company name
+  when settings are missing.
+- Preview generates **`src/responsive-type.ts`** (`toResponsiveTypeCss` shim) so
+  responsive typography works when the harness pins an older `@caraer/cms-tokens`
+  release that does not export it yet.
+- CMS module preview (`.harness__preview`) uses **block flow** like live `#main`,
+  so section modules fill the frame instead of shrink-wrapping in a centered
+  flex row.
+- Harness **`package.json`** is isolated from the app (`.npmrc` /
+  `ignore-workspace`) so pnpm does not treat the app root as the workspace and
+  skip `@astrojs/node`.
 
-- `apps init` writes a root `tsconfig.json` (same options as `caraer-core`) so
-  module scripts can resolve npm libraries from `package.json`. Node
-  `package.json` scaffolds set `"type": "module"`, `@caraer/client`, and the
-  published CMS contract packages (`@caraer/cms-runtime`, `@caraer/cms-tokens`)
-  and runs `npm install` so the default `hello_world` module resolves. They no
-  longer add `three` / `@types/three`. Add those only when a module imports
-  them.
+### CMS module manifests, codegen, and publish
+
+- **`apps add module`** scaffolds Astro modules with a literal `export const
+manifest` and generated **`types.d.ts`** (replaces `fields.d.ts`).
+- Module field types **`COLOR`**, **`IMAGE`**, and **`REPEATABLE`** (with
+  `itemFields`, `minItems` / `maxItems`) are supported in manifests, validation,
+  preview, and publish.
+- Module kind **`cookie_banner`** is distinct from header/footer for site chrome.
+- Manifests can **import shared field objects** (for example `widthField` from
+  `src/app/modules/settings.ts`) and spread field groups (`...backgroundFields`).
+  Shared files at the modules root and `_`-prefixed folders ship in the published
+  package; nested settings files may reuse exported arrays such as `COLORS`.
+- **`apps validate`** checks module **`components`**, **`visibleWhen`** targets
+  and operators (including on repeatable item fields), and repeatable bounds.
+- Published module npm packages include **runtime dependencies** declared in the
+  app root `package.json` (not only devDependencies).
 
 ## 0.1.3
 

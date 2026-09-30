@@ -147,6 +147,32 @@ def test_node_init_writes_tsconfig_and_module_package_json(tmp_path: Path) -> No
     assert ensure_tsconfig(root) is None
 
 
+def test_ensure_tsconfig_upgrades_legacy_include(tmp_path: Path) -> None:
+    root = tmp_path / "legacy_cms"
+    root.mkdir()
+    (root / "tsconfig.json").write_text(
+        json.dumps(
+            {
+                "compilerOptions": {
+                    "moduleResolution": "bundler",
+                    "strict": True,
+                    "noEmit": True,
+                },
+                "include": ["src/**/*.ts"],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert ensure_tsconfig(root) == root / "tsconfig.json"
+    tsconfig = json.loads((root / "tsconfig.json").read_text(encoding="utf-8"))
+    assert "src/**/*" in tsconfig["include"]
+    assert "src/**/*.ts" not in tsconfig["include"]
+    assert ensure_tsconfig(root) is None
+
+
 def test_existing_package_json_is_left_alone(tmp_path: Path) -> None:
     root = tmp_path / "legacy"
     root.mkdir()

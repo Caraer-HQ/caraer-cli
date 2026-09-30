@@ -72,6 +72,9 @@ def test_harness_does_not_statically_import_modules(tmp_path: Path) -> None:
     assert "() => import(\"@modules/hero/index.astro\")" in page
     assert "() => import(\"@modules/rich_text/index.astro\")" in page
     assert "overlay: false" in config
+    assert (harness / "src" / "responsive-type.ts").is_file()
+    assert "from '../responsive-type.ts'" in page
+    assert "toResponsiveTypeCss" in page
 
 
 def test_harness_preview_uses_block_flow_like_live_pages(tmp_path: Path) -> None:
@@ -161,6 +164,54 @@ def test_harness_ready_rejects_broken_cms_package_links(tmp_path: Path) -> None:
     (caraer / "cms-runtime").symlink_to(tmp_path / "runtime")
     (caraer / "cms-tokens").symlink_to(tmp_path / "tokens")
     assert _harness_ready(harness)
+
+
+def test_harness_groups_fields_by_components(tmp_path: Path) -> None:
+    """Local preview sidebar mirrors the builder component drill-down."""
+    root = _workspace(tmp_path)
+    directory = root / "src" / "app" / "modules" / "hero"
+    directory.mkdir(parents=True)
+    (directory / "index.astro").write_text(
+        """---
+export const manifest = {
+  name: "hero",
+  label: "Hero",
+  kind: "section",
+  fields: [],
+  components: [
+    {
+      name: "layout",
+      label: "Layout",
+      fields: [{ name: "title", label: "Title", type: "SINGLE_LINE" }],
+    },
+  ],
+} satisfies ModuleManifest;
+---
+<div />
+""",
+        encoding="utf-8",
+    )
+
+    harness, modules = write_harness(
+        root,
+        load_workspace(root),
+        app_name="demo_app",
+        runtime_spec="latest",
+        tokens_spec="latest",
+    )
+    page = (harness / "src" / "pages" / "index.astro").read_text(encoding="utf-8")
+
+    assert modules[0].components == [
+        {"name": "layout", "label": "Layout", "fields": ["title"]},
+    ]
+    assert '"components"' in page
+    assert "settingsGroups" in page
+    assert "accordionGroups" in page
+    assert "generalSidebarFields" in page
+    assert 'class="hx-component-panel"' in page
+    assert 'class="hx-general__title"' in page
+    assert "hx-help-tip" in page
+    assert "new URLSearchParams(window.location.search)" in page
 
 
 def test_harness_installs_app_module_libraries(tmp_path: Path) -> None:

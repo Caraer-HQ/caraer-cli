@@ -1530,6 +1530,7 @@ def _validate_modules(
                 f"category '{category}' is not one of {sorted(MODULE_CATEGORIES)}.",
             )
 
+        _validate_module_components(module, rel_config, issues)
         _validate_module_fields(module, rel_config, issues)
         _validate_module_frameworks(module, rel_dir, rel_config, issues)
 
@@ -1541,6 +1542,70 @@ def _validate_modules(
             ensure_package_json(root, config.name or root.name)
 
     return len(modules)
+
+
+def _validate_module_components(
+    module: Any,
+    rel_config: str,
+    issues: list[ValidationIssue],
+) -> None:
+    """Named sidebar groups. Field objects inside them are validated as fields."""
+    raw = module.config.get("components")
+    if raw is None:
+        return
+    if not isinstance(raw, list):
+        _issue(issues, "error", rel_config, "components must be a list.")
+        return
+
+    names: set[str] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                "Each component must be an object with name, label and fields.",
+            )
+            continue
+        name = str(item.get("name") or "").strip()
+        label = str(item.get("label") or "").strip()
+        if not name:
+            _issue(issues, "error", rel_config, "A component is missing 'name'.")
+        elif not SETTING_FIELD_NAME_RE.match(name):
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"component '{name}' must be snake_case (a-z, 0-9, underscore).",
+            )
+        elif name in names:
+            _issue(issues, "error", rel_config, f"Duplicate component '{name}'.")
+        else:
+            names.add(name)
+        if not label:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"component '{name or '?'}' is missing 'label'.",
+            )
+        fields = item.get("fields")
+        if not isinstance(fields, list) or not fields:
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                f"component '{name or '?'}' needs a 'fields' list.",
+            )
+            continue
+        for field in fields:
+            if not isinstance(field, dict):
+                _issue(
+                    issues,
+                    "error",
+                    rel_config,
+                    f"component '{name or '?'}' has a field that is not an object.",
+                )
 
 
 def _validate_module_fields(

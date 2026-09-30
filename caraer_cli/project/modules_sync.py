@@ -129,8 +129,50 @@ class LocalModule:
 
     @property
     def fields(self) -> list[dict[str, Any]]:
-        raw = self.config.get("fields")
-        return [item for item in raw if isinstance(item, dict)] if isinstance(raw, list) else []
+        """Flat field list the builder stores values against.
+
+        Component fields come first, in component order. Leftover top-level
+        ``fields`` follow them and show up as a General row. A module with no
+        ``components`` keeps its ``fields`` list unchanged.
+        """
+        components = self.config.get("components")
+        if not isinstance(components, list) or not components:
+            return _field_items(self.config.get("fields"))
+        collected: list[dict[str, Any]] = []
+        for component in components:
+            if isinstance(component, dict):
+                collected.extend(_field_items(component.get("fields")))
+        collected.extend(_field_items(self.config.get("fields")))
+        return collected
+
+    @property
+    def components(self) -> list[dict[str, Any]]:
+        """Published groups: ``name``, ``label``, and field name strings.
+
+        Field objects stay on ``fields``. This list is only how the sidebar
+        splits them. Leftover top-level fields are not included; the builder
+        shows those under General.
+        """
+        raw = self.config.get("components")
+        if not isinstance(raw, list):
+            return []
+        published: list[dict[str, Any]] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            names = [
+                str(field.get("name")).strip()
+                for field in _field_items(item.get("fields"))
+                if str(field.get("name") or "").strip()
+            ]
+            published.append(
+                {
+                    "name": str(item.get("name") or "").strip(),
+                    "label": str(item.get("label") or "").strip(),
+                    "fields": names,
+                }
+            )
+        return published
 
     @property
     def frameworks(self) -> dict[str, str]:
@@ -162,7 +204,15 @@ class LocalModule:
                 entry[key] = value
         if self.frameworks:
             entry["frameworks"] = self.frameworks
+        if self.components:
+            entry["components"] = self.components
         return entry
+
+
+def _field_items(raw: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw, list):
+        return []
+    return [item for item in raw if isinstance(item, dict)]
 
 
 def discover_local_modules(root: Path, config: ProjectConfig) -> list[LocalModule]:
