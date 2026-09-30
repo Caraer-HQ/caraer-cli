@@ -131,6 +131,19 @@ def get_build(client: CaraerApiClient, project_uuid: str, build_uuid: str) -> di
     )
 
 
+def download_deployed_source(client: CaraerApiClient, project_uuid: str) -> bytes:
+    """Zip of the build currently deployed for this project."""
+    payload = client.request(
+        "GET",
+        f"/api/v2/developer-projects/{project_uuid}/source",
+        raw=True,
+        timeout_seconds=max(client.context.timeout_seconds, 120.0),
+    )
+    if not isinstance(payload, (bytes, bytearray)) or not bytes(payload).startswith(b"PK"):
+        raise ValueError("Deployed source was not a zip archive.")
+    return bytes(payload)
+
+
 def deploy_build(
     client: CaraerApiClient,
     project_uuid: str,

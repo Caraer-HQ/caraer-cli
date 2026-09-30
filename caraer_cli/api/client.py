@@ -41,12 +41,14 @@ class CaraerApiClient:
         send_sandbox_header: bool = True,
         timeout_seconds: float | None = None,
         company_uuid: str | None = None,
+        raw: bool = False,
         _retried: bool = False,
-    ) -> dict[str, Any]:
-        headers: dict[str, str] = {
-            "Content-Type": "application/json",
-            "X-Request-Id": _new_request_id(),
-        }
+    ) -> dict[str, Any] | bytes:
+        headers: dict[str, str] = {"X-Request-Id": _new_request_id()}
+        if raw:
+            headers["Accept"] = "application/zip"
+        else:
+            headers["Content-Type"] = "application/json"
         if self.context.token:
             headers["Authorization"] = f"Bearer {self.context.token}"
         header_company = company_uuid or (
@@ -107,6 +109,7 @@ class CaraerApiClient:
                         send_sandbox_header=send_sandbox_header,
                         timeout_seconds=timeout_seconds,
                         company_uuid=company_uuid,
+                        raw=raw,
                         _retried=True,
                     )
             error = parse_api_error(response.status_code, payload)
@@ -126,6 +129,9 @@ class CaraerApiClient:
             if self.context.debug:
                 error.message += f"\n[debug] response body: {response.text}"
             raise error
+
+        if raw:
+            return response.content
 
         payload = _safe_json(response)
         if payload is None:

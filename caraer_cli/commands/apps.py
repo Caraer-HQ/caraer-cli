@@ -662,7 +662,9 @@ def pull_app(
 
     Refreshing the same selected app reuses that folder. Pulling a different
     app creates a new folder named after the app (sibling of the current
-    project when you are inside one).
+    project when you are inside one). After the manifest is written, the
+    currently deployed build archive is downloaded and extracted so functions
+    and CMS modules match that deploy.
     """
     from caraer_cli.app_sync import pull_app_full
 

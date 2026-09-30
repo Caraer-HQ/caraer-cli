@@ -948,6 +948,7 @@ def pull_app_full(
         oauth_result = {"count": pull_external_oauth_providers(client, root, config)}
     except Exception as exc:  # noqa: BLE001
         oauth_result = {"providers": [], "error": str(exc)}
+    source_result = restore_deployed_source(client, root)
     return {
         "appUuid": linked_uuid,
         "app_file": str(app_file),
@@ -964,4 +965,29 @@ def pull_app_full(
         "schedules": schedules_result,
         "inbound": inbound_result,
         "externalOAuthProviders": oauth_result,
+        "source": source_result,
     }
+
+
+def restore_deployed_source(client: CaraerApiClient, root: Path) -> dict[str, Any]:
+    """Replace the pull scaffold with the zip of the currently deployed build."""
+    from caraer_cli.formatters.output import print_success, print_warning
+    from caraer_cli.project.source_archive import extract_deployed_archive
+
+    project_uuid = get_cached_project_uuid(root)
+    if not project_uuid:
+        return {"restored": False, "reason": "No developer project."}
+    try:
+        payload = projects_api.download_deployed_source(client, project_uuid)
+    except ApiError as exc:
+        if exc.status == 404 and "No deployed source archive" in exc.message:
+            print_warning("This app has no deployed source archive yet.")
+        else:
+            print_warning(f"Could not download the deployed source: {exc.message}")
+        return {"restored": False, "reason": exc.message}
+    except ValueError as exc:
+        print_warning(str(exc))
+        return {"restored": False, "reason": str(exc)}
+    count = extract_deployed_archive(root, payload)
+    print_success(f"Restored {count} files from the deployed source.")
+    return {"restored": True, "files": count}
