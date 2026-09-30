@@ -171,7 +171,7 @@ def test_harness_ready_rejects_broken_cms_package_links(tmp_path: Path) -> None:
         json.dumps(
             {
                 "dependencies": {
-                    "@caraer/cms-runtime": "github:Caraer-HQ/caraer-cms-runtime#v0.1.3",
+                    "@caraer/cms-runtime": "github:Caraer-HQ/caraer-cms-runtime#v0.1.4",
                     "@caraer/cms-tokens": "github:Caraer-HQ/caraer-cms-tokens#v0.1.1",
                 }
             }
@@ -192,7 +192,7 @@ def test_harness_ready_rejects_broken_cms_package_links(tmp_path: Path) -> None:
     (harness / "node_modules" / ".caraer-cms-specs.json").write_text(
         json.dumps(
             {
-                "@caraer/cms-runtime": "github:Caraer-HQ/caraer-cms-runtime#v0.1.3",
+                "@caraer/cms-runtime": "github:Caraer-HQ/caraer-cms-runtime#v0.1.4",
                 "@caraer/cms-tokens": "github:Caraer-HQ/caraer-cms-tokens#v0.1.1",
             }
         ),

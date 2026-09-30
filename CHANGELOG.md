@@ -2,9 +2,9 @@
 
 ## Unreleased
 
-- CMS preview installs `@caraer/cms-runtime` v0.1.3, which exports
-  `flattenModuleFields`. A preview that already has the packages reinstalls
-  when that pin changes.
+- CMS preview installs `@caraer/cms-runtime` v0.1.4, which adds
+  `cookie_banner` to `ModuleKind` and exports site-chrome helpers. A preview
+  that already has the packages reinstalls when that pin changes.
 
 ## 0.1.5
 

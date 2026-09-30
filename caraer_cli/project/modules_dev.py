@@ -166,7 +166,7 @@ def fetch_form(client: Any, company_uuid: str, form_ref: str) -> dict[str, Any] 
     return raw if isinstance(raw, dict) and raw.get("uuid") else None
 
 
-PUBLISHED_RUNTIME_SPEC = "github:Caraer-HQ/caraer-cms-runtime#v0.1.3"
+PUBLISHED_RUNTIME_SPEC = "github:Caraer-HQ/caraer-cms-runtime#v0.1.4"
 PUBLISHED_TOKENS_SPEC = "github:Caraer-HQ/caraer-cms-tokens#v0.1.1"
 
 
