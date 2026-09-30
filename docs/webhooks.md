@@ -141,10 +141,10 @@ not the dialog.
   "event": "app.bar.triggered",
   "timestamp": 1710000000000,
   "appUuid": "…",
-  "appName": "layout_v21",
-  "appLabel": "Layout v21",
+  "appName": "example",
+  "appLabel": "Example",
   "appBarUuid": "…",
-  "appBarLabel": "Layout v21 ping",
+  "appBarLabel": "Example ping",
   "location": "RECORD_OVERVIEW",
   "recordUuid": "…",
   "object": "candidate",
@@ -241,7 +241,7 @@ property. Mapping scopes stay on the object,
 grant that property:
 `records.<setting:due_date.objectName>.property.<setting:due_date.propertyName>.all`.
 
-[`examples/layout-v21`](../examples/layout-v21) declares
+[`examples/example`](../examples/example) declares
 `record.<setting:target_object>.created` on `hello-world` and the due-date path
 on `due-date`.
 
@@ -279,6 +279,6 @@ and `defaultValue` apply per field. `icon` is a Font Awesome name such as
 
 In the function the dialog arrives as `appBarSettingsValues`.
 `settingsSchema` on the body is still the installation settings.
-[`examples/layout-v21`](../examples/layout-v21/src/app/appbars/ping.js)
+[`examples/example`](../examples/example/src/app/appbars/ping.js)
 declares one bar per location and every dialog field on `ping_overview`.
 `list-dialog-options.js` in that folder loads the Channel options.

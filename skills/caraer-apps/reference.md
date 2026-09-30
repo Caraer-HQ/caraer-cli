@@ -363,7 +363,7 @@ Use `options` or `optionsSource`, plus `visibleWhen`, `advanced`, `hidden`,
 `required`, `helpText`, `defaultValue`, and `filterTraits`. `icon` is a
 Font Awesome name (`bolt`). Iframe locations take `iframeUrl` and no dialog.
 
-`examples/layout-v21` `src/app/appbars/ping.js` declares every location and
+`examples/example` `src/app/appbars/ping.js` declares every location and
 every dialog field on `ping_overview`.
 
 In the handler the dialog values arrive as **`appBarSettingsValues`** (flat

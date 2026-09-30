@@ -1,5 +1,0 @@
-{
-  "name": "on-update",
-  "runtime": "nodejs22",
-  "description": "Refresh inbox label / max events after settings change"
-}

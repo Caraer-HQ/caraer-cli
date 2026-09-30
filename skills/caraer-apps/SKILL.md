@@ -100,8 +100,7 @@ schema (also emitted by `caraer apps init`):
 Browse the schemas at [Caraer-HQ/caraer-app-schemas](https://github.com/Caraer-HQ/caraer-app-schemas).
 `caraer apps validate` still uses the copies bundled with the CLI.
 
-Reference example: `examples/layout-v21` in the caraer-cli repo
-(`2026.2.1`). `examples/webhook-inbox` is the older `2026.2` folder layout.
+Reference example: `examples/example` in the caraer-cli repo (`2026.2.1`).
 
 ## Agent workflow
 
@@ -251,5 +250,5 @@ to leave for the installer when documented in README.
 
 - Payload shapes, lifecycle events, settings flattening: [reference.md](reference.md)
 - CLI docs in the caraer-cli repo: `docs/webhooks.md`, `docs/app_lifecycle.md`, `docs/platform_versioning.md`
-- Reference example: `examples/layout-v21`
+- Reference example: `examples/example`
 - Schemas: `schemas/*.caraer.schema.json`

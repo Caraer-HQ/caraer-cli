@@ -19,7 +19,7 @@ caraer apps add schedule heartbeat --cron "0 0 */6 * * *"
 ```
 
 On `2026.2.1` that writes `src/app/schedules/<name>.js` (see
-[`examples/layout-v21`](../examples/layout-v21/src/app/schedules/heartbeat.js)).
+[`examples/example`](../examples/example/src/app/schedules/heartbeat.js)).
 The filename is the schedule name and the handler. `--function` is only
 used on `2026.2`, where the command writes JSON that points at a function.
 

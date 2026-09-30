@@ -10,7 +10,7 @@ exports.handler = async (req, res) => {
   if (ctx.token && ctx.appUuid) {
     state = await putState(ctx, {
       installedAt,
-      displayName: ctx.settings.display_name || "Layout 2026.2.1",
+      displayName: ctx.settings.display_name || "Example",
     });
     db = await runSql(ctx, [
       {

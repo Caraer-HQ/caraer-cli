@@ -1,12 +1,17 @@
 {
-  "name": "webhook-inbox",
+  "name": "example",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "caraer apps local dev",
     "validate": "caraer apps validate",
     "push": "caraer apps push",
     "deploy": "caraer apps push",
     "logs": "caraer apps local logs --all"
+  },
+  "dependencies": {
+    "@caraer/cms-runtime": "github:Caraer-HQ/caraer-cms-runtime#v0.1.1",
+    "@caraer/cms-tokens": "github:Caraer-HQ/caraer-cms-tokens#v0.1.1"
   },
   "devDependencies": {
     "@caraer/client": "^2.0.366"

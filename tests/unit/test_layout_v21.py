@@ -426,7 +426,7 @@ def test_app_bar_dialog_rejects_unknown_field_type(tmp_path: Path) -> None:
     assert any("NOT_A_TYPE" in issue.message for issue in report.issues)
 
 
-EXAMPLE = Path(__file__).resolve().parents[2] / "examples" / "layout-v21"
+EXAMPLE = Path(__file__).resolve().parents[2] / "examples" / "example"
 DUE_TOPIC = "record.<setting:due_date.objectName>.date_due.<setting:due_date.propertyName>"
 
 
@@ -503,6 +503,7 @@ def test_example_ships_an_http_webhook_yaml() -> None:
     http = [item for _path, item in found if item.get("deliveryMode") == "HTTP"]
     assert len(http) == 1
     assert http[0]["topic"] == "record.candidate.updated"
+    assert http[0]["name"] == "candidate-updated"
     assert http[0]["url"] == "https://example.com/hooks/caraer"
     assert http[0]["label"] == "Candidate updated"
 

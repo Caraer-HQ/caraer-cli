@@ -2,7 +2,7 @@
   type: SINGLE_LINE
   label: Display name
   helpText: Returned by hello-world, inbound echo, and the heartbeat.
-  defaultValue: Layout 2026.2.1
+  defaultValue: Example
   section: General
   sectionSubtitle: How this install identifies itself
 - name: log_events

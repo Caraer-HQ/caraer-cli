@@ -3,7 +3,7 @@ from pathlib import Path
 from caraer_cli.project.schema import load_workspace
 from caraer_cli.project.validate_app import validate_local_app
 
-EXAMPLE_ROOT = Path(__file__).resolve().parents[2] / "examples" / "layout-v21"
+EXAMPLE_ROOT = Path(__file__).resolve().parents[2] / "examples" / "example"
 
 
 def test_layout_v21_example_validates() -> None:

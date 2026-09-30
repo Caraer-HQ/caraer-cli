@@ -25,7 +25,7 @@ caraer apps add inbound echo --auth NONE --sync
 ```
 
 On `2026.2.1` that writes `src/app/inbound/<name>.js` (see
-[`examples/layout-v21`](../examples/layout-v21/src/app/inbound/echo.js)).
+[`examples/example`](../examples/example/src/app/inbound/echo.js)).
 `name` is the path segment and the handler. `enqueue: true` runs the
 function as an installation job instead of on the request thread.
 

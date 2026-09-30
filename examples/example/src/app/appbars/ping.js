@@ -21,7 +21,7 @@ exports.manifest = {
     {
       name: "ping_overview",
       location: "RECORD_OVERVIEW",
-      label: "Layout v21 ping",
+      label: "Example ping",
       actionLabel: "Run",
       tooltipLabel: "Collect dialog fields, then run ping",
       description: "Every app-bar dialog field type on a record overview action.",

@@ -61,7 +61,7 @@ What the rewrite does:
 - `app-bars/*.json` → `appbars/<function>.js`
 - `modules/<name>/index.astro` → `modules/<name>/<name>.astro`
 
-Review the diff, then push. See [`examples/layout-v21`](../examples/layout-v21)
+Review the diff, then push. See [`examples/example`](../examples/example)
 for the target layout.
 
 ## 2026.2

@@ -1,8 +1,0 @@
-{
-  "topic": "app.installed",
-  "deliveryMode": "SERVERLESS",
-  "enabled": true,
-  "serverlessFunction": {
-    "name": "on-install"
-  }
-}

@@ -1,5 +1,0 @@
-{
-  "name": "on-install",
-  "runtime": "nodejs22",
-  "description": "Initialize empty inbox state on install"
-}

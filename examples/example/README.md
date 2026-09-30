@@ -1,4 +1,4 @@
-# Layout 2026.2.1
+# Example
 
 Reference Caraer app on the default `2026.2.1` source layout. Use this as a
 guide; `caraer apps init` still creates a smaller starter with the same
@@ -38,7 +38,7 @@ grants read and write for that one property. Mapping scopes stay on the object,
 ## Layout
 
 ```text
-layout-v21/
+example/
   caraer.json
   src/app/
     app.caraer.yaml
@@ -56,7 +56,7 @@ layout-v21/
 ## Quick start
 
 ```bash
-cd examples/layout-v21
+cd examples/example
 caraer auth login
 caraer company select <company-uuid>
 caraer apps select .
@@ -98,7 +98,7 @@ Open the app after install.
 | Candidate created | `record.candidate.created` |
 | Candidate updated | `record.candidate.updated` (HTTP, `webhooks/candidate-updated.yaml`) |
 | Availability date due | `record.candidate.date_due.availability_date` |
-| Layout v21 ping (and the other bars) | `app.bar.triggered` |
+| Example ping (and the other bars) | `app.bar.triggered` |
 
 Each row shows a `USER_FRIENDLY` format chip. Source still has
 `record.<setting:target_object>.created` and `label: "Record created"`. Caraer

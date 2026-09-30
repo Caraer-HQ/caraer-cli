@@ -154,7 +154,7 @@ caraer apps add module hello --kind section
 ```
 
 On `2026.2.1` those write code files (see
-[`examples/layout-v21`](examples/layout-v21)):
+[`examples/example`](examples/example)):
 
 - Webhook: `exports.manifest.webhooks` on `src/app/functions/<name>.js`
   (HTTP: `src/app/webhooks/<name>.yaml`)
@@ -217,11 +217,9 @@ Shared helpers live in `src/app/shared/` and are imported with the same relative
 path locally and when deployed, for example `require("../shared")` from
 `functions/<name>.js`.
 
-See [`examples/layout-v21`](examples/layout-v21) for a full `2026.2.1` app
+See [`examples/example`](examples/example) for a full `2026.2.1` app
 (named files, settings list, inbound, schedule, app bars, CMS module, and
 setting-targeted record and due-date webhooks).
-[`examples/webhook-inbox`](examples/webhook-inbox) is the older `2026.2`
-folder layout.
 
 A private app can be removed from the company that created it:
 

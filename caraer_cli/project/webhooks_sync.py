@@ -100,6 +100,9 @@ def discover_webhook_files(
             continue
         data = _load_webhook_file(path)
         if data is not None:
+            if not str(data.get("name") or "").strip():
+                data = dict(data)
+                data["name"] = path.stem
             found.append((path, data))
     return found
 

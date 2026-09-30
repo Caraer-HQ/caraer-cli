@@ -1,6 +1,6 @@
 {
   "platformVersion": "2026.2.1",
-  "name": "layout_v21",
+  "name": "example",
   "appUuid": null,
   "srcDir": "src",
   "autoDeploy": false,

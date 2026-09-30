@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.1.5
+
+- The first `caraer apps push` of a new app no longer sends lifecycle and
+  app-bar functions before they exist. Those hooks are attached after the
+  build, so create does not fail with an empty runtime.
+
+- The only example app is `examples/example` (name `example`, label Example).
+  `examples/webhook-inbox` is removed.
+
+- HTTP webhook files are deployed as HTTP webhooks. A file without `name`
+  uses its filename.
+
 - Module sidebar groups stay `{ group: "Style", fields: [...] }` in `fields`.
   A top-level `components` list is rejected.
 

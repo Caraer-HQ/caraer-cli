@@ -1,8 +1,0 @@
-{
-  "name": "catch",
-  "authMode": "SHARED_SECRET",
-  "enqueue": true,
-  "serverlessFunction": {
-    "name": "catch"
-  }
-}

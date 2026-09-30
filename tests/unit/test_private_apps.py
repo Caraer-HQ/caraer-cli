@@ -92,6 +92,9 @@ def test_create_private_app_uses_private_endpoints(tmp_path: Path) -> None:
     create_private.assert_called_once()
     update_private.assert_called_once()
     create_public.assert_not_called()
+    update_body = update_private.call_args.args[2]
+    assert "installWebhook" not in update_body
+    assert update_body.get("appBars") in (None, [])
     assert data["uuid"] == "priv-1"
     assert load_workspace(root).appUuid == "priv-1"
     assert load_workspace(root).privateApp is True

@@ -1,8 +1,0 @@
-{
-  "platformVersion": "2026.2",
-  "name": "webhook-inbox",
-  "appUuid": null,
-  "srcDir": "src",
-  "runtime": "nodejs22",
-  "autoDeploy": false
-}
