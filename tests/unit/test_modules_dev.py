@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from caraer_cli.project.cms_pins import PUBLISHED_RUNTIME_SPEC, PUBLISHED_TOKENS_SPEC
 from caraer_cli.project.modules_dev import (
     _harness_install_command,
@@ -224,9 +226,44 @@ def test_harness_installs_app_module_libraries(tmp_path: Path) -> None:
     )
     payload = json.loads((harness / "package.json").read_text(encoding="utf-8"))
     assert payload["dependencies"]["three"] == "^0.185.1"
-    assert "ignore-workspace=true" in (harness / ".npmrc").read_text(encoding="utf-8")
+    assert "ignore-workspace=false" in (harness / ".npmrc").read_text(encoding="utf-8")
     assert not _harness_ready(harness)
-    command = _harness_install_command()
-    assert command[0] in {"pnpm", "npm"}
-    if command[0] == "pnpm":
-        assert "--ignore-workspace" in command
+
+
+@pytest.mark.parametrize("existing_preview", [False, True])
+def test_harness_has_its_own_build_approval_workspace(
+    tmp_path: Path, existing_preview: bool
+) -> None:
+    root = _workspace(tmp_path)
+    _write_module(root, "hero")
+    parent_workspace = root / "pnpm-workspace.yaml"
+    parent_config = "packages:\n  - packages/*\nallowBuilds:\n  esbuild: false\n"
+    parent_workspace.write_text(parent_config, encoding="utf-8")
+    harness = root / ".caraer" / "cms-dev"
+    if existing_preview:
+        harness.mkdir(parents=True)
+        (harness / ".npmrc").write_text("ignore-workspace=true\n", encoding="utf-8")
+
+    write_harness(
+        root,
+        load_workspace(root),
+        app_name="demo_app",
+        runtime_spec="latest",
+        tokens_spec="latest",
+    )
+
+    assert (harness / "pnpm-workspace.yaml").read_text(encoding="utf-8") == (
+        "allowBuilds:\n  esbuild: true\n"
+    )
+    assert (harness / ".npmrc").read_text(encoding="utf-8") == "ignore-workspace=false\n"
+    assert parent_workspace.read_text(encoding="utf-8") == parent_config
+
+
+@pytest.mark.parametrize("manager", ["pnpm", "npm"])
+def test_harness_install_loads_workspace_build_approvals(
+    monkeypatch: pytest.MonkeyPatch, manager: str
+) -> None:
+    monkeypatch.setattr(
+        "caraer_cli.project.modules_dev._package_manager", lambda: manager
+    )
+    assert _harness_install_command() == [manager, "install"]

@@ -2552,10 +2552,13 @@ def write_harness(
         )
     samples_path.write_text(json.dumps(samples, indent=2) + "\n", encoding="utf-8")
     (harness / ".gitignore").write_text("*\n", encoding="utf-8")
-    # The app root now has its own package.json. Without this, `pnpm install`
-    # in the harness walks up, treats the app as the project, and skips
-    # @astrojs/node. Vite then loads from the app and the preview dies.
-    (harness / ".npmrc").write_text("ignore-workspace=true\n", encoding="utf-8")
+    # Give the preview its own workspace so pnpm does not install into the
+    # parent app. Keep workspace loading enabled: --ignore-workspace also
+    # bypasses allowBuilds, which esbuild needs for its native binary setup.
+    (harness / ".npmrc").write_text("ignore-workspace=false\n", encoding="utf-8")
+    (harness / "pnpm-workspace.yaml").write_text(
+        "allowBuilds:\n  esbuild: true\n", encoding="utf-8"
+    )
 
     return harness, modules
 
@@ -2567,7 +2570,7 @@ def _package_manager() -> str:
 def _harness_install_command() -> list[str]:
     manager = _package_manager()
     if manager == "pnpm":
-        return ["pnpm", "install", "--ignore-workspace"]
+        return ["pnpm", "install"]
     return ["npm", "install"]
 
 
