@@ -67,13 +67,13 @@ tsconfig.json               # resolves module npm imports from package.json
 src/app/
   app.caraer.yaml           # identity, scopes, auth, details
   settings.yaml             # installer setting fields (optional section grouping)
-  functions/<name>.js       # name is the filename; serverless webhooks in exports.manifest
+  functions/<name>.js       # name is the filename; serverless webhooks in export const manifest
   appbars/<name>.js         # appBars on this file; handler for app.bar.triggered
   lifecycle/<hook>.js       # install|uninstall|rotate|update
   schedules/<name>.js
   inbound/<name>.js
   webhooks/<name>.yaml      # HTTP webhooks (no function)
-  shared/                   # require("../shared")
+  shared/                   # import { helper } from "../shared/index.js"
   modules/<name>/<name>.astro
 ```
 
@@ -85,7 +85,7 @@ Payload types: import from `@caraer/client` (Node) or `caraer-client` (Python),
 e.g. `LifecyclePayload`, `WebhookPayload`, `SchedulePayload`.
 
 On `2026.2.1` the filename is the function name. Serverless webhooks, app bars,
-schedules, inbound, and lifecycle are `exports.manifest` / `manifest = {...}`
+schedules, inbound, and lifecycle are `export const manifest` / `manifest = {...}`
 literals. Record webhooks that run a function live on that function. HTTP
 webhooks are one YAML file each under `src/app/webhooks/`. App bars live in
 `src/app/appbars/`. `2026.2` still uses folders and JSON.
@@ -185,13 +185,13 @@ Installation settings are for **admins installing the app**, not developers.
 
 ### Functions
 
-- Node: `exports.handler = async (req, res) => { ... }`.
+- Node: `export const handler = async (req, res) => { ... }`.
 - Python: `def handler(request): ...` returning `{statusCode, body}`.
 - Shared helpers live in `src/app/shared/` and are imported with the same
-  relative path locally and deployed: `require("../shared")` from
+  relative path locally and deployed: `import { helper } from "../shared/index.js"` from
   `functions/<name>.js`, `appbars/`, `lifecycle/`, `schedules/`, or
   `inbound/` (2026.2.1). `2026.2` folders still use
-  `require("../../shared")`.
+  `import { helper } from "../../shared/index.js"`.
 - Read settings via flattened `body.settingsSchema` (`name` → `value`).
 - Use `body.installationToken` (short-lived `inst_…` Bearer) + `body.appUuid`
   for `/v2/apps/{appUuid}/installation/state|secrets|jobs`.

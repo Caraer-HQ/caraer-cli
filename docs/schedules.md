@@ -4,8 +4,8 @@ A schedule runs on a cron. On `2026.2.1` it is a code file:
 
 ```js
 // src/app/schedules/heartbeat.js
-exports.handler = async (req, res) => { res.status(200).json({ ok: true }); };
-exports.manifest = { schedule: "0 0 */12 * * *", enabled: true };
+export const handler = async (req, res) => { res.status(200).json({ ok: true }); };
+export const manifest = { schedule: "0 0 */12 * * *", enabled: true };
 ```
 
 `2026.2` still uses one JSON file under `src/app/schedules/` that points at a

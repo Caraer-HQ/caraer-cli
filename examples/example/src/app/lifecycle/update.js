@@ -1,6 +1,6 @@
-const { contextFrom, putState, ok } = require("../shared");
+import { contextFrom, putState, ok } from "../shared/index.js";
 
-exports.handler = async (req, res) => {
+export const handler = async (req, res) => {
   const ctx = contextFrom(req);
   const updatedAt = new Date().toISOString();
   if (ctx.token && ctx.appUuid) {
@@ -15,7 +15,7 @@ exports.handler = async (req, res) => {
   });
 };
 
-exports.manifest = {
+export const manifest = {
   lifecycle: "update",
   topic: "app.updated",
   label: "App updated",

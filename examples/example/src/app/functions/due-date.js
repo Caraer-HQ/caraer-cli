@@ -1,8 +1,8 @@
-const { contextFrom, ok } = require("../shared");
+import { contextFrom, ok } from "../shared/index.js";
 
 // Date-due body uses the same USER_FRIENDLY record envelope as a record
 // webhook. event.type is "date_due". propertyName is the selected property.
-exports.handler = async (req, res) => {
+export const handler = async (req, res) => {
   const ctx = contextFrom(req);
   ok(res, {
     functionName: "due-date",
@@ -12,7 +12,7 @@ exports.handler = async (req, res) => {
   });
 };
 
-exports.manifest = {
+export const manifest = {
   description: "Fires for the due date chosen in the due_date setting.",
   webhooks: [
     {

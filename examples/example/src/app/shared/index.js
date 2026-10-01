@@ -130,7 +130,7 @@ function ok(res, extra) {
   });
 }
 
-module.exports = {
+export {
   contextFrom,
   flattenSettings,
   objectNameFromSetting,

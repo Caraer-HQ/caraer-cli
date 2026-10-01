@@ -25,24 +25,27 @@ a settings field whose options come from your code. See
 ```text
 src/app/functions/my-action.js   # Node
 src/app/functions/my-action.py   # Python
-src/app/shared/                  # require("../shared")
+src/app/shared/                  # import { helper } from "../shared/index.js"
 ```
 
 The filename is the function name. Put record webhooks on
-`exports.manifest.webhooks` (or Python `manifest = {...}`). App bars live in
-`src/app/appbars/<name>.js` with `exports.manifest.appBars`; that file is the
+`manifest.webhooks` on the exported `manifest` object (or Python `manifest = {...}`). App bars live in
+`src/app/appbars/<name>.js` with `manifest.appBars` on the exported `manifest` object; that file is the
 one Caraer runs for `app.bar.triggered`. Helpers used by more than one
-function live in `src/app/shared/` and import as `require("../shared")`.
+function live in `src/app/shared/` and import as `import { helper } from "../shared/index.js"`.
 
 `2026.2` still uses a folder with `index.js` / `main.py` and
-`require("../../shared")`.
+`import { helper } from "../../shared/index.js"`.
+
+Node functions use ES modules. The project’s `package.json` declares
+`"type": "module"`; relative imports include the filename and `.js` extension.
 
 ## Handlers
 
 Node:
 
 ```js
-exports.handler = async (req, res) => {
+export const handler = async (req, res) => {
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
   res.status(200).json({ ok: true });
 };

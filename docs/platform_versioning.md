@@ -24,7 +24,7 @@ New private apps are always created as V2 (`runtime` defaults to `nodejs22`).
 
 - Default for `caraer apps init`
 - Flat functions: `src/app/functions/<name>.js` (or `.py`)
-- Lifecycle, schedules, and inbound are code files with `exports.manifest`
+- Lifecycle, schedules, and inbound are code files with `export const manifest`
 - Serverless webhooks live on the function manifest
 - HTTP webhooks are one YAML file each under `src/app/webhooks/`
 - Give each webhook a `label`; the CLI fills one from the topic when omitted

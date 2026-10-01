@@ -253,7 +253,7 @@ def test_harness_has_its_own_build_approval_workspace(
     )
 
     assert (harness / "pnpm-workspace.yaml").read_text(encoding="utf-8") == (
-        "allowBuilds:\n  esbuild: true\n"
+        "allowBuilds:\n  esbuild: true\n  sharp: true\n"
     )
     assert (harness / ".npmrc").read_text(encoding="utf-8") == "ignore-workspace=false\n"
     assert parent_workspace.read_text(encoding="utf-8") == parent_config

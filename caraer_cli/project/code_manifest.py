@@ -48,7 +48,10 @@ def upsert_code_manifest(source: str, payload: dict[str, Any], *, path: Path | N
         start = source.index("{", match.end())
         old = _object_literal(source, start)
         return source[:start] + literal + source[start + len(old) :]
-    return source.rstrip() + f"\n\nexports.manifest = {literal};\n"
+    # Preserve older CommonJS functions when adding their first manifest.
+    commonjs = re.search(r"\b(?:exports\.|module\.exports\b)", source) is not None
+    declaration = "exports.manifest" if commonjs else "export const manifest"
+    return source.rstrip() + f"\n\n{declaration} = {literal};\n"
 
 
 def write_code_manifest(path: Path, payload: dict[str, Any]) -> None:

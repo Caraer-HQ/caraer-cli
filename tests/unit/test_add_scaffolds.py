@@ -30,7 +30,7 @@ def test_scaffold_function_creates_nodejs_folder(tmp_path: Path) -> None:
     # folder name and entry file.
     assert folder.name == "my-action.js"
     assert folder.is_file()
-    assert "exports.handler" in folder.read_text(encoding="utf-8")
+    assert "export const handler" in folder.read_text(encoding="utf-8")
     from caraer_cli.project.sync import discover_local_functions
 
     discovered = {m.name: m for m, _, _, _ in discover_local_functions(root, config)}

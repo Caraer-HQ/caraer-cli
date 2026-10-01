@@ -1,6 +1,6 @@
-const { contextFrom, ok } = require("../shared");
+import { contextFrom, ok } from "../shared/index.js";
 
-exports.handler = async (req, res) => {
+export const handler = async (req, res) => {
   const ctx = contextFrom(req);
   ok(res, {
     functionName: "uninstall",
@@ -8,7 +8,7 @@ exports.handler = async (req, res) => {
   });
 };
 
-exports.manifest = {
+export const manifest = {
   lifecycle: "uninstall",
   topic: "app.uninstalled",
   label: "App uninstalled",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from http.client import HTTPConnection
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -72,6 +73,7 @@ def _wait_for_server(port: int) -> HTTPConnection:
             index.read()
             return conn
         except OSError:
+            time.sleep(0.01)
             conn.close()
             conn = HTTPConnection("127.0.0.1", port, timeout=5)
     pytest.fail("dev server did not start")
@@ -280,3 +282,34 @@ def test_deploy_wait_polls_v2(tmp_path: Path) -> None:
     ):
         result = _poll_v2_runtime(client, config, timeout_s=5, interval_s=0.01)
     assert result["runtimeStatus"] == "READY"
+
+
+@pytest.mark.parametrize("suffix", [".js", ".mjs"])
+def test_invoke_es_module_with_shared_import_and_top_level_await(tmp_path: Path, suffix: str) -> None:
+    from caraer_cli.project.local_dev import invoke_local
+
+    (tmp_path / "package.json").write_text('{"type":"module"}')
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "index.js").write_text('export const greeting = "hello";\n')
+    entry = tmp_path / f"hello world{suffix}"
+    entry.write_text(
+        'import { greeting } from "./shared/index.js";\n'
+        'const ready = await Promise.resolve(true);\n'
+        'console.log("initializing");\n'
+        'export const handler = async (req, res) => {\n'
+        '  res.status(201).json({ greeting, ready, name: req.body.name });\n'
+        '};\n'
+    )
+    assert invoke_local("nodejs22", entry, {"name": "Robin"}) == {
+        "statusCode": 201,
+        "body": {"greeting": "hello", "ready": True, "name": "Robin"},
+    }
+
+
+def test_invoke_commonjs_still_works(tmp_path: Path) -> None:
+    from caraer_cli.project.local_dev import invoke_local
+
+    entry = tmp_path / "legacy.cjs"
+    entry.write_text('exports.handler = (req, res) => res.json({ ok: true });\n')
+    assert invoke_local("nodejs22", entry, {})["body"] == {"ok": True}

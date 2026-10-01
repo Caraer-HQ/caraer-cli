@@ -68,7 +68,7 @@ def _invoke_python(entry: Path, payload: dict[str, Any]) -> dict[str, Any]:
 
 def _invoke_node(entry: Path, payload: dict[str, Any]) -> dict[str, Any]:
     script = f"""
-const mod = require({json.dumps(str(entry))});
+const entryUrl = {json.dumps(entry.resolve().as_uri())};
 const payload = {json.dumps(payload)};
 // Keep handler console.log off stdout so the CLI can parse the result JSON.
 const _log = console.log.bind(console);
@@ -81,7 +81,7 @@ const res = {{
   send(body) {{ this.body = body; return this; }}
 }};
 const req = {{ body: payload, method: 'POST', headers: {{}} }};
-Promise.resolve(mod.handler(req, res)).then(() => {{
+import(entryUrl).then((mod) => mod.handler(req, res)).then(() => {{
   process.stdout.write(JSON.stringify({{ statusCode: res.statusCode, body: res.body }}));
 }}).catch((err) => {{
   console.error(err && err.stack ? err.stack : String(err));

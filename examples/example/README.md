@@ -17,7 +17,7 @@ offers to rewrite it to this layout (default yes). Or run
 | Piece | Where |
 | --- | --- |
 | Named functions | `src/app/functions/hello-world.js`, `due-date.js` |
-| Shared helpers | `src/app/shared/index.js` (`require("../shared")`) |
+| Shared helpers | `src/app/shared/index.js` (`import { helper } from "../shared/index.js"`) |
 | Settings list | `src/app/settings.yaml` (`section` cards) |
 | Record-created webhook | `record.<setting:target_object>.created` on `hello-world` |
 | HTTP webhook | `src/app/webhooks/candidate-updated.yaml` (POST, no function) |

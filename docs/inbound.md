@@ -6,12 +6,12 @@ the app. On `2026.2.1` it is a code file:
 
 ```js
 // src/app/inbound/gmail-push.js
-exports.handler = async (req, res) => {
+export const handler = async (req, res) => {
   const body = req.body || {};
   res.status(200).json({ ok: true, inbound: body.payload || body.body || body });
 };
 
-exports.manifest = { authMode: "SHARED_SECRET", enqueue: true };
+export const manifest = { authMode: "SHARED_SECRET", enqueue: true };
 ```
 
 Keep `sharedSecret` out of the committed file; put it in installation secrets

@@ -486,7 +486,7 @@ def _write_lifecycle_function_entry(
             "/**\n"
             f" * Handle {topic} (app lifecycle).\n"
             " */\n"
-            "exports.handler = async (req, res) => {\n"
+            "export const handler = async (req, res) => {\n"
             "  const body =\n"
             "    typeof req.body === \"string\"\n"
             "      ? JSON.parse(req.body || \"{}\")\n"

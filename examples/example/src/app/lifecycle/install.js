@@ -1,8 +1,8 @@
 // req.body.event is "Installed" | "Updated" | "Uninstalled" | "Rotated".
 // installationToken, caraerApiBase, and settingsSchema sit on req.body.
-const { contextFrom, putState, runSql, ok } = require("../shared");
+import { contextFrom, putState, runSql, ok } from "../shared/index.js";
 
-exports.handler = async (req, res) => {
+export const handler = async (req, res) => {
   const ctx = contextFrom(req);
   const installedAt = new Date().toISOString();
   let state = null;
@@ -35,7 +35,7 @@ exports.handler = async (req, res) => {
   });
 };
 
-exports.manifest = {
+export const manifest = {
   lifecycle: "install",
   topic: "app.installed",
   label: "App installed",

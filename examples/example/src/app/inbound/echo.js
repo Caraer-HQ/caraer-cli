@@ -1,8 +1,8 @@
 // Direct inbound: req.body.body is the HTTP JSON, req.body.action is
 // "app.inbound". Queued inbound wraps that object as req.body.payload.
-const { contextFrom, putState, ok } = require("../shared");
+import { contextFrom, putState, ok } from "../shared/index.js";
 
-exports.handler = async (req, res) => {
+export const handler = async (req, res) => {
   const ctx = contextFrom(req);
   const receivedAt = new Date().toISOString();
   if (ctx.settings.log_events && ctx.token && ctx.appUuid) {
@@ -19,7 +19,7 @@ exports.handler = async (req, res) => {
   });
 };
 
-exports.manifest = {
+export const manifest = {
   authMode: "NONE",
   enqueue: false,
   enabled: true,

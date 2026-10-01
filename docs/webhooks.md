@@ -7,7 +7,7 @@ either a function in this app or an HTTP POST to a URL you own.
 On `2026.2.1` a **serverless** webhook lives on the function that should run:
 
 ```js
-exports.manifest = {
+export const manifest = {
   webhooks: [{
     topic: "record.<setting:target_object>.created",
     label: "Record created",
@@ -60,7 +60,7 @@ caraer apps add webhook --topic record.<setting:target_object>.created --functio
 ```
 
 On `2026.2.1` that writes (or updates) `src/app/functions/hello-world.js`
-and puts the topic on `exports.manifest.webhooks`. HTTP delivery writes
+and puts the topic on `manifest.webhooks` on the exported `manifest` object. HTTP delivery writes
 `src/app/webhooks/<topic>.yaml` instead:
 
 ```bash
@@ -193,7 +193,7 @@ Append `.<relation>` when only one relation type should fire.
 same setting/trait placeholders as `requiredScopes`:
 
 ```js
-exports.manifest = {
+export const manifest = {
   webhooks: [{
     topic: "record.<setting:target_object>.created",
     label: "Record created",
@@ -213,7 +213,7 @@ A path after the field name reads one key. A property single-select stores
 A row is selected by its `fieldName`, so `field.email` is that key's target.
 
 ```js
-exports.manifest = {
+export const manifest = {
   webhooks: [{
     topic: "record.<setting:due_date.objectName>.date_due.<setting:due_date.propertyName>",
     label: "Due date",
@@ -252,7 +252,7 @@ in `src/app/appbars/`. There is no `app-bars.yaml` and no
 `serverlessFunction` reference:
 
 ```js
-exports.manifest = {
+export const manifest = {
   appBars: [
     {
       name: "ping_overview",

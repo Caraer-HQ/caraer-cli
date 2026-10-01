@@ -422,7 +422,7 @@ function flattenSettings(schema) {
   return out;
 }
 
-exports.handler = async (req, res) => {
+export const handler = async (req, res) => {
   try {
     const body =
       typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
@@ -528,7 +528,7 @@ def _v21_function_source(
 
     body_js = _OPTIONS_FUNCTION_JS if template == "options" else (
         "/**\n * Caraer serverless entrypoint.\n */\n"
-        "exports.handler = async (req, res) => {\n"
+        "export const handler = async (req, res) => {\n"
         "  res.status(200).json({ ok: true });\n"
         "};\n"
     )
@@ -545,7 +545,7 @@ def _v21_function_source(
             literal.replace("true", "True").replace("false", "False").replace("null", "None")
         )
         return f"manifest = {py_literal}\n\n{body_py}"
-    return f"{body_js.rstrip()}\n\nexports.manifest = {literal};\n"
+    return f"{body_js.rstrip()}\n\nexport const manifest = {literal};\n"
 
 
 def scaffold_function(
@@ -622,7 +622,7 @@ def scaffold_function(
         else:
             entry.write_text(
                 "/**\n * Caraer serverless entrypoint.\n */\n"
-                "exports.handler = async (req, res) => {\n"
+                "export const handler = async (req, res) => {\n"
                 "  res.status(200).json({ ok: true });\n"
                 "};\n",
                 encoding="utf-8",

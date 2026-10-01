@@ -3,7 +3,7 @@
 Caraer apps can run code when a company **installs**, **updates**, **uninstalls**, or
 **rotates** credentials. On `2026.2.1` each hook is a named file under
 `src/app/lifecycle/`. The file is a normal [serverless function](functions.md)
-with `exports.manifest` (or Python `manifest = {...}`).
+with `export const manifest` (or Python `manifest = {...}`).
 
 `2026.2` still uses `src/app/lifecycle/*.json` plus a matching
 `functions/on-<hook>/` folder.
@@ -39,12 +39,12 @@ caraer apps add lifecycle-hook uninstall
 
 ```js
 // src/app/lifecycle/install.js
-exports.handler = async (req, res) => {
+export const handler = async (req, res) => {
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
   res.status(200).json({ ok: true, event: body.event || null });
 };
 
-exports.manifest = {
+export const manifest = {
   lifecycle: "install",
   topic: "app.installed",
   label: "App installed",
@@ -126,7 +126,7 @@ function flattenSettings(schema) {
   return out;
 }
 
-exports.handler = async (req, res) => {
+export const handler = async (req, res) => {
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
   const settings = flattenSettings(body.settingsSchema);
   // settings.pubsub_topic, body.installationToken, body.companyUuid, …

@@ -2,7 +2,7 @@
  * Options loader for the RECORD_OVERVIEW dialog field `channel`.
  * Caraer calls this with action "loadSettingOptions".
  */
-exports.handler = async (req, res) => {
+export const handler = async (req, res) => {
   const body =
     typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
   const query = String(body.query || "").trim().toLowerCase();

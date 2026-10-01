@@ -156,7 +156,7 @@ caraer apps add module hello --kind section
 On `2026.2.1` those write code files (see
 [`examples/example`](examples/example)):
 
-- Webhook: `exports.manifest.webhooks` on `src/app/functions/<name>.js`
+- Webhook: `manifest.webhooks` on the exported `manifest` object on `src/app/functions/<name>.js`
   (HTTP: `src/app/webhooks/<name>.yaml`)
 - Schedule: `src/app/schedules/<name>.js`
 - Inbound: `src/app/inbound/<name>.js`
@@ -183,24 +183,24 @@ my_app/
   src/app/
     app.caraer.yaml           # identity, scopes, auth, details
     settings.yaml             # installer setting fields (optional section grouping)
-    functions/<name>.js       # name is the filename; serverless webhooks live in exports.manifest
+    functions/<name>.js       # name is the filename; serverless webhooks live in export const manifest
     appbars/<name>.js         # appBars on this file; Caraer runs it for app.bar.triggered
     lifecycle/<hook>.js       # install | uninstall | rotate | update
     schedules/<name>.js
     inbound/<name>.js
     webhooks/<name>.yaml      # HTTP webhooks (POST to a URL, no function)
-    shared/                   # require("../shared") from each of the above
+    shared/                   # import { helper } from "../shared/index.js" from each of the above
     modules/<name>/<name>.astro
 ```
 
-A function is a file named after the function, with `exports.handler` (Node) or
+A function is a file named after the function, with `export const handler` (Node) or
 `def handler` (Python). Helpers live in `shared/`.
 
 Node handlers export `handler`. Payload types come from `@caraer/client`
 (`LifecyclePayload`, `WebhookPayload`, `SchedulePayload`):
 
 ```js
-exports.handler = async (req, res) => {
+export const handler = async (req, res) => {
   const body = req.body || {};
   res.status(200).json({ ok: true, event: body.event || null });
 };
@@ -214,7 +214,7 @@ def handler(request):
 ```
 
 Shared helpers live in `src/app/shared/` and are imported with the same relative
-path locally and when deployed, for example `require("../shared")` from
+path locally and when deployed, for example `import { helper } from "../shared/index.js"` from
 `functions/<name>.js`.
 
 See [`examples/example`](examples/example) for a full `2026.2.1` app

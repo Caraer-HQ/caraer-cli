@@ -1,4 +1,4 @@
-const { contextFrom, objectNameFromSetting, ok } = require("../shared");
+import { contextFrom, objectNameFromSetting, ok } from "../shared/index.js";
 
 // req.body is the webhook.
 //
@@ -16,7 +16,7 @@ const { contextFrom, objectNameFromSetting, ok } = require("../shared");
 // The overview dialog's Preview button calls this function. Dialog answers
 // are flat on body.appBarSettingsValues. The app bars themselves live in
 // src/app/appbars/ping.js.
-exports.handler = async (req, res) => {
+export const handler = async (req, res) => {
   const ctx = contextFrom(req);
   const record = ctx.record;
   ok(res, {
@@ -33,7 +33,7 @@ exports.handler = async (req, res) => {
   });
 };
 
-exports.manifest = {
+export const manifest = {
   description: "Runs when a record is created on the installer-chosen object.",
   webhooks: [{
     topic: "record.<setting:target_object>.created",

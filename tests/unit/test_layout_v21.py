@@ -554,3 +554,17 @@ def test_validate_warns_on_2026_2_layout(tmp_path: Path) -> None:
     )
     report = validate_local_app(root)
     assert any("2026.2.1" in issue.message for issue in report.issues if issue.severity == "warning")
+
+
+def test_upsert_new_manifest_uses_es_export() -> None:
+    source = "export const handler = async () => ({});\n"
+    updated = upsert_code_manifest(source, {"enabled": True})
+    assert "export const manifest =" in updated
+    assert parse_code_manifest(updated) == {"enabled": True}
+
+
+def test_upsert_new_manifest_preserves_legacy_commonjs() -> None:
+    updated = upsert_code_manifest("exports.handler = () => {};", {"enabled": True})
+    assert "exports.manifest =" in updated
+    assert "export const" not in updated
+    assert parse_code_manifest(updated) == {"enabled": True}

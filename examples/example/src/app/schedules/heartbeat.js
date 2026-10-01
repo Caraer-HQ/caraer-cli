@@ -1,8 +1,8 @@
 // req.body.action is "app.schedule". The schedule is req.body.payload
 // ({ scheduleName, ...template }). Token and settingsSchema are on req.body.
-const { contextFrom, putState, ok } = require("../shared");
+import { contextFrom, putState, ok } from "../shared/index.js";
 
-exports.handler = async (req, res) => {
+export const handler = async (req, res) => {
   const ctx = contextFrom(req);
   const ranAt = new Date().toISOString();
   if (ctx.token && ctx.appUuid) {
@@ -15,7 +15,7 @@ exports.handler = async (req, res) => {
   });
 };
 
-exports.manifest = {
+export const manifest = {
   schedule: "0 0 */12 * * *",
   enabled: true,
   description: "Writes lastHeartbeatAt to installation state every 12 hours.",

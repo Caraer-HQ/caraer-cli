@@ -121,7 +121,7 @@ def app_bars_dir(root: Path, src_dir: str = "src") -> Path:
 def appbars_dir(root: Path, src_dir: str = "src") -> Path:
     """2026.2.1 function files that declare ``appBars``.
 
-    Same depth as ``functions/``, so ``require("../shared")`` still resolves.
+    Same depth as ``functions/``, so ``import { helper } from "../shared/index.js"`` still resolves.
     Legacy ``app-bars/`` JSON stays on 2026.2.
     """
     return app_dir(root, src_dir) / "appbars"
@@ -147,8 +147,8 @@ def shared_dir(root: Path, src_dir: str = "src") -> Path:
 
     Deployed at ``shared/`` in the runtime archive root, so functions import
     them with the same relative path as locally, e.g.
-    ``require("../shared")`` from a 2026.2.1 file or
-    ``require("../../shared/utils")`` from ``functions/<name>/index.js``.
+    ``import { helper } from "../shared/index.js"`` from a 2026.2.1 file or
+    ``import { helper } from "../../shared/utils.js"`` from ``functions/<name>/index.js``.
     """
     return app_dir(root, src_dir) / "shared"
 

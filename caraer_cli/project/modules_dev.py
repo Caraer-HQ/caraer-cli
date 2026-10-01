@@ -2554,10 +2554,10 @@ def write_harness(
     (harness / ".gitignore").write_text("*\n", encoding="utf-8")
     # Give the preview its own workspace so pnpm does not install into the
     # parent app. Keep workspace loading enabled: --ignore-workspace also
-    # bypasses allowBuilds, which esbuild needs for its native binary setup.
+    # bypasses allowBuilds, needed by esbuild and Astro's sharp image processor.
     (harness / ".npmrc").write_text("ignore-workspace=false\n", encoding="utf-8")
     (harness / "pnpm-workspace.yaml").write_text(
-        "allowBuilds:\n  esbuild: true\n", encoding="utf-8"
+        "allowBuilds:\n  esbuild: true\n  sharp: true\n", encoding="utf-8"
     )
 
     return harness, modules

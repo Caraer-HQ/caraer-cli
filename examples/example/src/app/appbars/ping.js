@@ -1,10 +1,10 @@
-const { contextFrom, ok } = require("../shared");
+import { contextFrom, ok } from "../shared/index.js";
 
 // Action bars (RECORD_PREVIEW, RECORD_OVERVIEW, RECORD_TRAIT) open
 // settingsSchema as a dialog. Submitted values arrive as
 // body.appBarSettingsValues. Iframe bars (RECORD_DETAIL, TOOL_BAR,
 // TRAIT_BAR) need iframeUrl and do not call this function.
-exports.handler = async (req, res) => {
+export const handler = async (req, res) => {
   const ctx = contextFrom(req);
   ok(res, {
     functionName: ctx.functionName || "ping",
@@ -15,7 +15,7 @@ exports.handler = async (req, res) => {
   });
 };
 
-exports.manifest = {
+export const manifest = {
   description: "Action and iframe app bars.",
   appBars: [
     {

@@ -238,7 +238,7 @@ const settings = body.settingsValues
 
 ## Record webhook topics
 
-On `2026.2.1` declare a serverless topic on `exports.manifest.webhooks`. An
+On `2026.2.1` declare a serverless topic on `manifest.webhooks` on the exported `manifest` object. An
 HTTP webhook is one YAML file under `src/app/webhooks/`. On `2026.2` use
 one JSON file under `src/app/webhooks/` for either mode.
 
@@ -246,7 +246,7 @@ The object (and property) may be a literal name or a setting/trait
 placeholder, the same tokens as `requiredScopes`:
 
 ```js
-exports.manifest = {
+export const manifest = {
   webhooks: [{
     topic: "record.<setting:target_object>.created",
     label: "Record created",
@@ -288,7 +288,7 @@ On `2026.2.1` the route is the file:
 
 ```js
 // src/app/inbound/catch.js
-exports.manifest = { authMode: "SHARED_SECRET", enqueue: true };
+export const manifest = { authMode: "SHARED_SECRET", enqueue: true };
 ```
 
 `2026.2` still uses `src/app/inbound/<name>.json` that points at a function.
@@ -317,7 +317,7 @@ Example every 12 hours on `2026.2.1`:
 
 ```js
 // src/app/schedules/heartbeat.js
-exports.manifest = { schedule: "0 0 */12 * * *", enabled: true };
+export const manifest = { schedule: "0 0 */12 * * *", enabled: true };
 ```
 
 `2026.2` still uses `src/app/schedules/<name>.json` that points at a function.
@@ -340,7 +340,7 @@ On `2026.2.1` declare `appBars` on a function in `src/app/appbars/` (no
 that is how an action collects input (including a `FILE` upload):
 
 ```js
-exports.manifest = {
+export const manifest = {
   appBars: [
     {
       location: "RECORD_OVERVIEW",
@@ -378,7 +378,7 @@ const ctx = buildCtx(body);   // ctx.settings = installation settings
 ## Node handler skeleton
 
 ```js
-exports.handler = async (req, res) => {
+export const handler = async (req, res) => {
   try {
     const body =
       typeof req.body === "string"
