@@ -6,7 +6,7 @@ manifest shape that the installed ``@caraer/cms-runtime`` types reject.
 
 from __future__ import annotations
 
-PUBLISHED_RUNTIME_TAG = "v0.1.4"
+PUBLISHED_RUNTIME_TAG = "v0.1.6"
 PUBLISHED_TOKENS_TAG = "v0.1.2"
 
 PUBLISHED_RUNTIME_SPEC = f"github:Caraer-HQ/caraer-cms-runtime#{PUBLISHED_RUNTIME_TAG}"
