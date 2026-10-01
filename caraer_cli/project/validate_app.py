@@ -37,6 +37,7 @@ from caraer_cli.project.settings_sync import discover_local_settings
 from caraer_cli.project.app_bars_sync import discover_local_app_bars
 from caraer_cli.project.lifecycle_sync import LIFECYCLE_HOOKS, discover_local_lifecycle
 from caraer_cli.project.marketplace_assemble import assemble_local_manifest
+from caraer_cli.project.naming import MODULE_NAME_RE as SETTING_FIELD_NAME_RE
 from caraer_cli.project.sync import discover_local_functions, list_local_function_names
 from caraer_cli.project.webhooks_sync import discover_local_webhooks
 
@@ -95,7 +96,6 @@ CONDITION_OPERATORS = frozenset(
 )
 VALUELESS_CONDITION_OPERATORS = frozenset({"IS_SET", "IS_NOT_SET"})
 LIST_CONDITION_OPERATORS = frozenset({"IN", "NOT_IN"})
-SETTING_FIELD_NAME_RE = re.compile(r"^[a-z]+(?:_[a-z]+)*$")
 APP_BAR_LOCATIONS = frozenset(
     {
         "RECORD_PREVIEW",

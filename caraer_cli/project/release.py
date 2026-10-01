@@ -112,9 +112,9 @@ def prompt_release(
         break
 
     notes = ask_text(
-        "Release notes",
+        "Release notes (optional)",
         default=(default_notes or "").strip(),
-        required=True,
+        required=False,
     ).strip()
     return version, notes
 
@@ -140,8 +140,6 @@ def resolve_release_for_build(
                 f"Version must be greater than previous ({previous})."
             )
         notes = (release_notes or "").strip()
-        if not notes:
-            raise ValueError("Non-interactive push requires --notes.")
         return version.strip(), notes
 
     return prompt_release(

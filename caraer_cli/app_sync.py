@@ -612,19 +612,33 @@ def push_app(
     release_notes: str | None = None,
     interactive: bool = True,
 ) -> dict[str, Any]:
-    from caraer_cli.formatters.output import print_success, print_warning
+    from caraer_cli.formatters.output import PushProgress, print_success, print_warning
+    from caraer_cli.project.validate_app import validate_local_app
+
+    progress = PushProgress()
+    progress.start("Validating local app")
+    report = validate_local_app(root)
+    if not report.ok:
+        progress.finish()
+        errors = [issue for issue in report.issues if issue.severity == "error"]
+        for issue in errors:
+            print_warning(f"{issue.path}: {issue.message}")
+        raise ValueError(
+            f"Local app has {len(errors)} validation error(s). "
+            "Fix them or run 'caraer apps validate'."
+        )
 
     config = load_workspace(root)
 
     # Create remote app when unlinked but local manifest exists.
     if not (app_uuid or config.appUuid):
-        print_success("Creating remote app from local manifest…")
+        progress.start("Creating remote app from local manifest")
         created = create_app_from_manifest(client, root, config)
         config = load_workspace(root)
         manifest_result = created
     else:
         config = ensure_linked(client, root, config, app_uuid=app_uuid)
-        print_success("Pushing app manifest…")
+        progress.start("Pushing app manifest")
         # Soft resolve: settings always; lifecycle/app-bars wait for function UUIDs.
         manifest_result = push_manifest(
             client, root, config, patch=patch, strict_function_refs=False
@@ -636,6 +650,7 @@ def push_app(
             "Sandbox deploys isolate Neo4j data via X-Caraer-Sandbox-Uuid, "
             "but the Cloud Function runtime is shared with production."
         )
+    progress.start("Packing and deploying functions")
     functions_result = push_functions(
         client,
         root,
@@ -649,7 +664,7 @@ def push_app(
         release_notes=release_notes,
         interactive=interactive,
     )
-    print_success("Refreshing app manifest (lifecycle / app bars)…")
+    progress.start("Refreshing app manifest (lifecycle / app bars)")
     try:
         manifest_result = push_manifest(
             client, root, config, patch=patch, strict_function_refs=True
@@ -670,7 +685,7 @@ def push_app(
         inbound_result: dict[str, Any] = {"mode": "server-reconcile"}
         oauth_result: dict[str, Any] = {"mode": "server-reconcile"}
     else:
-        print_success("Syncing webhooks…")
+        progress.start("Syncing webhooks, schedules, inbound, and OAuth")
         webhooks_result = push_webhooks(
             client,
             root,
@@ -699,6 +714,7 @@ def push_app(
             delete_missing=delete_missing,
         )
 
+    progress.start("Publishing CMS modules")
     modules_result = push_cms_modules(
         client,
         root,
@@ -706,6 +722,7 @@ def push_app(
         functions_result=functions_result,
         version=version,
     )
+    progress.finish()
 
     return {
         "appUuid": config.appUuid,

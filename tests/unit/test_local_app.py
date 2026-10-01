@@ -13,6 +13,7 @@ from caraer_cli.local_app import (
     local_app_summary,
     resolve_app_file_path,
 )
+from caraer_cli.project.cms_pins import PUBLISHED_RUNTIME_SPEC, PUBLISHED_TOKENS_SPEC
 from caraer_cli.project.scaffold import (
     ensure_package_json,
     ensure_tsconfig,
@@ -144,8 +145,8 @@ def test_node_init_writes_tsconfig_and_module_package_json(tmp_path: Path) -> No
     assert package["devDependencies"]["@caraer/client"] == "^2.0.366"
     assert package["scripts"]["dev"] == "caraer apps local dev"
     assert package["scripts"]["push"] == "caraer apps push"
-    assert package["dependencies"]["@caraer/cms-runtime"].startswith("github:Caraer-HQ/caraer-cms-runtime")
-    assert package["dependencies"]["@caraer/cms-tokens"].startswith("github:Caraer-HQ/caraer-cms-tokens")
+    assert package["dependencies"]["@caraer/cms-runtime"] == PUBLISHED_RUNTIME_SPEC
+    assert package["dependencies"]["@caraer/cms-tokens"] == PUBLISHED_TOKENS_SPEC
     assert (root / "src" / "app" / "modules" / "hello_world" / "hello_world.astro").is_file()
     assert (root / "src" / "app" / "modules" / "hello_world" / "types.d.ts").is_file()
     assert ensure_tsconfig(root) is None
@@ -214,3 +215,30 @@ def test_install_npm_dependencies_requires_npm(tmp_path: Path) -> None:
             assert "npm is required" in str(exc)
         else:
             raise AssertionError("expected RuntimeError")
+
+
+def test_website_template_scaffolds_header_hero_and_page(tmp_path: Path) -> None:
+    root = tmp_path / "website"
+    result = scaffold_app_project(
+        root,
+        app_payload=build_public_app_placeholder(label="Website", name="website"),
+        sample_function="hello-world",
+        runtime="nodejs22",
+        template="website",
+    )
+
+    modules = root / "src" / "app" / "modules"
+    assert not (modules / "hello_world").exists()
+    header = (modules / "site_header" / "site_header.astro").read_text(encoding="utf-8")
+    hero = (modules / "hero" / "hero.astro").read_text(encoding="utf-8")
+    home = (modules / "home" / "home.astro").read_text(encoding="utf-8")
+    assert "kind: 'header'" in header
+    assert "kind: 'section'" in hero
+    assert "kind: 'page'" in home
+    assert "type Props = ModuleProps<SiteHeaderFields>;" in header
+    assert "as ModuleProps" not in header
+    assert [path.name for path in result["sample_modules"]] == [
+        "site_header",
+        "hero",
+        "home",
+    ]

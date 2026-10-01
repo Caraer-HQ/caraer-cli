@@ -153,6 +153,23 @@ def print_success(message: str) -> None:
     console.print(f"[green]{message}[/green]")
 
 
+class PushProgress:
+    """Print a running/done line for each long push stage."""
+
+    def __init__(self) -> None:
+        self._current: str | None = None
+
+    def start(self, label: str) -> None:
+        self.finish()
+        print_success(f"… {label}")
+        self._current = label
+
+    def finish(self) -> None:
+        if self._current:
+            print_success(f"✓ {self._current}")
+            self._current = None
+
+
 def print_warning(message: str) -> None:
     console.print(f"[yellow]{message}[/yellow]")
 

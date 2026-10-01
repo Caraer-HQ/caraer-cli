@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
+from caraer_cli.project.cms_pins import PUBLISHED_RUNTIME_SPEC, PUBLISHED_RUNTIME_TAG
 from caraer_cli.project.modules_codegen import render_module_types
-from caraer_cli.project.modules_scaffold import scaffold_module
+from caraer_cli.project.modules_scaffold import _manifest_source, scaffold_module
 from caraer_cli.project.modules_sync import (
     discover_local_modules,
     flatten_module_fields,
@@ -384,7 +387,72 @@ def test_scaffold_creates_a_valid_module(tmp_path: Path) -> None:
     assert [p.name for p in directory.iterdir()] == ["index.astro"]
     assert 'data-caraer-field="heading"' in astro
     assert 'data-caraer-field="body"' in astro
+    assert "group: 'Content'" in astro
+    assert "type Props = ModuleProps<FeatureGridFields>;" in astro
+    assert "const { fields } = Astro.props;" in astro
+    assert "as ModuleProps" not in astro
     assert _errors(root) == []
+
+
+def test_hero_2_is_a_valid_module_name(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    config = load_workspace(root)
+    scaffold_module(root, config, name="hero_2", kind="section")
+    assert _errors(root) == []
+
+
+def _sibling_repo(name: str) -> Path | None:
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        candidate = parent / name
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def test_scaffolded_manifest_typechecks_against_pinned_runtime(tmp_path: Path) -> None:
+    """A grouped-fields scaffold must stay inside the pinned ModuleManifest."""
+    runtime_root = _sibling_repo("caraer-cms-runtime")
+    contract = None if runtime_root is None else runtime_root / "src" / "contract.ts"
+    if contract is None or not contract.is_file():
+        raise AssertionError("Pinned CMS runtime checkout is missing contract.ts")
+    tsc = shutil.which("tsc")
+    if tsc is None:
+        web = _sibling_repo("caraer-web")
+        sibling = None if web is None else web / "node_modules" / ".bin" / "tsc"
+        tsc = str(sibling) if sibling is not None and sibling.is_file() else None
+    npx = shutil.which("npx")
+    if tsc is None and npx is None:
+        raise AssertionError("tsc or npx is required to typecheck the scaffold")
+
+    assert PUBLISHED_RUNTIME_SPEC.endswith(f"#{PUBLISHED_RUNTIME_TAG}")
+    check = tmp_path / "check.ts"
+    check.write_text(
+        "import type { ModuleManifest } from './contract.ts';\n\n"
+        f"{_manifest_source('hero_2', 'Hero', 'section', None)}\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "contract.ts").write_text(contract.read_text(encoding="utf-8"), encoding="utf-8")
+    command = (
+        [tsc, "--strict", "--module", "nodenext", "--moduleResolution", "nodenext", "--noEmit", str(check)]
+        if tsc
+        else [
+            npx,
+            "--yes",
+            "-p",
+            "typescript@5.6.3",
+            "tsc",
+            "--strict",
+            "--module",
+            "nodenext",
+            "--moduleResolution",
+            "nodenext",
+            "--noEmit",
+            str(check),
+        ]
+    )
+    result = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_scaffold_with_a_framework_places_the_island_correctly(tmp_path: Path) -> None:

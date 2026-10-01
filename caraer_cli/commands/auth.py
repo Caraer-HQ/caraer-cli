@@ -11,6 +11,7 @@ from caraer_cli.context import AppContext
 from caraer_cli.errors import ApiError, AuthError
 from caraer_cli.formatters.output import print_data, print_success, print_warning
 from caraer_cli.state import session as session_store
+from caraer_cli.state.config import save_config
 
 app = typer.Typer(help="Authentication commands.", no_args_is_help=True)
 
@@ -107,6 +108,7 @@ def login(
                 status = str(poll.get("status") or "").lower()
                 if status == "approved":
                     _store_tokens(app_ctx.profile_name, poll)
+                    _apply_login_company(app_ctx, poll)
                     print_success(f"Logged in for profile '{app_ctx.profile_name}'.")
                     _print_next_steps(app_ctx)
                     return
@@ -123,6 +125,15 @@ def login(
     _store_tokens(app_ctx.profile_name, data if isinstance(data, dict) else {})
     print_success(f"Logged in for profile '{app_ctx.profile_name}'.")
     _print_next_steps(app_ctx)
+
+
+def _apply_login_company(app_ctx: AppContext, payload: dict) -> None:
+    company_uuid = str(payload.get("companyUuid") or "").strip()
+    if not company_uuid:
+        return
+    profile = app_ctx.config.profiles[app_ctx.profile_name]
+    profile.company_uuid = company_uuid
+    save_config(app_ctx.config)
 
 
 def _print_next_steps(app_ctx: AppContext) -> None:

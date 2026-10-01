@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from caraer_cli.project.app_manifest_template import render_app_manifest
+from caraer_cli.project.cms_pins import PUBLISHED_RUNTIME_SPEC, PUBLISHED_TOKENS_SPEC
 from caraer_cli.project.lifecycle_sync import LIFECYCLE_HOOKS
 from caraer_cli.project.paths import (
     WORKSPACE_FILE,
@@ -697,8 +698,8 @@ def ensure_package_json(root: Path, name: str) -> Path | None:
             "logs": "caraer apps local logs --all",
         },
         "dependencies": {
-            "@caraer/cms-runtime": "github:Caraer-HQ/caraer-cms-runtime#v0.1.3",
-            "@caraer/cms-tokens": "github:Caraer-HQ/caraer-cms-tokens#v0.1.1",
+            "@caraer/cms-runtime": PUBLISHED_RUNTIME_SPEC,
+            "@caraer/cms-tokens": PUBLISHED_TOKENS_SPEC,
         },
         "devDependencies": {
             "@caraer/client": "^2.0.366",
@@ -720,22 +721,22 @@ def install_npm_dependencies(root: Path) -> bool:
     """
     if not (root / "package.json").is_file():
         return False
+    from caraer_cli.formatters.output import print_success
+
     npm = shutil.which("npm")
     if not npm:
         raise RuntimeError(
             "npm is required to install @caraer/cms-runtime after apps init. "
             "Install Node.js, then run `npm install` in the app directory."
         )
+    print_success("Installing npm dependencies…")
     result = subprocess.run(
         [npm, "install"],
         cwd=root,
-        capture_output=True,
-        text=True,
         check=False,
     )
     if result.returncode != 0:
-        detail = (result.stderr or result.stdout or "npm install failed").strip()
-        raise RuntimeError(detail[-2000:])
+        raise RuntimeError("npm install failed.")
     return True
 
 
@@ -763,6 +764,7 @@ def scaffold_app_project(
     src_dir: str = "src",
     sample_function: str | None = "hello-world",
     sample_module: str | None = "hello_world",
+    template: str = "default",
     runtime: str = "nodejs22",
     platform_version: str = PLATFORM_VERSION,
     private_app: bool = False,
@@ -864,9 +866,14 @@ def scaffold_app_project(
                 force=force,
             )
 
-    module_folder = _scaffold_sample_module(
-        project_root, config, name=sample_module, force=force
-    )
+    if template == "website":
+        module_folders = _scaffold_website_modules(project_root, config, force=force)
+        module_folder = module_folders[0] if module_folders else None
+    else:
+        module_folder = _scaffold_sample_module(
+            project_root, config, name=sample_module, force=force
+        )
+        module_folders = [module_folder] if module_folder else []
 
     return {
         "root": project_root,
@@ -882,8 +889,16 @@ def scaffold_app_project(
         "sample_function": function_folder,
         "sample_webhook": webhook_file,
         "sample_module": module_folder,
+        "sample_modules": module_folders,
         "config": config,
     }
+
+
+WEBSITE_TEMPLATE_MODULES = (
+    ("site_header", "Site header", "header"),
+    ("hero", "Hero", "section"),
+    ("home", "Home", "page"),
+)
 
 
 def _scaffold_sample_module(
@@ -892,6 +907,8 @@ def _scaffold_sample_module(
     *,
     name: str | None,
     force: bool,
+    label: str = "Hello world",
+    kind: str = "section",
 ) -> Path | None:
     """Write the starter CMS module that ``apps add module`` would create."""
     if not name:
@@ -905,8 +922,8 @@ def _scaffold_sample_module(
         root,
         config,
         name=name,
-        label="Hello world",
-        kind="section",
+        label=label,
+        kind=kind,
         force=force,
     )
     for module in discover_local_modules(root, config):
@@ -914,3 +931,25 @@ def _scaffold_sample_module(
             write_module_types(module)
             break
     return directory
+
+
+def _scaffold_website_modules(
+    root: Path,
+    config: ProjectConfig,
+    *,
+    force: bool,
+) -> list[Path]:
+    """Write header, section, and page starters for a CMS website app."""
+    folders: list[Path] = []
+    for name, label, kind in WEBSITE_TEMPLATE_MODULES:
+        folder = _scaffold_sample_module(
+            root,
+            config,
+            name=name,
+            label=label,
+            kind=kind,
+            force=force,
+        )
+        if folder:
+            folders.append(folder)
+    return folders

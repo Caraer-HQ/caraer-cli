@@ -437,10 +437,13 @@ def add_module(
     from caraer_cli.wizard.prompts import require_text
 
     app_ctx: AppContext = ctx.obj
+    from caraer_cli.project.naming import require_module_name
+
     raw_name = require_text(name, "Module name", flag="name")
-    module_name = re.sub(r"[^a-z0-9]+", "_", raw_name.strip().lower()).strip("_")
-    if not module_name:
-        raise ValueError("Module name must contain at least one letter or digit.")
+    try:
+        module_name = require_module_name(raw_name)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
     kind_value = kind.strip().lower()
     if kind_value not in MODULE_KINDS:

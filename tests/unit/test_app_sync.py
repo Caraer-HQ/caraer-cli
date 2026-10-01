@@ -117,6 +117,10 @@ def test_push_app_pipeline_order(tmp_path: Path) -> None:
         patch("caraer_cli.app_sync.push_schedules", side_effect=track_schedules),
         patch("caraer_cli.app_sync.push_inbound", side_effect=track_inbound),
         patch("caraer_cli.app_sync.push_external_oauth_providers", side_effect=track_oauth),
+        patch(
+            "caraer_cli.app_sync.push_cms_modules",
+            side_effect=lambda *_a, **_k: calls.append("cms") or {"modules": 0},
+        ),
     ):
         from caraer_cli.app_sync import push_app
 
@@ -130,8 +134,39 @@ def test_push_app_pipeline_order(tmp_path: Path) -> None:
         "schedules",
         "inbound",
         "oauth",
+        "cms",
     ]
     assert result["appUuid"] == "app-1"
     assert "schedules" in result
     assert "inbound" in result
     assert "externalOAuthProviders" in result
+
+
+def test_push_app_stops_on_validation_errors(tmp_path: Path) -> None:
+    root = tmp_path / "demo"
+    scaffold_app_project(
+        root,
+        app_payload=build_public_app_placeholder(label="Demo", name="demo"),
+        app_uuid="app-1",
+        sample_function=None,
+        force=True,
+        platform_version="2026.2",
+    )
+    bad = root / "src" / "app" / "modules" / "Hero-2"
+    bad.mkdir(parents=True)
+    (bad / "index.astro").write_text(
+        "---\n"
+        "export const manifest = { name: 'Hero-2', label: 'Hero', "
+        'kind: "section", category: "content", fields: [] } '
+        "satisfies ModuleManifest;\n---\n<div />\n",
+        encoding="utf-8",
+    )
+    client = MagicMock()
+    from caraer_cli.app_sync import push_app
+
+    try:
+        push_app(client, root, app_uuid="app-1", legacy_functions=True)
+    except ValueError as exc:
+        assert "validation error" in str(exc)
+    else:
+        raise AssertionError("expected validation to stop the push")

@@ -43,7 +43,8 @@ export const manifest = {
   ],
 } satisfies ModuleManifest;
 
-const { fields } = Astro.props as ModuleProps<HelloWorldFields>;
+type Props = ModuleProps<HelloWorldFields>;
+const { fields } = Astro.props;
 ---
 
 <section class="hello_world">

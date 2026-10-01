@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from caraer_cli.project.cms_pins import PUBLISHED_RUNTIME_SPEC, PUBLISHED_TOKENS_SPEC
 from caraer_cli.project.modules_dev import (
     _harness_install_command,
     _harness_ready,
@@ -147,6 +148,11 @@ def test_harness_hides_fields_that_are_not_visible(tmp_path: Path) -> None:
     assert "/api/upload" in page
     assert "One image URL per line" not in page
     assert (harness / "src" / "pages" / "api" / "upload.ts").is_file()
+    assert (
+        "import { DEFAULT_TOKENS, toCustomProperties, toResponsiveTypeCss, toStyleAttribute } from '@caraer/cms-tokens';"
+        in page
+    )
+    assert "responsive-type.ts" not in page
 
 
 def test_harness_ready_rejects_broken_cms_package_links(tmp_path: Path) -> None:
@@ -171,8 +177,8 @@ def test_harness_ready_rejects_broken_cms_package_links(tmp_path: Path) -> None:
         json.dumps(
             {
                 "dependencies": {
-                    "@caraer/cms-runtime": "github:Caraer-HQ/caraer-cms-runtime#v0.1.3",
-                    "@caraer/cms-tokens": "github:Caraer-HQ/caraer-cms-tokens#v0.1.1",
+                    "@caraer/cms-runtime": PUBLISHED_RUNTIME_SPEC,
+                    "@caraer/cms-tokens": PUBLISHED_TOKENS_SPEC,
                 }
             }
         ),
@@ -183,7 +189,7 @@ def test_harness_ready_rejects_broken_cms_package_links(tmp_path: Path) -> None:
         json.dumps(
             {
                 "@caraer/cms-runtime": "github:Caraer-HQ/caraer-cms-runtime#v0.1.2",
-                "@caraer/cms-tokens": "github:Caraer-HQ/caraer-cms-tokens#v0.1.1",
+                "@caraer/cms-tokens": PUBLISHED_TOKENS_SPEC,
             }
         ),
         encoding="utf-8",
@@ -192,8 +198,8 @@ def test_harness_ready_rejects_broken_cms_package_links(tmp_path: Path) -> None:
     (harness / "node_modules" / ".caraer-cms-specs.json").write_text(
         json.dumps(
             {
-                "@caraer/cms-runtime": "github:Caraer-HQ/caraer-cms-runtime#v0.1.3",
-                "@caraer/cms-tokens": "github:Caraer-HQ/caraer-cms-tokens#v0.1.1",
+                "@caraer/cms-runtime": PUBLISHED_RUNTIME_SPEC,
+                "@caraer/cms-tokens": PUBLISHED_TOKENS_SPEC,
             }
         ),
         encoding="utf-8",

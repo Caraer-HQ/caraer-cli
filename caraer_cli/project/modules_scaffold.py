@@ -76,7 +76,8 @@ def _entry_source(name: str, label: str, kind: str, framework: str | None) -> st
 
 {_manifest_source(name, label, kind, framework)}
 
-const {{ fields }} = Astro.props as ModuleProps<{interface}>;
+type Props = ModuleProps<{interface}>;
+const {{ fields }} = Astro.props;
 ---
 
 <section class="{name}">

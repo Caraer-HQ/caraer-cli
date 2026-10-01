@@ -472,6 +472,14 @@ def init_app(
         "--private/--public",
         help="Create a company-private app (default is a public marketplace app).",
     ),
+    template: str = typer.Option(
+        "default",
+        "--template",
+        help=(
+            "Starter layout: default (hello_world section) or website "
+            "(header, hero, and page modules)."
+        ),
+    ),
     force: bool = typer.Option(False, "--force", help="Overwrite existing app files."),
     select: bool = typer.Option(True, "--select/--no-select", help="Select the new app file in the profile."),
 ) -> None:
@@ -499,6 +507,9 @@ def init_app(
         raise typer.BadParameter(
             "--platform must be 2026.2.1, 2026.2, or 2026.1."
         )
+    template_value = template.strip().lower()
+    if template_value not in {"default", "website"}:
+        raise typer.BadParameter("--template must be default or website.")
     try:
         payload = build_public_app_placeholder(
             label=label,
@@ -546,6 +557,7 @@ def init_app(
             runtime=runtime,
             platform_version=platform,
             private_app=private_app,
+            template=template_value,
             force=force,
         )
     except FileExistsError as exc:
@@ -584,15 +596,24 @@ def init_app(
             ],
             "sample_function": str(result["sample_function"]) if result["sample_function"] else None,
             "sample_module": str(result["sample_module"]) if result["sample_module"] else None,
+            "sample_modules": [
+                str(path) for path in (result.get("sample_modules") or []) if path
+            ],
         },
         app_ctx.output,
     )
     if select:
         _select_local_file(app_ctx, app_file)
     if platform == "2026.2.1":
+        modules_hint = (
+            "Website starters are under src/app/modules/{site_header,hero,home}."
+            if template_value == "website"
+            else "A starter CMS module is under src/app/modules/hello_world. "
+            "CMS apps can use --template website."
+        )
         print_success(
             "Lifecycle hooks are src/app/lifecycle/{install,uninstall,rotate,update}.js. "
-            "A starter CMS module is under src/app/modules/hello_world. "
+            f"{modules_hint} "
             "Edit files under src/app/, then run: caraer apps push"
         )
     else:
@@ -762,8 +783,8 @@ def _normalize_release_args(
         version = version.strip()
         if not is_semver(version):
             raise typer.BadParameter("--version must be MAJOR.MINOR.PATCH (e.g. 1.2.3).")
-    if require_release and yes and not dry_run and (not version or not (release_notes or "").strip()):
-        raise typer.BadParameter("--yes requires both --version and --notes.")
+    if require_release and yes and not dry_run and not version:
+        raise typer.BadParameter("--yes requires --version.")
     return version, release_notes
 
 
@@ -851,6 +872,9 @@ def _run_push(
         )
     except WizardCancelled:
         raise typer.Exit(code=1) from None
+    except ValueError as exc:
+        print_warning(str(exc))
+        raise typer.Exit(code=1) from None
     if result.get("appUuid"):
         manifest = resolve_app_file_path(selected_file or root)
         _save_selection(app_ctx, app_uuid=str(result["appUuid"]), app_file=str(manifest))
@@ -897,7 +921,7 @@ def push_public(
         False,
         "--yes",
         "-y",
-        help="Non-interactive: skip confirmation; require --version and --notes when deploying.",
+        help="Non-interactive: skip confirmation; require --version when deploying.",
     ),
     upgrade: bool | None = typer.Option(
         None,
@@ -980,10 +1004,14 @@ def push_public(
         legacy_functions=legacy_functions,
         target=target,
     )
+    from caraer_cli.formatters.output import PushProgress
+
     installed_uuid = str(result.get("appUuid") or "")
+    progress = PushProgress()
     if company and installed_uuid:
-        print_success(f"Installing app '{installed_uuid}' on company {company}…")
+        progress.start("Installing on company")
         result["install"] = install_app_on_company(app_ctx.api_client(), installed_uuid)
+        progress.finish()
         print_success(f"Pushed and installed app '{installed_uuid}'.")
     else:
         print_success("Pushed app (manifest + functions + webhooks).")

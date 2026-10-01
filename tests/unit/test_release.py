@@ -77,3 +77,12 @@ def test_resolve_non_interactive_requires_increment(
     )
     assert version == "1.0.1"
     assert notes == "Fixed bug"
+    version, notes = resolve_release_for_build(
+        client,
+        "proj",
+        version="1.0.2",
+        release_notes=None,
+        interactive=False,
+    )
+    assert version == "1.0.2"
+    assert notes == ""
