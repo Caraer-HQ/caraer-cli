@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -401,26 +402,24 @@ def test_hero_2_is_a_valid_module_name(tmp_path: Path) -> None:
     assert _errors(root) == []
 
 
-def _sibling_repo(name: str) -> Path | None:
-    here = Path(__file__).resolve()
-    for parent in here.parents:
-        candidate = parent / name
-        if candidate.is_dir():
-            return candidate
-    return None
-
-
 def test_scaffolded_manifest_typechecks_against_pinned_runtime(tmp_path: Path) -> None:
     """A grouped-fields scaffold must stay inside the pinned ModuleManifest."""
-    runtime_root = _sibling_repo("caraer-cms-runtime")
-    contract = None if runtime_root is None else runtime_root / "src" / "contract.ts"
-    if contract is None or not contract.is_file():
-        raise AssertionError("Pinned CMS runtime checkout is missing contract.ts")
+    runtime_root = Path(os.environ.get(
+        "CARAER_CMS_RUNTIME_ROOT",
+        str(Path(__file__).resolve().parents[3] / "caraer-cms-runtime"),
+    ))
+    assert runtime_root.is_dir(), (
+        "CMS runtime checkout is missing; set CARAER_CMS_RUNTIME_ROOT "
+        "to a caraer-cms-runtime checkout"
+    )
+    contract = subprocess.run(
+        ["git", "-C", str(runtime_root), "show", f"{PUBLISHED_RUNTIME_TAG}:src/contract.ts"],
+        capture_output=True, text=True, check=False,
+    )
+    assert contract.returncode == 0, (
+        f"Cannot read CMS runtime contract from {PUBLISHED_RUNTIME_TAG}: {contract.stderr}"
+    )
     tsc = shutil.which("tsc")
-    if tsc is None:
-        web = _sibling_repo("caraer-web")
-        sibling = None if web is None else web / "node_modules" / ".bin" / "tsc"
-        tsc = str(sibling) if sibling is not None and sibling.is_file() else None
     npx = shutil.which("npx")
     if tsc is None and npx is None:
         raise AssertionError("tsc or npx is required to typecheck the scaffold")
@@ -432,7 +431,7 @@ def test_scaffolded_manifest_typechecks_against_pinned_runtime(tmp_path: Path) -
         f"{_manifest_source('hero_2', 'Hero', 'section', None)}\n",
         encoding="utf-8",
     )
-    (tmp_path / "contract.ts").write_text(contract.read_text(encoding="utf-8"), encoding="utf-8")
+    (tmp_path / "contract.ts").write_text(contract.stdout, encoding="utf-8")
     command = (
         [tsc, "--strict", "--module", "nodenext", "--moduleResolution", "nodenext", "--noEmit", str(check)]
         if tsc

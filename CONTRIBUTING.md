@@ -14,7 +14,14 @@ source .venv/bin/activate
 
 ## Checks
 
+Install Node.js 22 and the TypeScript compiler used by CI. The scaffold
+contract test reads `src/contract.ts` directly from `PUBLISHED_RUNTIME_TAG`
+in a `caraer-cms-runtime` checkout. CI checks out that tag automatically.
+Locally, use a sibling checkout or set `CARAER_CMS_RUNTIME_ROOT` to another
+checkout containing the pinned tag. The working tree can stay on any branch.
+
 ```bash
+npm install --global typescript@5.6.3
 ./scripts/ci.sh
 # or: pytest tests/unit -q
 ```
