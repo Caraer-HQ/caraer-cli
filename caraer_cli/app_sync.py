@@ -597,6 +597,25 @@ def _deploy_has_full_reconcile(functions_result: dict[str, Any]) -> bool:
     )
 
 
+def validate_before_push(root: Path) -> None:
+    """Cancel before any remote work when local app validation fails."""
+    from caraer_cli.formatters.output import print_error, print_warning
+    from caraer_cli.formatters.progress import progress_step
+    from caraer_cli.project.validate_app import validate_local_app
+
+    with progress_step("Validating local app"):
+        report = validate_local_app(root)
+        for issue in report.issues:
+            emit = print_error if issue.severity == "error" else print_warning
+            emit(f"{issue.path}: {issue.message}")
+        if not report.ok:
+            errors = sum(issue.severity == "error" for issue in report.issues)
+            raise ValueError(
+                f"Push cancelled: local app has {errors} validation error(s). "
+                "Fix them and run 'caraer apps validate' before retrying."
+            )
+
+
 def push_app(
     client: CaraerApiClient,
     root: Path,
@@ -613,20 +632,10 @@ def push_app(
     interactive: bool = True,
 ) -> dict[str, Any]:
     from caraer_cli.formatters.output import PushProgress, print_success, print_warning
-    from caraer_cli.project.validate_app import validate_local_app
 
+    # Validate again after any command-level layout upgrade, and protect direct callers.
+    validate_before_push(root)
     progress = PushProgress()
-    progress.start("Validating local app")
-    report = validate_local_app(root)
-    if not report.ok:
-        progress.finish()
-        errors = [issue for issue in report.issues if issue.severity == "error"]
-        for issue in errors:
-            print_warning(f"{issue.path}: {issue.message}")
-        raise ValueError(
-            f"Local app has {len(errors)} validation error(s). "
-            "Fix them or run 'caraer apps validate'."
-        )
 
     config = load_workspace(root)
 

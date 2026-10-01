@@ -55,6 +55,7 @@ def test_scaffold_app_project_layout(tmp_path: Path) -> None:
         app_payload=payload,
         sample_function="hello-world",
         runtime="python312",
+        template="default",
     )
 
     assert (root / "caraer.json").is_file()
@@ -132,6 +133,7 @@ def test_node_init_writes_tsconfig_and_module_package_json(tmp_path: Path) -> No
         app_payload=payload,
         sample_function=None,
         runtime="nodejs22",
+        template="default",
     )
 
     tsconfig = json.loads((root / "tsconfig.json").read_text(encoding="utf-8"))
@@ -202,8 +204,26 @@ def test_install_npm_dependencies_runs_npm_install(tmp_path: Path) -> None:
         run.return_value.stdout = ""
         assert install_npm_dependencies(tmp_path) is True
     run.assert_called_once()
-    assert run.call_args.args[0] == ["/usr/bin/npm", "install"]
+    assert run.call_args.args[0] == ["/usr/bin/npm", "install", "--loglevel", "info"]
     assert run.call_args.kwargs["cwd"] == tmp_path
+
+
+def test_install_npm_dependencies_failure_does_not_report_success(tmp_path: Path, capsys) -> None:
+    (tmp_path / "package.json").write_text("{}\n", encoding="utf-8")
+    with (
+        patch("caraer_cli.project.scaffold.shutil.which", return_value="/usr/bin/npm"),
+        patch("caraer_cli.project.scaffold.subprocess.run") as run,
+    ):
+        run.return_value.returncode = 1
+        try:
+            install_npm_dependencies(tmp_path)
+        except RuntimeError as exc:
+            assert "npm install failed" in str(exc)
+        else:
+            raise AssertionError("expected RuntimeError")
+    output = capsys.readouterr().err
+    assert "… Installing npm dependencies" in output
+    assert "✓" not in output
 
 
 def test_install_npm_dependencies_requires_npm(tmp_path: Path) -> None:
@@ -232,13 +252,16 @@ def test_website_template_scaffolds_header_hero_and_page(tmp_path: Path) -> None
     header = (modules / "site_header" / "site_header.astro").read_text(encoding="utf-8")
     hero = (modules / "hero" / "hero.astro").read_text(encoding="utf-8")
     home = (modules / "home" / "home.astro").read_text(encoding="utf-8")
-    assert "kind: 'header'" in header
-    assert "kind: 'section'" in hero
-    assert "kind: 'page'" in home
-    assert "type Props = ModuleProps<SiteHeaderFields>;" in header
+    assert '"kind": "header"' in header
+    assert '"kind": "section"' in hero
+    assert '"kind": "page"' in home
+    assert "type Props = ModuleProps<SiteHeaderFields>" in header
     assert "as ModuleProps" not in header
     assert [path.name for path in result["sample_modules"]] == [
         "site_header",
         "hero",
+        "features",
+        "call_to_action",
+        "site_footer",
         "home",
     ]

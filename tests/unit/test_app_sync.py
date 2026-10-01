@@ -142,7 +142,7 @@ def test_push_app_pipeline_order(tmp_path: Path) -> None:
     assert "externalOAuthProviders" in result
 
 
-def test_push_app_stops_on_validation_errors(tmp_path: Path) -> None:
+def test_push_app_stops_on_validation_errors(tmp_path: Path, capsys) -> None:
     root = tmp_path / "demo"
     scaffold_app_project(
         root,
@@ -170,3 +170,5 @@ def test_push_app_stops_on_validation_errors(tmp_path: Path) -> None:
         assert "validation error" in str(exc)
     else:
         raise AssertionError("expected validation to stop the push")
+    client.request.assert_not_called()
+    assert "✓ Validating local app" not in capsys.readouterr().err

@@ -72,8 +72,8 @@ deploy, install, or publish the app unless I explicitly ask.
 6. Log in with `caraer auth login` and stop so I can approve the device code
    in the browser. Do not ask for or type my password. If device login is
    unavailable, ask me to run `caraer auth login --email <my-email>` myself.
-7. Run `caraer company list` and ask which company to use, then
-   `caraer company select <uuid>`.
+7. Browser login lets the user choose the default CLI company. If no company
+   was selected, run `caraer company select` to choose one.
 8. Ask whether the app is private to that company or a public marketplace app,
    and what label to use. Then scaffold with platform 2026.2.1 (the default):
    - Private: `caraer apps init --private --label "<Label>" --auth-method API_KEY`
@@ -99,10 +99,17 @@ caraer skill list
 
 ```bash
 caraer auth login
+# Choose the default CLI company in the browser after signing in.
 # CI or password login: caraer auth login --email you@example.com
-caraer company list
-caraer company select <company-uuid>
+caraer company select
 ```
+
+Browser login saves the chosen company as the default for the active CLI profile.
+Use `caraer company select` to change it later.
+
+Use ↑/↓ to highlight a company and Enter to select it. The current company is
+highlighted by default. Scripts can still pass a UUID with
+`caraer company select <company-uuid>`.
 
 Create a local app:
 
@@ -127,7 +134,17 @@ caraer apps local logs          # the only local function, or a prompt
 caraer apps local logs --all
 ```
 
+`caraer apps push` validates the local app before planning or pushing, including
+with `--dry-run` and `--no-deploy`. Validation errors cancel the command with a
+non-zero exit code; fix the reported issues before retrying. Warnings are shown
+and allow the push to continue, as with `caraer apps validate`.
+
 Only the company that created the app (or a super-admin) can push builds.
+
+`caraer apps init` and the create-app wizard show each setup step, with elapsed-time
+updates every five seconds during long waits. Dependency installation also streams
+npm informational logs. Progress messages go to stderr, including when output is
+redirected.
 
 `--no-deploy` syncs without a build. Private apps (`caraer apps init --private`,
 or `privateApp: true` in `caraer.json`) use the private app API and cannot be
@@ -165,8 +182,15 @@ On `2026.2` `add webhook|schedule|inbound` still write JSON under
 `src/app/webhooks/`, `schedules/`, and `inbound/`.
 
 `caraer apps init` already creates lifecycle files
-(`src/app/lifecycle/{install,uninstall,rotate,update}.js`) and a starter
-`modules/hello_world`. A `2026.2` app is rewritten to `2026.2.1` on the
+(`src/app/lifecycle/{install,uninstall,rotate,update}.js`) and a complete CMS
+website starter: `site_header`, `hero`, `features`, `call_to_action`,
+`site_footer`, and a `home` page that composes the content sections. Features
+and Call to action reuse `modules/_components/FeatureCard.astro`. The generated
+README explains how to preview Home with `npm run dev`, customize editable
+fields, and configure site chrome. Use `--template default` for the minimal
+`hello_world` section, or `--template website` to select the full starter explicitly.
+
+ A `2026.2` app is rewritten to `2026.2.1` on the
 next `caraer apps push` unless you decline the prompt (default yes) or
 pass `--no-upgrade`. `caraer apps upgrade` does the same rewrite without
 deploying. See [docs/platform_versioning.md](docs/platform_versioning.md).

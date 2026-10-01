@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from caraer_cli.formatters.progress import progress_step
 from caraer_cli.wizard.catalog import (
     MAIN_CATEGORIES,
     find_main_category,
@@ -528,15 +529,16 @@ def run_public_app_wizard(
         ):
             raise WizardCancelled()
 
-    result = scaffold_app_project(
-        project_dir,
-        app_payload=payload,
-        project_name=name,
-        sample_function=function_name,
-        runtime=resolved_runtime,
-        private_app=private,
-        force=True,
-    )
+    with progress_step(f"Creating app files in {project_dir}"):
+        result = scaffold_app_project(
+            project_dir,
+            app_payload=payload,
+            project_name=name,
+            sample_function=function_name,
+            runtime=resolved_runtime,
+            private_app=private,
+            force=True,
+        )
     if result.get("sample_module"):
         try:
             if install_npm_dependencies(result["root"]):

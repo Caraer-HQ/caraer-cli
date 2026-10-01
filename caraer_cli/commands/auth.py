@@ -100,7 +100,7 @@ def login(
                     webbrowser.open(verification_uri)
                 except Exception:  # noqa: BLE001
                     pass
-            print_success("Waiting for approval in the browser…")
+            print_success("Sign in and choose the default CLI company in the browser…")
             deadline = time.monotonic() + expires_in
             while time.monotonic() < deadline:
                 time.sleep(max(1.0, interval))
@@ -132,6 +132,8 @@ def _apply_login_company(app_ctx: AppContext, payload: dict) -> None:
     if not company_uuid:
         return
     profile = app_ctx.config.profiles[app_ctx.profile_name]
+    if profile.company_uuid != company_uuid:
+        profile.sandbox_uuid = None  # sandboxes belong to the previous company
     profile.company_uuid = company_uuid
     save_config(app_ctx.config)
 
@@ -139,12 +141,12 @@ def _apply_login_company(app_ctx: AppContext, payload: dict) -> None:
 def _print_next_steps(app_ctx: AppContext) -> None:
     if app_ctx.profile.company_uuid:
         print_success(
-            f"Profile company is '{app_ctx.profile.company_uuid}'. "
-            "If API calls fail with Company not found, run 'caraer company clear' "
-            "then 'caraer company list'."
+            f"Default company for profile '{app_ctx.profile_name}': "
+            f"{app_ctx.profile.company_uuid}. "
+            "Run 'caraer company select' to change it."
         )
     else:
-        print_success("Next: run 'caraer company list' and 'caraer company select <uuid>'.")
+        print_success("Next: run 'caraer company select' and use the arrow keys to choose a company.")
 
 
 @app.command("logout")

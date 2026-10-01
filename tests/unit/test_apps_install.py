@@ -174,3 +174,72 @@ def test_push_wait_and_no_deploy_pass_through(
     assert result.exit_code == 0, result.output
     assert pushed.call_args.kwargs["deploy"] is False
     assert pushed.call_args.kwargs["wait"] is True
+
+
+@pytest.mark.parametrize("args", [
+    ["--yes", "--version", "1.0.0"],
+    ["--dry-run"],
+    ["--no-deploy", "--yes"],
+])
+def test_push_validates_before_upgrade_plan_or_remote_actions(tmp_path, args):
+    root = tmp_path / "demo"
+    scaffold_app_project(
+        root,
+        app_payload=build_public_app_placeholder(label="Demo", name="demo"),
+        sample_function=None,
+    )
+    # A real validation error rather than a mocked report.
+    manifest = root / "src/app/app.caraer.yaml"
+    manifest.write_text("name: demo\nlabel: Demo\nauthMethod: INVALID\n")
+    with (
+        patch("caraer_cli.commands.apps._maybe_upgrade_layout_on_push") as upgrade,
+        patch("caraer_cli.commands.apps._confirm_push_plan") as plan,
+        patch("caraer_cli.commands.apps._run_push") as push,
+        patch("caraer_cli.app_install.install_app_on_company") as install,
+        patch.object(AppContext, "api_client") as client,
+    ):
+        result = _invoke_push(_app_ctx(company_uuid="company-1"), ["--file", str(root), *args])
+    assert result.exit_code == 1, result.output
+    assert "authMethod" in result.output
+    assert "Push cancelled" in result.output
+    assert "✓ Validating local app" not in result.output
+    upgrade.assert_not_called()
+    plan.assert_not_called()
+    push.assert_not_called()
+    install.assert_not_called()
+    client.assert_not_called()
+
+
+def test_push_validates_before_a_successful_dry_run(tmp_path):
+    from caraer_cli.project.validate_app import ValidationIssue, ValidationReport
+
+    root = tmp_path / "demo"
+    scaffold_app_project(
+        root,
+        app_payload=build_public_app_placeholder(label="Demo", name="demo"),
+        sample_function=None,
+    )
+    stages = []
+
+    def validate(_root):
+        stages.append("validate")
+        return ValidationReport(
+            ok=True, root=str(_root),
+            issues=[ValidationIssue("warning", "src/app/app.caraer.yaml", "Review optional branding")],
+        )
+
+    def plan(*_args, **_kwargs):
+        stages.append("plan")
+        return False
+
+    with (
+        patch("caraer_cli.project.validate_app.validate_local_app", side_effect=validate),
+        patch("caraer_cli.commands.apps._confirm_push_plan", side_effect=plan),
+        patch("caraer_cli.commands.apps._run_push") as push,
+    ):
+        result = _invoke_push(_app_ctx(company_uuid=None), ["--file", str(root), "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert stages == ["validate", "plan"]
+    assert "Review optional branding" in result.output
+    assert "✓ Validating local app" in result.output
+    push.assert_not_called()

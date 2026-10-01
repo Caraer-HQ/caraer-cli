@@ -21,6 +21,7 @@ from caraer_cli.formatters.output import (
     print_warning,
     project_rows,
 )
+from caraer_cli.formatters.progress import progress_step
 from caraer_cli.local_app import (
     discover_local_app_files,
     load_local_app,
@@ -473,11 +474,11 @@ def init_app(
         help="Create a company-private app (default is a public marketplace app).",
     ),
     template: str = typer.Option(
-        "default",
+        "website",
         "--template",
         help=(
-            "Starter layout: default (hello_world section) or website "
-            "(header, hero, and page modules)."
+            "Starter layout: website (complete example page, sections, shared component) "
+            "or default (minimal hello_world section)."
         ),
     ),
     force: bool = typer.Option(False, "--force", help="Overwrite existing app files."),
@@ -533,13 +534,15 @@ def init_app(
     private_app = private
 
     if linked_app:
-        remote = apps_api.get_app(app_ctx.api_client(), linked_app).get("data") or {}
+        with progress_step("Fetching linked app"):
+            remote = apps_api.get_app(app_ctx.api_client(), linked_app).get("data") or {}
         if isinstance(remote, dict) and remote.get("privateApp"):
             private_app = True
         try:
-            response = projects_api.create_or_get_project(
-                app_ctx.api_client(), linked_app, project_name
-            )
+            with progress_step("Preparing remote project"):
+                response = projects_api.create_or_get_project(
+                    app_ctx.api_client(), linked_app, project_name
+                )
             data = response.get("data") or {}
             project_uuid = data.get("uuid")
             linked_app = data.get("appUuid") or linked_app
@@ -547,19 +550,20 @@ def init_app(
             pass
 
     try:
-        result = scaffold_app_project(
-            project_dir,
-            app_payload=payload,
-            project_name=project_name,
-            app_uuid=linked_app,
-            project_uuid=project_uuid,
-            sample_function=(function.strip() or None),
-            runtime=runtime,
-            platform_version=platform,
-            private_app=private_app,
-            template=template_value,
-            force=force,
-        )
+        with progress_step(f"Creating app files in {project_dir}"):
+            result = scaffold_app_project(
+                project_dir,
+                app_payload=payload,
+                project_name=project_name,
+                app_uuid=linked_app,
+                project_uuid=project_uuid,
+                sample_function=(function.strip() or None),
+                runtime=runtime,
+                platform_version=platform,
+                private_app=private_app,
+                template=template_value,
+                force=force,
+            )
     except FileExistsError as exc:
         raise typer.BadParameter(str(exc)) from exc
 
@@ -573,12 +577,13 @@ def init_app(
     app_file: Path = result["app_file"]
     if linked_app:
         try:
-            ensure_linked(
-                app_ctx.api_client(),
-                result["root"],
-                load_workspace(result["root"]),
-                app_uuid=str(linked_app),
-            )
+            with progress_step("Linking app to remote project"):
+                ensure_linked(
+                    app_ctx.api_client(),
+                    result["root"],
+                    load_workspace(result["root"]),
+                    app_uuid=str(linked_app),
+                )
         except Exception:  # noqa: BLE001
             pass
 
@@ -606,7 +611,7 @@ def init_app(
         _select_local_file(app_ctx, app_file)
     if platform == "2026.2.1":
         modules_hint = (
-            "Website starters are under src/app/modules/{site_header,hero,home}."
+            "Website starters are under src/app/modules/. Preview Home with npm run dev; see README.md."
             if template_value == "website"
             else "A starter CMS module is under src/app/modules/hello_world. "
             "CMS apps can use --template website."
@@ -948,7 +953,7 @@ def push_public(
     ),
     target: str = typer.Option("production", "--target", help="production|sandbox"),
 ) -> None:
-    """Push the local app to Caraer and deploy it.
+    """Validate the local app, then push it to Caraer and deploy it.
 
     Same command for private and public apps. Creates the remote app on first
     run, deploys the function build, publishes CMS modules, and installs on
@@ -956,6 +961,8 @@ def push_public(
     to block until function runtime provisioning finishes.
     """
     from caraer_cli.app_install import install_app_on_company
+    from caraer_cli.app_sync import validate_before_push
+    from caraer_cli.formatters.output import print_error
 
     app_ctx: AppContext = ctx.obj
     version, release_notes = _normalize_release_args(
@@ -967,6 +974,11 @@ def push_public(
     )
     selected_file = file or app_ctx.pinned_app_file
     root = _require_app_root(selected_file)
+    try:
+        validate_before_push(root)
+    except ValueError as exc:
+        print_error(str(exc))
+        raise typer.Exit(code=1) from None
     _maybe_upgrade_layout_on_push(
         root, upgrade=upgrade, yes=yes, dry_run=dry_run
     )

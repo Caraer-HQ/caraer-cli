@@ -721,7 +721,7 @@ def install_npm_dependencies(root: Path) -> bool:
     """
     if not (root / "package.json").is_file():
         return False
-    from caraer_cli.formatters.output import print_success
+    from caraer_cli.formatters.progress import progress_step
 
     npm = shutil.which("npm")
     if not npm:
@@ -729,14 +729,14 @@ def install_npm_dependencies(root: Path) -> bool:
             "npm is required to install @caraer/cms-runtime after apps init. "
             "Install Node.js, then run `npm install` in the app directory."
         )
-    print_success("Installing npm dependencies…")
-    result = subprocess.run(
-        [npm, "install"],
-        cwd=root,
-        check=False,
-    )
-    if result.returncode != 0:
-        raise RuntimeError("npm install failed.")
+    with progress_step(f"Installing npm dependencies in {root}"):
+        result = subprocess.run(
+            [npm, "install", "--loglevel", "info"],
+            cwd=root,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError("npm install failed.")
     return True
 
 
@@ -764,7 +764,7 @@ def scaffold_app_project(
     src_dir: str = "src",
     sample_function: str | None = "hello-world",
     sample_module: str | None = "hello_world",
-    template: str = "default",
+    template: str = "website",
     runtime: str = "nodejs22",
     platform_version: str = PLATFORM_VERSION,
     private_app: bool = False,
@@ -894,13 +894,6 @@ def scaffold_app_project(
     }
 
 
-WEBSITE_TEMPLATE_MODULES = (
-    ("site_header", "Site header", "header"),
-    ("hero", "Hero", "section"),
-    ("home", "Home", "page"),
-)
-
-
 def _scaffold_sample_module(
     root: Path,
     config: ProjectConfig,
@@ -939,17 +932,7 @@ def _scaffold_website_modules(
     *,
     force: bool,
 ) -> list[Path]:
-    """Write header, section, and page starters for a CMS website app."""
-    folders: list[Path] = []
-    for name, label, kind in WEBSITE_TEMPLATE_MODULES:
-        folder = _scaffold_sample_module(
-            root,
-            config,
-            name=name,
-            label=label,
-            kind=kind,
-            force=force,
-        )
-        if folder:
-            folders.append(folder)
-    return folders
+    """Write the complete CMS website starter."""
+    from caraer_cli.project.website_scaffold import scaffold_website_modules
+
+    return scaffold_website_modules(root, config, force=force)
