@@ -64,7 +64,7 @@ def test_progress_does_not_report_success_after_failure(monkeypatch, capsys):
 
 @pytest.mark.parametrize("linked", [False, True])
 def test_init_shows_progress_before_installing_dependencies(tmp_path, linked):
-    profile = ProfileConfig(base_url="http://localhost:8080", app_uuid="app-1" if linked else None)
+    profile = ProfileConfig(base_url="http://localhost:8080", app_uuid="previous-app" if linked else None)
     ctx = AppContext(
         config=CliConfig(active_profile="dev", profiles={"dev": profile}),
         profile_name="dev", profile=profile, token="token", output="json", debug=False,
@@ -89,12 +89,64 @@ def test_init_shows_progress_before_installing_dependencies(tmp_path, linked):
         patch("caraer_cli.api.projects.create_or_get_project", return_value={"data": {"uuid": "project-1"}}),
         patch("caraer_cli.app_sync.ensure_linked", return_value=MagicMock()),
     ):
-        result = CliRunner().invoke(app, ["apps", "init", "--dir", str(tmp_path / "demo"), "--no-select"])
+        args = ["apps", "init", "--dir", str(tmp_path / "demo"), "--no-select"]
+        if linked:
+            args.extend(["--app-uuid", "app-1"])
+        result = CliRunner().invoke(app, args)
     assert result.exit_code == 0, result.output
     assert "… Creating app files" in result.stderr
     assert "✓ Creating app files" in result.stderr
     assert "Created app at" in result.stdout
     if linked:
+        from caraer_cli.project.schema import load_workspace
+        from caraer_cli.project.state import load_state
+
+        assert load_workspace(tmp_path / "demo").appUuid == "app-1"
+        assert load_state(tmp_path / "demo")["projectUuid"] == "project-1"
         assert "… Fetching linked app" in result.stderr
         assert "… Preparing remote project" in result.stderr
         assert "… Linking app to remote project" in result.stderr
+
+
+def test_init_does_not_inherit_selected_app(tmp_path):
+    from caraer_cli.project.schema import load_workspace
+    from caraer_cli.project.state import load_state
+    from caraer_cli.local_app import load_local_app
+
+    profile = ProfileConfig(base_url="http://localhost:8080", app_uuid="existing-app")
+    ctx = AppContext(
+        config=CliConfig(active_profile="dev", profiles={"dev": profile}),
+        profile_name="dev", profile=profile, token="token", output="json", debug=False,
+    )
+    app = typer.Typer()
+    app.add_typer(apps_commands.app, name="apps")
+
+    @app.callback()
+    def root(context: typer.Context):
+        context.obj = ctx
+
+    workspace = tmp_path / "new-library"
+    with (
+        patch("caraer_cli.project.scaffold.install_npm_dependencies", return_value=False),
+        patch("caraer_cli.api.apps.get_app") as fetch_app,
+        patch("caraer_cli.api.projects.create_or_get_project") as fetch_project,
+        patch("caraer_cli.app_sync.ensure_linked") as link_app,
+        patch("caraer_cli.commands.apps._save_selection") as save_selection,
+    ):
+        result = CliRunner().invoke(
+            app, ["apps", "init", "--dir", str(workspace), "--name", "new-library"]
+        )
+
+    assert result.exit_code == 0, result.output
+    assert load_workspace(workspace).appUuid is None
+    assert load_state(workspace)["projectUuid"] is None
+    assert not load_local_app(workspace).get("uuid")
+    fetch_app.assert_not_called()
+    fetch_project.assert_not_called()
+    link_app.assert_not_called()
+    save_selection.assert_called_once_with(
+        ctx,
+        app_file=str(workspace / "src/app/app.caraer.yaml"),
+        app_uuid=None,
+        clear_uuid=True,
+    )

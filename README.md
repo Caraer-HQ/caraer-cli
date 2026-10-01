@@ -141,6 +141,11 @@ and allow the push to continue, as with `caraer apps validate`.
 
 Only the company that created the app (or a super-admin) can push builds.
 
+`caraer apps init` creates an unlinked app even when another app is selected.
+To link the new folder to an existing remote app, pass `--app-uuid <uuid>` explicitly.
+`caraer apps push` uses the current folder's app link; a selected app in another
+folder does not override it. An unlinked folder creates its own remote app.
+
 `caraer apps init` and the create-app wizard show each setup step, with elapsed-time
 updates every five seconds during long waits. Dependency installation also streams
 npm informational logs. Progress messages go to stderr, including when output is

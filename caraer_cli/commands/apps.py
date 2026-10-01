@@ -529,7 +529,9 @@ def init_app(
         payload.pop("runtime", None)
     project_name = payload["name"]
     project_dir = Path(dir) if dir else Path(project_name)
-    linked_app = app_uuid or app_ctx.profile.app_uuid
+    # A new workspace must not inherit the previously selected app's identity.
+    # Linking an existing app is an explicit choice via --app-uuid / --app.
+    linked_app = app_uuid
     project_uuid = None
     private_app = private
 
@@ -815,8 +817,6 @@ def _confirm_push_plan(
     config = load_workspace(root)
     if app_uuid:
         config.appUuid = app_uuid
-    elif not config.appUuid and app_ctx.profile.app_uuid:
-        config.appUuid = app_ctx.profile.app_uuid
     interactive_tty = sys.stdin.isatty() and sys.stdout.isatty()
     show_plan = dry_run or (interactive_tty and not yes)
     if not show_plan:
@@ -864,7 +864,7 @@ def _run_push(
         result = push_app(
             app_ctx.api_client(),
             root,
-            app_uuid=app_uuid or app_ctx.profile.app_uuid,
+            app_uuid=app_uuid,
             patch=patch_data,
             deploy=deploy,
             delete_missing=delete_missing,
@@ -889,7 +889,7 @@ def _run_push(
 @app.command("push")
 def push_public(
     ctx: typer.Context,
-    app_uuid: str | None = typer.Argument(None, help="App UUID (defaults to selected app)."),
+    app_uuid: str | None = typer.Argument(None, help="App UUID (defaults to this folder's app)."),
     file: str | None = typer.Option(
         None,
         "--file",
