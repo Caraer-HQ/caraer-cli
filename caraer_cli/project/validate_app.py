@@ -1106,6 +1106,18 @@ def _validate_settings(
                     f"{rel}:options",
                     "SELECT fields require options or optionsSource.",
                 )
+        elif field_type == "SECRET":
+            if item.get("defaultValue") is not None or item.get("value") is not None:
+                _issue(
+                    issues, "error", f"{rel}:defaultValue",
+                    "SECRET fields cannot contain values or defaults; supply them through installation settings.",
+                )
+        elif field_type == "REPEATABLE":
+            if any(
+                str(child.get("type", "")).upper() == "SECRET"
+                for child in item.get("itemFields", []) if isinstance(child, dict)
+            ):
+                _issue(issues, "error", f"{rel}:itemFields", "Declare SECRET fields outside REPEATABLE settings.")
         elif field_type == "ACTION":
             if item.get("required") is True:
                 _issue(
@@ -1579,6 +1591,12 @@ def _validate_app_bar_settings(
                         f"{where}:optionsSource.serverlessFunctionName",
                         f"Unknown local function '{fn_name}'.",
                     )
+        elif field_type == "SECRET":
+            if item.get("defaultValue") is not None or item.get("value") is not None:
+                _issue(
+                    issues, "error", f"{where}:defaultValue",
+                    "SECRET fields cannot contain values or defaults; supply them through installation settings.",
+                )
         elif field_type == "ACTION":
             if item.get("required") is True:
                 _issue(
@@ -1598,6 +1616,11 @@ def _validate_app_bar_settings(
                     "REPEATABLE fields require itemFields.",
                 )
             else:
+                if any(
+                    str(child.get("type", "")).upper() == "SECRET"
+                    for child in children if isinstance(child, dict)
+                ):
+                    _issue(issues, "error", f"{where}:itemFields", "Declare SECRET fields outside REPEATABLE settings.")
                 _validate_app_bar_settings(
                     children,
                     f"{where}:itemFields",
