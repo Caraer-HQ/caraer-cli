@@ -49,9 +49,7 @@ UUID_RE = re.compile(
 )
 # 5–6 field cron (backend accepts both); keep loose.
 CRON_RE = re.compile(r"^(\S+\s+){4,5}\S+$")
-INBOUND_AUTH_MODES = frozenset(
-    {"NONE", "SHARED_SECRET", "INSTALLATION_TOKEN", "GOOGLE_OIDC", "GOOGLE_CALENDAR_CHANNEL"}
-)
+INBOUND_AUTH_MODES = frozenset({"NONE", "SHARED_SECRET"})
 SETTING_FIELD_TYPES = frozenset(
     {
         "SINGLE_LINE",

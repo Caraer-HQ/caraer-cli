@@ -14,7 +14,7 @@
     },
     "authMode": {
       "type": "string",
-      "enum": ["NONE", "SHARED_SECRET", "INSTALLATION_TOKEN", "GOOGLE_OIDC", "GOOGLE_CALENDAR_CHANNEL"],
+      "enum": ["NONE", "SHARED_SECRET"],
       "default": "NONE"
     },
     "sharedSecret": {

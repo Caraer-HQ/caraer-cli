@@ -197,18 +197,19 @@ def test_validate_schedule_and_inbound(tmp_path: Path) -> None:
     assert report.inbound == 1
 
 
-@pytest.mark.parametrize("auth_mode", ["GOOGLE_OIDC", "GOOGLE_CALENDAR_CHANNEL"])
-def test_validate_google_inbound_auth_modes(tmp_path: Path, auth_mode: str) -> None:
+@pytest.mark.parametrize("auth_mode", ["NONE", "SHARED_SECRET"])
+def test_validate_generic_inbound_auth_modes(tmp_path: Path, auth_mode: str) -> None:
     _write_workspace(tmp_path)
     _write_manifest(tmp_path)
     _write_function(tmp_path)
     inbound = tmp_path / "src" / "app" / "inbound"
     inbound.mkdir(parents=True)
-    (inbound / "google-push.json").write_text(
+    (inbound / "external-push.json").write_text(
         json.dumps(
             {
-                "name": "google-push",
+                "name": "external-push",
                 "authMode": auth_mode,
+                "sharedSecret": "test-shared-secret",
                 "serverlessFunction": {"name": "hello-world"},
             }
         ),
