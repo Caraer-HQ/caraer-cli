@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from caraer_cli.project.schema import ProjectConfig, save_project_config
 from caraer_cli.project.validate_app import validate_local_app
 
@@ -192,6 +194,30 @@ def test_validate_schedule_and_inbound(tmp_path: Path) -> None:
     report = validate_local_app(tmp_path)
     assert report.ok
     assert report.schedules == 1
+    assert report.inbound == 1
+
+
+@pytest.mark.parametrize("auth_mode", ["GOOGLE_OIDC", "GOOGLE_CALENDAR_CHANNEL"])
+def test_validate_google_inbound_auth_modes(tmp_path: Path, auth_mode: str) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(tmp_path)
+    _write_function(tmp_path)
+    inbound = tmp_path / "src" / "app" / "inbound"
+    inbound.mkdir(parents=True)
+    (inbound / "google-push.json").write_text(
+        json.dumps(
+            {
+                "name": "google-push",
+                "authMode": auth_mode,
+                "serverlessFunction": {"name": "hello-world"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = validate_local_app(tmp_path)
+
+    assert report.ok
     assert report.inbound == 1
 
 
