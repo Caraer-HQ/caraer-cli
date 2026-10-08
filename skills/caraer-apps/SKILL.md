@@ -40,8 +40,8 @@ repo into `~/.cursor/skills/caraer-apps/`.
 ## Golden path
 
 ```bash
-caraer apps init --name my_app --label "My App"
-caraer apps init --private --name internal_tool --label "Internal Tool"
+caraer apps init --name my_app --label "My App" --auth-method NONE
+caraer apps init --private --name internal_tool --label "Internal Tool" --auth-method NONE
 cd my_app
 # edit src/app/app.caraer.yaml + functions
 caraer apps validate
@@ -123,11 +123,35 @@ Ask only what blocks design:
 
 - Trigger: inbound HTTP, schedule, record event, or install lifecycle?
 - Runtime: `nodejs22` (default) or `python312`?
-- Need installation state/secrets/jobs? Either `API_KEY` or `OAUTH2`. Webhooks
-  inject a short-lived `inst_…` `installationToken` (about 1h), not the API key.
-  Prefer `hideApiKeyField: true` so installers do not see the API key in the UI.
-- Need Caraer user OAuth app install? → `OAUTH2` + redirect URIs.
+- Hosted functions/UI, installation state/secrets/jobs? → `NONE` (see below).
+- External client needs to connect through Caraer OAuth? → `OAUTH2` + the
+  client's real callback URLs.
+- External integration needs a long-lived installation key? → `API_KEY`.
 - External provider (Google, etc.)? → `externalOAuthProviders` + `${ENV}` secrets.
+
+### App authentication and installationToken
+
+For an app fully hosted on Caraer, set `authMethod: NONE` in
+`src/app/app.caraer.yaml`, or scaffold with `--auth-method NONE`. Caraer creates
+no long-lived API key or OAuth client credentials, and no `oauthRedirectUris`
+are needed. Installation still requires the user's permission grants and
+enforces the installation's company, scopes, and record filters. Choose the
+mode at creation; an existing app's `authMethod` is immutable.
+
+Every installation-scoped invocation, under `NONE`, `API_KEY`, or `OAUTH2`,
+receives a short-lived `inst_…` Bearer at the **top level of the decoded
+request body**: `req.body.installationToken` in Node, or
+`(request.get_json(silent=True) or {}).get("installationToken")` in hosted
+Python. Local Python adapters may pass the body in `request["body"]`.
+The token is valid for about one hour; use the fresh value supplied on each
+invocation with `Authorization: Bearer <installationToken>` and the supplied
+`body.caraerApiBase`. Keep it out of logs, settings, source, and durable state.
+
+Read [Runtime token locations](reference.md#runtime-token-locations) for each
+request kind, including jobs, inbound handlers, setting functions, and iframe
+sessions. `externalOAuthProviders` works with all three modes and connects
+third-party accounts independently. `hideApiKeyField` only hides an API key
+for `API_KEY` apps; `NONE` prevents creating that key.
 
 ### Settings UX rules
 

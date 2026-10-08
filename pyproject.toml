@@ -41,6 +41,7 @@ dependencies = [
 dev = [
   "pytest>=8.3.2",
   "build>=1.2.1",
+  "jsonschema>=4.22.0",
 ]
 schemas = [
   "jsonschema>=4.22.0",

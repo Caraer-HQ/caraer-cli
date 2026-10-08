@@ -397,12 +397,16 @@ def build_public_app_payload_from_answers(
     oauth_redirect_uris: list[str] | None = None,
     private: bool = False,
 ) -> dict[str, Any]:
-    from caraer_cli.commands.apps import DEFAULT_OAUTH_CALLBACK
+    from caraer_cli.commands.apps import AUTH_METHODS, DEFAULT_OAUTH_CALLBACK
 
     method = (auth_method or "OAUTH2").strip().upper()
+    if method not in AUTH_METHODS:
+        raise ValueError(f"authMethod must be one of: {', '.join(sorted(AUTH_METHODS))}")
     redirects = [
         uri.strip()
-        for uri in (oauth_redirect_uris or [DEFAULT_OAUTH_CALLBACK])
+        for uri in (
+            oauth_redirect_uris or ([DEFAULT_OAUTH_CALLBACK] if method == "OAUTH2" else [])
+        )
         if uri and uri.strip()
     ]
     payload: dict[str, Any] = {
@@ -466,18 +470,23 @@ def run_public_app_wizard(
     auth_method = ask_select(
         "Auth method",
         [
+            Choice(title="Platform-managed (no API key or OAuth credentials)", value="NONE"),
             Choice(title="OAuth 2.0", value="OAUTH2"),
             Choice(title="API key", value="API_KEY"),
         ],
         default="OAUTH2",
     )
-    oauth_redirect_uris = [
-        ask_text(
-            "OAuth callback / redirect URL",
-            default=DEFAULT_OAUTH_CALLBACK,
-            required=True,
-        )
-    ]
+    oauth_redirect_uris = (
+        [
+            ask_text(
+                "OAuth callback / redirect URL",
+                default=DEFAULT_OAUTH_CALLBACK,
+                required=True,
+            )
+        ]
+        if auth_method == "OAUTH2"
+        else []
+    )
 
     _print_section("App")
     console.print(
