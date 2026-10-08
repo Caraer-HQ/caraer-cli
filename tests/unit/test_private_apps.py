@@ -3,9 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from caraer_cli.api.apps import delete_private_app, fetch_app
 from caraer_cli.commands.apps import build_public_app_placeholder
-from caraer_cli.errors import NotFoundError
+from caraer_cli.errors import NotFoundError, ValidationError
 from caraer_cli.project.scaffold import scaffold_app_project
 from caraer_cli.project.schema import load_workspace
 
@@ -64,15 +66,6 @@ def test_create_private_app_uses_private_endpoints(tmp_path: Path) -> None:
             "privateApp": True,
         }
     }
-    updated = {
-        "data": {
-            "uuid": "priv-1",
-            "label": "Internal",
-            "name": "internal",
-            "privateApp": True,
-            "authMethod": "OAUTH2",
-        }
-    }
     client = MagicMock()
     with (
         patch(
@@ -81,7 +74,6 @@ def test_create_private_app_uses_private_endpoints(tmp_path: Path) -> None:
         ) as create_private,
         patch(
             "caraer_cli.app_sync.apps_api.update_private_app",
-            return_value=updated,
         ) as update_private,
         patch("caraer_cli.app_sync.apps_api.create_public_app") as create_public,
     ):
@@ -90,11 +82,41 @@ def test_create_private_app_uses_private_endpoints(tmp_path: Path) -> None:
         data = create_app_from_manifest(client, root, config)
 
     create_private.assert_called_once()
-    update_private.assert_called_once()
+    update_private.assert_not_called()
     create_public.assert_not_called()
-    update_body = update_private.call_args.args[2]
-    assert "installWebhook" not in update_body
-    assert update_body.get("appBars") in (None, [])
+    create_body = create_private.call_args.args[1]
+    assert create_body["name"] == "internal"
+    assert create_body["authMethod"] == "OAUTH2"
+    assert "installWebhook" not in create_body
+    assert create_body.get("appBars") in (None, [])
     assert data["uuid"] == "priv-1"
     assert load_workspace(root).appUuid == "priv-1"
     assert load_workspace(root).privateApp is True
+
+
+def test_duplicate_private_name_does_not_leave_empty_remote_app(tmp_path: Path) -> None:
+    from caraer_cli.app_sync import create_app_from_manifest
+
+    root = tmp_path / "internal"
+    payload = build_public_app_placeholder(label="Internal", private=True)
+    payload["name"] = "internal"
+    scaffold_app_project(
+        root, app_payload=payload, private_app=True, sample_function=None, force=True
+    )
+    remote_apps = {"existing": {"uuid": "existing", "name": "internal"}}
+
+    def request(method: str, path: str, *, json_body: dict) -> dict:
+        name = json_body.get("name", "generated_private_name")
+        uuid = "created" if method == "POST" else path.rsplit("/", 1)[-1]
+        if any(app["name"] == name and app["uuid"] != uuid for app in remote_apps.values()):
+            raise ValidationError("Validation failed Duplicate value for name", status=400)
+        remote_apps[uuid] = {**json_body, "uuid": uuid, "name": name, "privateApp": True}
+        return {"data": remote_apps[uuid]}
+
+    client = MagicMock()
+    client.request.side_effect = request
+    with pytest.raises(ValidationError, match="Duplicate value for name"):
+        create_app_from_manifest(client, root, load_workspace(root))
+
+    assert set(remote_apps) == {"existing"}, "A rejected name must not leave an empty remote app"
+    assert load_workspace(root).appUuid is None
