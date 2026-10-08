@@ -257,7 +257,74 @@
       "type": "object",
       "required": ["name", "type"],
       "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "SECRET"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "defaultValue": {
+                "type": "null"
+              },
+              "value": {
+                "type": "null"
+              }
+            },
+            "description": "Secrets are supplied per installation and stored in its encrypted vault. Reads return hasValue. Omitted values preserve secrets; clearValue=true deletes them."
+          }
+        }
+      ],
       "properties": {
+        "hasValue": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "readOnly": true,
+          "description": "SECRET presence; the value is never returned."
+        },
+        "clearValue": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "writeOnly": true,
+          "description": "Explicitly remove a SECRET installation value."
+        },
+        "itemFields": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/settingField"
+              },
+              {
+                "not": {
+                  "properties": {
+                    "type": {
+                      "enum": [
+                        "SECRET",
+                        "REPEATABLE"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ]
+                }
+              }
+            ]
+          },
+          "description": "Row settings cannot contain SECRET or nested REPEATABLE fields. Declare named installation secrets outside rows."
+        },
         "name": {
           "type": "string",
           "minLength": 1,

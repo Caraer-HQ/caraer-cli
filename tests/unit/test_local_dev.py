@@ -11,6 +11,7 @@ import pytest
 
 from caraer_cli.project.local_dev import (
     function_name_from_path,
+    invoke_local,
     resolve_function_name,
     serve_functions,
 )
@@ -64,6 +65,22 @@ def _write_node_function(root: Path, name: str, body_expr: str) -> None:
     )
 
 
+def _write_esm_app_function(root: Path, name: str, body_expr: str) -> None:
+    """2026.2.1 layout: type:module package + export const handler."""
+    (root / "package.json").write_text(
+        json.dumps({"name": "demo", "private": True, "type": "module"}),
+        encoding="utf-8",
+    )
+    functions = root / "src" / "app" / "functions"
+    functions.mkdir(parents=True)
+    (functions / f"{name}.js").write_text(
+        "export const handler = async (req, res) => {\n"
+        f"  res.status(200).json({body_expr});\n"
+        "};\n",
+        encoding="utf-8",
+    )
+
+
 def _wait_for_server(port: int) -> HTTPConnection:
     conn = HTTPConnection("127.0.0.1", port, timeout=5)
     for _ in range(50):
@@ -85,6 +102,28 @@ def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return int(sock.getsockname()[1])
+
+
+def test_invoke_node_esm_under_type_module(tmp_path: Path) -> None:
+    _write_esm_app_function(tmp_path, "hello-world", '{ ok: true, kind: "esm" }')
+    result = invoke_local(
+        "nodejs22",
+        tmp_path / "src" / "app" / "functions" / "hello-world.js",
+        {},
+    )
+    assert result["statusCode"] == 200
+    assert result["body"] == {"ok": True, "kind": "esm"}
+
+
+def test_invoke_node_commonjs_without_type_module(tmp_path: Path) -> None:
+    _write_node_function(tmp_path, "legacy", '{ ok: true, kind: "cjs" }')
+    result = invoke_local(
+        "nodejs22",
+        tmp_path / "src" / "app" / "functions" / "legacy" / "index.js",
+        {},
+    )
+    assert result["statusCode"] == 200
+    assert result["body"] == {"ok": True, "kind": "cjs"}
 
 
 def test_serve_functions_v2_routes(tmp_path: Path) -> None:

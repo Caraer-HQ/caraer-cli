@@ -1,5 +1,7 @@
 # Agent instructions
 
+For app development or CLI changes supporting an app, read [the app development boundary](../Caraer-Java-Backend/docs/agents/app-development.md) before editing.
+
 ## Agent skills
 
 ### Issue tracker

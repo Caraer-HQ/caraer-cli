@@ -355,7 +355,7 @@ def add_inbound(
     auth: str = typer.Option(
         "SHARED_SECRET",
         "--auth",
-        help="NONE, SHARED_SECRET, or GOOGLE_OIDC.",
+        help="NONE (app-owned verification) or SHARED_SECRET.",
     ),
     enqueue: bool = typer.Option(True, "--enqueue/--sync", help="Enqueue as app job (default) or sync invoke."),
     force: bool = typer.Option(False, "--force", help="Overwrite existing file."),

@@ -26,7 +26,7 @@ _EXAMPLE_SETTINGS_SCHEMA = """\
 
 _EXAMPLE_APP_BARS = """\
 # Edit appBars above when needed (record / tool / trait bars).
-# On 2026.2.1 declare the bar in src/app/appbars/<name>.js: exports.manifest.appBars.
+# On 2026.2.1 declare the bar in src/app/appbars/<name>.js: manifest.appBars on the exported manifest object.
 # Lifecycle hooks: src/app/lifecycle/<event>.js (caraer apps add lifecycle-hook)
 """
 
