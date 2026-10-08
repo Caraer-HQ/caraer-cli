@@ -6,6 +6,15 @@
   `cookie_banner` to `ModuleKind` and exports site-chrome helpers. A preview
   that already has the packages reinstalls when that pin changes.
 
+## 0.1.8
+
+- Support `authMethod: NONE` for Caraer-hosted apps using platform-managed
+  installation tokens. Validation, scaffolds, the app wizard, and the bundled
+  app schema accept an empty `oauthRedirectUris` list without adding a callback.
+
+- Keep new workspaces unlinked until their first push creates the app, so they
+  do not inherit an app selected in another folder.
+
 ## 0.1.5
 
 - The first `caraer apps push` of a new app no longer sends lifecycle and
