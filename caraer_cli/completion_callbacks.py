@@ -126,7 +126,7 @@ def complete_runtime(ctx: typer.Context, incomplete: str) -> list[tuple[str, str
 
 def complete_auth_method(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
     return complete_from_pairs(
-        [("OAUTH2", "OAuth 2.0"), ("API_KEY", "API key")],
+        [("NONE", "Platform-managed installation tokens"), ("OAUTH2", "OAuth 2.0"), ("API_KEY", "API key")],
         incomplete,
     )
 

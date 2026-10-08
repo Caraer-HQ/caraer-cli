@@ -820,7 +820,11 @@ def scaffold_app_project(
         # Hide installation API key in the Caraer UI by default.
         manifest_payload["hideApiKeyField"] = True
     if not manifest_payload.get("oauthRedirectUris"):
-        manifest_payload["oauthRedirectUris"] = ["http://localhost:3000/oauth/callback"]
+        manifest_payload["oauthRedirectUris"] = (
+            ["http://localhost:3000/oauth/callback"]
+            if manifest_payload["authMethod"] == "OAUTH2"
+            else []
+        )
     if platform_version == PLATFORM_VERSION:
         for key in ("settingsSchema", "settingsSections", "appBars"):
             manifest_payload.pop(key, None)

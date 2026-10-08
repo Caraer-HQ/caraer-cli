@@ -76,7 +76,7 @@ deploy, install, or publish the app unless I explicitly ask.
    was selected, run `caraer company select` to choose one.
 8. Ask whether the app is private to that company or a public marketplace app,
    and what label to use. Then scaffold with platform 2026.2.1 (the default):
-   - Private: `caraer apps init --private --label "<Label>" --auth-method API_KEY`
+   - Private: `caraer apps init --private --label "<Label>" --auth-method NONE`
    - Public: `caraer apps init --label "<Label>"`
    Do not pass `--platform 2026.1`.
 9. Change into the new folder and run `caraer apps validate`. Fix only errors
@@ -116,7 +116,7 @@ Create a local app:
 ```bash
 caraer apps init --label "My App"
 # company-only app:
-caraer apps init --private --label "Internal Tool" --auth-method API_KEY
+caraer apps init --private --label "Internal Tool" --auth-method NONE
 cd my_app
 caraer apps validate
 caraer apps local dev           # local server: POST /functions/<name>

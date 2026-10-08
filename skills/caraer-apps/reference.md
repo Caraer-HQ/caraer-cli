@@ -7,15 +7,22 @@ marketplace modules.
 
 | `authMethod` | Use when | Notes |
 |--------------|----------|-------|
-| `API_KEY` | Installers get a long-lived API key (optional UI field) | Typical for integrations |
-| `OAUTH2` | Install uses Caraer OAuth app flow | Set `oauthRedirectUris` |
+| `NONE` | The app's functions and UI are hosted by Caraer | Platform-managed runtime tokens only; no API key, OAuth client, secret, or callback |
+| `API_KEY` | An external integration needs a long-lived installation key | `hideApiKeyField` controls its UI visibility, not whether it exists |
+| `OAUTH2` | An external client connects through Caraer OAuth | Register the client's real callback in `oauthRedirectUris` |
 
-Both methods inject a short-lived `inst_…` `installationToken` into webhook,
-lifecycle, and app-bar payloads (about 1 hour). That token is the runtime
-Bearer. It is not the API key.
+For hosted apps, scaffold with `caraer apps init --auth-method NONE` and keep:
+
+```yaml
+authMethod: NONE
+```
+
+All modes use the same scoped, company-isolated runtime authentication and
+installation permission grants. An existing app's authentication mode is
+immutable; select it when creating the app.
 
 Set `hideApiKeyField: true` (CLI scaffold default) to hide the installation API
-key from the Caraer UI. Use `false` only when installers must copy the key.
+key for `API_KEY` apps. `NONE` creates no such key.
 
 Public apps require both `brandmark` (square SVG URL, top-level) and
 `details.image` (marketplace logo SVG URL). Private apps may omit them.
@@ -31,6 +38,54 @@ External providers (`externalOAuthProviders`) are separate from `authMethod`.
 Settings may set `valueScope: USER` so values are saved per user
 (`PUT .../installation/settings/user`) and delivered via `userSettings` /
 overlay on `settingsSchema` when that user acts.
+
+## Runtime token locations
+
+`installationToken` is a short-lived opaque `inst_…` Bearer (about one hour),
+scoped to the app installation and its currently granted scopes and record
+filters. Caraer supplies and rotates it for `NONE`, `API_KEY`, and `OAUTH2`.
+Read the fresh value from each invocation instead of storing or logging it.
+It is separate from an installer API key, an OAuth client secret, and a
+third-party provider's access token.
+
+In this table, `body` means the **decoded outer HTTP JSON body** delivered to
+the handler. Node uses `req.body` (parse it first if it is a string); hosted
+Python uses `request.get_json(silent=True) or {}`. Local Python adapters may
+use `request["body"]`, which can also need JSON decoding.
+
+| Request kind | Token location | Other payload location |
+|---|---|---|
+| Record webhook | `body.installationToken` | Event: `body.event`; record: `body.record.record` |
+| Lifecycle install/update/rotate/uninstall | `body.installationToken` | Lifecycle name: `body.event` |
+| App-bar action | `body.installationToken` | Dialog answers: `body.appBarSettingsValues` |
+| Setting options loader | `body.installationToken` | Option inputs in the same outer body |
+| Setting action | `body.installationToken` | Action inputs: `body.payload` |
+| Schedule | `body.installationToken` | Schedule data: `body.payload` |
+| Queued installation job (including an enqueued inbound request) | `body.installationToken` | Job data: `body.payload`; job ID: `body.jobId` |
+| Synchronous inbound handler | `body.installationToken` | Original caller JSON: `body.payload`; forwarded headers: `body.headers` |
+| Iframe app-bar session validation | Response `data.installationToken` | POST `{ "token": caraer_iframe_token }` to `/api/v2/app-bars/iframe-session/validate`; `data.apiToken` remains an alias of the runtime token |
+
+The credential is on the outer body even when the event or original caller
+data is nested in `payload`. Caller-supplied JSON and incoming HTTP
+Authorization headers are not the runtime credential. Inbound route
+`authMode` protects the caller-to-Caraer request independently of the app's
+`authMethod`.
+
+Use the injected API base and app identity for installation APIs:
+
+```js
+const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+const response = await fetch(
+  `${body.caraerApiBase}/v2/apps/${body.appUuid}/installation/state`,
+  { headers: { Authorization: `Bearer ${body.installationToken}` } },
+);
+```
+
+The token is injected on live installation-scoped requests. Local samples,
+uninstalled previews, and direct requests to a function without platform
+delivery may have no usable token. Uninstall delivery can include a token
+captured before removal; it no longer authenticates once the installation
+has been deleted.
 
 ## Handler envelope (SERVERLESS)
 
@@ -399,7 +454,7 @@ export const handler = async (req, res) => {
 
 ```python
 def handler(request):
-    body = request.get("body") if isinstance(request, dict) else {}
+    body = request.get("body", {}) if isinstance(request, dict) else (request.get_json(silent=True) or {})
     if isinstance(body, str):
         import json
         body = json.loads(body or "{}")

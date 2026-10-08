@@ -483,12 +483,12 @@ def _validate_manifest(
     auth = str(manifest.get("authMethod") or "").strip().upper()
     if not auth:
         _issue(issues, "error", f"{rel_manifest}:authMethod", "authMethod is required.")
-    elif auth not in {"OAUTH2", "API_KEY"}:
+    elif auth not in {"NONE", "OAUTH2", "API_KEY"}:
         _issue(
             issues,
             "error",
             f"{rel_manifest}:authMethod",
-            "authMethod must be OAUTH2 or API_KEY.",
+            "authMethod must be NONE, OAUTH2, or API_KEY.",
         )
     elif auth == "OAUTH2":
         redirects = manifest.get("oauthRedirectUris")

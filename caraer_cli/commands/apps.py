@@ -68,7 +68,7 @@ def normalize_app_name(value: str) -> str:
 
 
 DEFAULT_OAUTH_CALLBACK = "http://localhost:3000/oauth/callback"
-AUTH_METHODS = frozenset({"OAUTH2", "API_KEY"})
+AUTH_METHODS = frozenset({"NONE", "OAUTH2", "API_KEY"})
 
 
 def build_public_app_placeholder(
@@ -92,7 +92,9 @@ def build_public_app_placeholder(
         raise ValueError(f"authMethod must be one of: {', '.join(sorted(AUTH_METHODS))}")
     redirects = [
         uri.strip()
-        for uri in (oauth_redirect_uris or [DEFAULT_OAUTH_CALLBACK])
+        for uri in (
+            oauth_redirect_uris or ([DEFAULT_OAUTH_CALLBACK] if method == "OAUTH2" else [])
+        )
         if uri and uri.strip()
     ]
     if method == "OAUTH2" and not redirects:
@@ -449,7 +451,7 @@ def init_app(
     auth_method: str = typer.Option(
         "OAUTH2",
         "--auth-method",
-        help="App auth method: OAUTH2 or API_KEY (always written to the manifest).",
+        help="App credentials: NONE for hosted apps, OAUTH2 for OAuth clients, or API_KEY for long-lived keys.",
         autocompletion=complete_auth_method,
     ),
     oauth_redirect_uri: list[str] | None = typer.Option(
@@ -519,7 +521,7 @@ def init_app(
             auth_method=auth_method,
             oauth_redirect_uris=list(oauth_redirect_uri)
             if oauth_redirect_uri
-            else [DEFAULT_OAUTH_CALLBACK],
+            else None,
             private=private,
         )
     except ValueError as exc:

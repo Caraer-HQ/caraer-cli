@@ -110,7 +110,10 @@ Approximate body delivered to your handler:
 Notes:
 
 - `event` is the domain event simple name (`Installed`, `Updated`, `Uninstalled`, `Rotated`).
-- `installationToken` is present for `API_KEY` apps (use it for installation state/secrets APIs).
+- `installationToken` is a short-lived `inst_…` Bearer supplied for installation-scoped
+  delivery under `NONE`, `API_KEY`, and `OAUTH2`. Read it from the outer request
+  body, and use it for Caraer APIs, including installation state/secrets/jobs.
+  See the skill's [runtime token locations](../skills/caraer-apps/reference.md#runtime-token-locations).
 - `settingsSchema` includes filled `value` / `hasValue` for the installation.
 - **Updated** also includes booleans such as `settingsChanged`, `scopesChanged`, `filtersChanged`, `userSettingsChanged`.
 - When USER-scoped settings are saved, `userSettingsChanged` is true and `userUuid` identifies the user. Payload may include `userSettings` (map of userUuid → field values) and `connections` (external OAuth connection instances with access tokens).

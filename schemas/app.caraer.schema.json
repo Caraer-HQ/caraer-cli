@@ -11,7 +11,7 @@
       "label": "Google Calendar Sync",
       "name": "google_calendar_sync",
       "runtime": "nodejs22",
-      "authMethod": "API_KEY",
+      "authMethod": "NONE",
       "hideApiKeyField": true,
       "oauthRedirectUris": [],
       "details": {
@@ -101,13 +101,13 @@
     },
     "authMethod": {
       "type": "string",
-      "enum": ["OAUTH2", "API_KEY"],
-      "description": "How a company authenticates the install. OAUTH2 runs Caraer user consent (preferred; will be required for public apps). API_KEY is the legacy installer key. Both methods inject body.installationToken into webhooks so functions can call Caraer as Bearer."
+      "enum": ["NONE", "OAUTH2", "API_KEY"],
+      "description": "App credentials: NONE for Caraer-hosted apps using only platform-managed installation tokens (no API key, OAuth client, or callback); OAUTH2 for external clients using Caraer OAuth; API_KEY for integrations needing a long-lived key. All methods inject body.installationToken into installation-scoped function requests; normal scopes and tenant isolation apply."
     },
     "hideApiKeyField": {
       "type": "boolean",
       "default": true,
-      "description": "When true (scaffold default), hide the installation token in the Caraer UI. Functions still receive it on the webhook envelope."
+      "description": "For API_KEY apps, hide the long-lived installation API key in the Caraer UI. This does not revoke the key. Runtime installationToken injection is independent of this field."
     },
     "oauthRedirectUris": {
       "type": "array",

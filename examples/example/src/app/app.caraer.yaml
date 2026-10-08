@@ -2,10 +2,9 @@
 label: Example
 name: example
 runtime: nodejs22
-authMethod: API_KEY
+authMethod: NONE
 hideApiKeyField: true
-oauthRedirectUris:
-  - http://localhost:3000/oauth/callback
+oauthRedirectUris: []
 requiredScopes:
   - records.<setting:target_object>.all
   - records.<setting:due_date.objectName>.all
