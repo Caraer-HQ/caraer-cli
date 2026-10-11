@@ -67,11 +67,13 @@ def _invoke_python(entry: Path, payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _invoke_node(entry: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    # Dynamic import() loads both ESM (`export const handler` under
+    # package.json "type": "module") and CommonJS (`exports.handler`).
+    # Vite/Astro already require ESM; a CJS require() of those files fails.
     script = f"""
 const entryUrl = {json.dumps(entry.resolve().as_uri())};
 const payload = {json.dumps(payload)};
 // Keep handler console.log off stdout so the CLI can parse the result JSON.
-const _log = console.log.bind(console);
 console.log = (...args) => console.error(...args);
 const res = {{
   statusCode: 200,
@@ -81,14 +83,20 @@ const res = {{
   send(body) {{ this.body = body; return this; }}
 }};
 const req = {{ body: payload, method: 'POST', headers: {{}} }};
-import(entryUrl).then((mod) => mod.handler(req, res)).then(() => {{
+import(entryUrl).then((mod) => {{
+  const handler = mod.handler || (mod.default && mod.default.handler) || mod.default;
+  if (typeof handler !== 'function') {{
+    throw new Error('No handler export in ' + {json.dumps(str(entry))});
+  }}
+  return Promise.resolve(handler(req, res));
+}}).then(() => {{
   process.stdout.write(JSON.stringify({{ statusCode: res.statusCode, body: res.body }}));
 }}).catch((err) => {{
   console.error(err && err.stack ? err.stack : String(err));
   process.exit(1);
 }});
 """
-    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as tmp:
+    with tempfile.NamedTemporaryFile("w", suffix=".cjs", delete=False) as tmp:
         tmp.write(script)
         tmp_path = tmp.name
     try:

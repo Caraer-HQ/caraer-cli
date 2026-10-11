@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from caraer_cli.project.schema import ProjectConfig, save_project_config
 from caraer_cli.project.validate_app import validate_local_app
 
@@ -192,6 +194,31 @@ def test_validate_schedule_and_inbound(tmp_path: Path) -> None:
     report = validate_local_app(tmp_path)
     assert report.ok
     assert report.schedules == 1
+    assert report.inbound == 1
+
+
+@pytest.mark.parametrize("auth_mode", ["NONE", "SHARED_SECRET"])
+def test_validate_generic_inbound_auth_modes(tmp_path: Path, auth_mode: str) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(tmp_path)
+    _write_function(tmp_path)
+    inbound = tmp_path / "src" / "app" / "inbound"
+    inbound.mkdir(parents=True)
+    (inbound / "external-push.json").write_text(
+        json.dumps(
+            {
+                "name": "external-push",
+                "authMode": auth_mode,
+                "sharedSecret": "test-shared-secret",
+                "serverlessFunction": {"name": "hello-world"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = validate_local_app(tmp_path)
+
+    assert report.ok
     assert report.inbound == 1
 
 
@@ -607,3 +634,24 @@ def test_validate_private_app_skips_marketplace_listing_fields(tmp_path: Path) -
     assert report.ok
     assert not any(i.path.endswith(":brandmark") for i in report.issues)
     assert not any(i.path.endswith(":details") for i in report.issues)
+
+@pytest.mark.parametrize('field_property', ['value', 'defaultValue'])
+def test_secret_defaults_and_values_are_rejected(tmp_path: Path, field_property: str) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(tmp_path, settingsSchema=[{'name':'credential','type':'SECRET',field_property:'synthetic-secret'}])
+    result = validate_local_app(tmp_path)
+    assert any('SECRET fields cannot contain' in issue.message for issue in result.issues)
+
+
+def test_secret_installation_field_without_default_is_valid(tmp_path: Path) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(tmp_path, settingsSchema=[{'name':'credential','type':'SECRET','required':False}])
+    result = validate_local_app(tmp_path)
+    assert not [issue for issue in result.issues if issue.severity == 'error']
+
+
+def test_repeatable_secret_values_cannot_be_persisted_as_row_json(tmp_path: Path) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(tmp_path, settingsSchema=[{'name':'rows','type':'REPEATABLE','itemFields':[{'name':'key','type':'SECRET'}]}])
+    result = validate_local_app(tmp_path)
+    assert any('outside REPEATABLE' in issue.message for issue in result.issues)
