@@ -184,22 +184,6 @@ def _remote_app_data(
     return data
 
 
-def _private_create_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    details = payload.get("details") if isinstance(payload.get("details"), dict) else {}
-    description = payload.get("description")
-    if not description and isinstance(details, dict):
-        description = details.get("description")
-    body: dict[str, Any] = {
-        "label": payload.get("label"),
-        "description": description,
-        "authMethod": payload.get("authMethod"),
-        "oauthRedirectUris": payload.get("oauthRedirectUris"),
-        "runtime": payload.get("runtime"),
-        "platformVersion": payload.get("platformVersion"),
-    }
-    return {key: value for key, value in body.items() if value is not None}
-
-
 def push_manifest(
     client: CaraerApiClient,
     root: Path,
@@ -262,19 +246,10 @@ def create_app_from_manifest(
             save_project_config(workspace_file(root), config)
     initial = defer_unlinked_functions(payload)
     if config.privateApp:
-        created = apps_api.create_private_app(
-            client, _private_create_payload(initial)
-        )
-        data = created.get("data") or {}
-        created_uuid = data.get("uuid")
-        if created_uuid:
-            config.appUuid = str(created_uuid)
-            save_project_config(workspace_file(root), config)
-            response = apps_api.update_private_app(client, str(created_uuid), initial)
-            data = response.get("data") or data
+        response = apps_api.create_private_app(client, initial)
     else:
         response = apps_api.create_public_app(client, initial)
-        data = response.get("data") or {}
+    data = response.get("data") or {}
     created_uuid = data.get("uuid")
     if created_uuid:
         config.appUuid = str(created_uuid)

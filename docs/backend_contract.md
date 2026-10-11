@@ -28,6 +28,7 @@ Headers:
 - `GET /api/v2/apps/public/{uuid}`
 - `PUT /api/v2/apps/public/{uuid}`
 - `POST /api/v2/apps/private`
+  - Accepts the creator manifest, including the requested internal name, settings, scopes and app bars. The initial create validates this complete payload before saving; a rejected name does not leave an empty app. Deploy the backend contract before publishing a CLI that uses it.
 - `PUT /api/v2/apps/private/{uuid}`
 - `POST /api/v2/apps/{uuid}/install`
 
