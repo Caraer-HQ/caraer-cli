@@ -124,3 +124,37 @@ def test_parse_split_join_settings_yaml_helpers() -> None:
     assert rejoined[0]["section"] == "Candidate"
     assert rejoined[0]["sectionSubtitle"] == "Map CV fields"
     assert "section" not in rejoined[1]
+
+
+def test_repeatable_fields_survive_yaml_assembly_and_resolve_nested_options() -> None:
+    import yaml
+    from caraer_cli.project.settings_sync import resolve_setting_options_source
+
+    field = {
+        "name": "links", "type": "REPEATABLE", "itemLabel": "Link",
+        "min": 0, "max": 10, "section": "My links",
+        "itemFields": [{"name": "source", "type": "SINGLE_SELECT",
+                        "optionsSource": {"type": "SERVERLESS", "serverlessFunctionName": "sources"}}],
+    }
+    parsed = parse_settings_yaml(yaml.safe_load(yaml.safe_dump([field])))
+    schema, sections = split_settings_payload(parsed)
+    assert schema[0]["itemFields"] == field["itemFields"]
+    assert schema[0]["min"] == 0
+    assert schema[0]["max"] == 10
+    assert schema[0]["itemLabel"] == "Link"
+    assert sections[0]["settings"] == ["links"]
+    resolved = resolve_setting_options_source(schema[0], fn_by_name={"sources": "function-uuid"})
+    assert resolved["itemFields"][0]["optionsSource"]["serverlessFunctionUuid"] == "function-uuid"
+    assert "serverlessFunctionUuid" not in schema[0]["itemFields"][0]["optionsSource"]
+
+
+def test_unresolved_nested_option_source_is_rejected_before_push() -> None:
+    import pytest
+    from caraer_cli.project.settings_sync import resolve_setting_options_source
+
+    field = {"name": "links", "type": "REPEATABLE", "itemFields": [
+        {"name": "source", "type": "SINGLE_SELECT", "optionsSource": {
+            "type": "SERVERLESS", "serverlessFunctionName": "missing"}},
+    ]}
+    with pytest.raises(ValueError, match="missing"):
+        resolve_setting_options_source(field, fn_by_name={})
