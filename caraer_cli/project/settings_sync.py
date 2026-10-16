@@ -32,6 +32,10 @@ LOCAL_SETTING_KEYS = (
     "hasValue",
     "mappingValue",
     "valueScope",
+    "itemFields",
+    "itemLabel",
+    "min",
+    "max",
 )
 
 AUTHORING_SECTION_KEY = "section"
@@ -102,6 +106,14 @@ def _resolve_setting_function_source(
     strict: bool = True,
 ) -> dict[str, Any]:
     out = dict(field)
+    children = out.get("itemFields")
+    if isinstance(children, list):
+        out["itemFields"] = [
+            _resolve_setting_function_source(
+                child, source_key=source_key, fn_by_name=fn_by_name, strict=strict
+            ) if isinstance(child, dict) else child
+            for child in children
+        ]
     source = out.get(source_key)
     if not isinstance(source, dict):
         return out
