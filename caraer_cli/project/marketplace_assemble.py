@@ -26,6 +26,7 @@ from caraer_cli.project.settings_sections_sync import (
 from caraer_cli.project.settings_sync import (
     discover_local_settings,
     resolve_setting_action_source,
+    resolve_setting_content_source,
     resolve_setting_options_source,
     write_settings_files,
 )
@@ -122,11 +123,9 @@ def assemble_local_manifest(
             resolved = resolve_setting_options_source(
                 field, fn_by_name=fn_by_name, strict=strict_function_refs
             )
-            resolved_settings.append(
-                resolve_setting_action_source(
-                    resolved, fn_by_name=fn_by_name, strict=strict_function_refs
-                )
-            )
+            resolved = resolve_setting_action_source(resolved, fn_by_name=fn_by_name, strict=strict_function_refs)
+            resolved = resolve_setting_content_source(resolved, fn_by_name=fn_by_name, strict=strict_function_refs)
+            resolved_settings.append(resolved)
         out["settingsSchema"] = resolved_settings
 
     yaml_sections = (

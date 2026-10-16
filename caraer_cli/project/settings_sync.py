@@ -19,6 +19,9 @@ LOCAL_SETTING_KEYS = (
     "options",
     "optionsSource",
     "actionSource",
+    "contentSource",
+    "text",
+    "refreshIntervalSeconds",
     "visibleWhen",
     "defaultValue",
     "hidden",
@@ -96,6 +99,10 @@ def resolve_setting_action_source(
         fn_by_name=fn_by_name,
         strict=strict,
     )
+
+
+def resolve_setting_content_source(field: dict[str, Any], *, fn_by_name: dict[str, str], strict: bool = True) -> dict[str, Any]:
+    return _resolve_setting_function_source(field, source_key="contentSource", fn_by_name=fn_by_name, strict=strict)
 
 
 def _resolve_setting_function_source(

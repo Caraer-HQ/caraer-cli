@@ -402,7 +402,7 @@ def prompt_setting_field(
 
     resolved_required = (
         False
-        if resolved_type == "ACTION"
+        if resolved_type in {"ACTION", "MARKDOWN"}
         else (
             required
             if required is not None
@@ -436,7 +436,7 @@ def prompt_setting_field(
         field["visibleWhen"] = conditions
 
     # SECRET / ACTION: no stored default value.
-    if resolved_type not in {"SECRET", "ACTION"}:
+    if resolved_type not in {"SECRET", "ACTION", "MARKDOWN"}:
         resolved_default = (
             default_value
             if default_value is not None
@@ -462,6 +462,12 @@ def prompt_setting_field(
             "[dim]Installer picks the object/property at install time — "
             "no static options needed.[/dim]"
         )
+        return field
+
+    if resolved_type == "MARKDOWN":
+        field["text"] = (default_value if default_value is not None else (ask_text("Markdown text", default="") if interactive else ""))
+        if options_function:
+            field["contentSource"] = {"type": "SERVERLESS", "serverlessFunctionName": options_function}
         return field
 
     if resolved_type == "ACTION":

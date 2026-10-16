@@ -70,6 +70,7 @@ SETTING_FIELD_TYPES = frozenset(
         "COLOR",
         "SECRET",
         "ACTION",
+        "MARKDOWN",
         "REPEATABLE",
     }
 )
@@ -1062,7 +1063,7 @@ def _validate_settings(
     action_names = {
         str(item.get("name") or "").strip()
         for _rel, item in rows
-        if str(item.get("type") or "").strip().upper() == "ACTION"
+        if str(item.get("type") or "").strip().upper() in {"ACTION", "MARKDOWN"}
         and str(item.get("name") or "").strip()
     }
     seen: set[str] = set()
@@ -1118,6 +1119,8 @@ def _validate_settings(
                 for child in item.get("itemFields", []) if isinstance(child, dict)
             ):
                 _issue(issues, "error", f"{rel}:itemFields", "Declare SECRET fields outside REPEATABLE settings.")
+        elif field_type == "MARKDOWN":
+            _validate_markdown_content(item, rel, function_names, issues)
         elif field_type == "ACTION":
             if item.get("required") is True:
                 _issue(
@@ -1217,6 +1220,22 @@ def _validate_settings_sections(
                 "and will appear under Other settings.",
             )
     return len(rows)
+
+
+def _validate_markdown_content(item: dict[str, Any], rel: str, function_names: set[str], issues: list[ValidationIssue]) -> None:
+    if item.get("required") or item.get("value") is not None or item.get("defaultValue") is not None:
+        _issue(issues, "error", rel, "MARKDOWN is read-only; use text or contentSource.")
+    source = item.get("contentSource")
+    if source is not None:
+        if not isinstance(source, dict) or source.get("type") != "SERVERLESS":
+            _issue(issues, "error", f"{rel}:contentSource", "contentSource.type must be SERVERLESS.")
+        elif not source.get("serverlessFunctionName") and not source.get("serverlessFunctionUuid"):
+            _issue(issues, "error", f"{rel}:contentSource", "Content function is required.")
+        elif source.get("serverlessFunctionName") and source["serverlessFunctionName"] not in function_names:
+            _issue(issues, "error", f"{rel}:contentSource", "Unknown content function.")
+    interval = item.get("refreshIntervalSeconds")
+    if interval is not None and (not isinstance(interval, int) or isinstance(interval, bool) or not 10 <= interval <= 3600 or source is None):
+        _issue(issues, "error", f"{rel}:refreshIntervalSeconds", "Use 10 to 3600 seconds with contentSource, or omit it.")
 
 
 def _validate_action_source(
@@ -1540,7 +1559,7 @@ def _validate_app_bar_settings(
         str(item.get("name") or "").strip()
         for item in fields
         if isinstance(item, dict)
-        and str(item.get("type") or "").strip().upper() == "ACTION"
+        and str(item.get("type") or "").strip().upper() in {"ACTION", "MARKDOWN"}
         and str(item.get("name") or "").strip()
     }
     seen: set[str] = set()
@@ -1597,6 +1616,8 @@ def _validate_app_bar_settings(
                     issues, "error", f"{where}:defaultValue",
                     "SECRET fields cannot contain values or defaults; supply them through installation settings.",
                 )
+        elif field_type == "MARKDOWN":
+            _validate_markdown_content(item, where, function_names, issues)
         elif field_type == "ACTION":
             if item.get("required") is True:
                 _issue(
