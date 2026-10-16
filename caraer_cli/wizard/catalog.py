@@ -173,6 +173,7 @@ SETTING_FIELD_TYPES: tuple[tuple[str, str], ...] = (
     ("MULTI_FILE", "Multiple file upload"),
     ("IMAGE", "Image upload"),
     ("COLOR", "Colour"),
+    ("MARKDOWN", "Read-only Markdown display"),
     ("ACTION", "Action button (runs a serverless function, not stored)"),
 )
 

@@ -158,3 +158,14 @@ def test_unresolved_nested_option_source_is_rejected_before_push() -> None:
     ]}
     with pytest.raises(ValueError, match="missing"):
         resolve_setting_options_source(field, fn_by_name={})
+
+
+def test_markdown_content_survives_serialization_and_function_resolution() -> None:
+    from caraer_cli.project.settings_sync import resolve_setting_content_source
+    field = {"name": "status", "type": "MARKDOWN", "text": "**Loading**", "refreshIntervalSeconds": 15,
+             "contentSource": {"type": "SERVERLESS", "serverlessFunctionName": "report"}}
+    payload = resolve_setting_content_source(sanitize_setting(field), fn_by_name={"report": "owned-function"})
+    assert payload["text"] == "**Loading**"
+    assert payload["refreshIntervalSeconds"] == 15
+    assert payload["contentSource"]["serverlessFunctionUuid"] == "owned-function"
+    assert "serverlessFunctionUuid" not in field["contentSource"]

@@ -655,3 +655,14 @@ def test_repeatable_secret_values_cannot_be_persisted_as_row_json(tmp_path: Path
     _write_manifest(tmp_path, settingsSchema=[{'name':'rows','type':'REPEATABLE','itemFields':[{'name':'key','type':'SECRET'}]}])
     result = validate_local_app(tmp_path)
     assert any('outside REPEATABLE' in issue.message for issue in result.issues)
+
+
+@pytest.mark.parametrize("interval,valid", [(15, True), (1, False), (3601, False)])
+def test_markdown_display_content_contract(tmp_path: Path, interval: int, valid: bool) -> None:
+    _write_workspace(tmp_path)
+    _write_function(tmp_path)
+    _write_manifest(tmp_path, settingsSchema=[{"name": "status", "type": "MARKDOWN", "text": "**Ready**",
+        "contentSource": {"type": "SERVERLESS", "serverlessFunctionName": "hello-world"},
+        "refreshIntervalSeconds": interval}])
+    report = validate_local_app(tmp_path)
+    assert report.ok is valid
