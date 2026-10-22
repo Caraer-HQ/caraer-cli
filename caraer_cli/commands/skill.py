@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import shutil
+import json
+import re
 from importlib import resources
 from pathlib import Path
 
@@ -14,6 +16,23 @@ app = typer.Typer(help="Cursor / AI IDE skill helpers.", no_args_is_help=True)
 
 SKILL_ID = "caraer-apps"
 SHIPPED_SKILLS = ("caraer-apps", "caraer-cms")
+
+
+def shipped_skill_ids() -> tuple[str, ...]:
+    """Discover new canonical bundles while preserving existing CLI packages."""
+    repo = _repo_skill_dir(SKILL_ID)
+    manifest = repo.parent / "canonical-source.json" if repo else None
+    if manifest is None or not manifest.is_file():
+        manifest = resources.files("caraer_cli") / "skills" / "canonical-source.json"
+    if not manifest.is_file():
+        return SHIPPED_SKILLS
+    value = json.loads(manifest.read_text(encoding="utf-8"))
+    names = value.get("skills")
+    if not isinstance(names, dict) or not names or any(
+        not re.fullmatch(r"caraer-[a-z0-9-]{1,56}", name) for name in names
+    ):
+        raise ValueError("The canonical skill manifest contains invalid skill names")
+    return tuple(sorted(names))
 
 
 def _repo_skill_dir(skill_id: str = SKILL_ID) -> Path | None:
@@ -119,7 +138,7 @@ def install_all_skills(
             force=force,
             skill_id=skill_id,
         )
-        for skill_id in SHIPPED_SKILLS
+        for skill_id in shipped_skill_ids()
     ]
 
 
@@ -138,10 +157,10 @@ def install_cmd(
     path: Path | None = typer.Option(
         None,
         "--path",
-        help="Custom skills root directory (contains caraer-apps/ and caraer-cms/).",
+        help="Custom directory for the bundled canonical skills.",
     ),
 ) -> None:
-    """Install the shipped Caraer Cursor skills (apps + CMS)."""
+    """Install all canonical Caraer skills bundled with this CLI."""
     try:
         installed = install_all_skills(
             project=project, target_root=path, force=force
@@ -149,7 +168,7 @@ def install_cmd(
     except FileExistsError as exc:
         print_error(str(exc))
         raise typer.Exit(1) from exc
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, ValueError) as exc:
         print_error(str(exc))
         raise typer.Exit(1) from exc
 
@@ -164,7 +183,7 @@ def install_cmd(
 def path_cmd() -> None:
     """Print the on-disk source paths for the shipped skills."""
     missing = False
-    for skill_id in SHIPPED_SKILLS:
+    for skill_id in shipped_skill_ids():
         try:
             source = resolve_skill_source(skill_id)
         except FileNotFoundError as exc:
@@ -179,7 +198,7 @@ def path_cmd() -> None:
 @app.command("list")
 def list_cmd() -> None:
     """Show install locations for each shipped skill."""
-    for skill_id in SHIPPED_SKILLS:
+    for skill_id in shipped_skill_ids():
         try:
             source = resolve_skill_source(skill_id)
             typer.echo(f"{skill_id}\tsource\t{source}")

@@ -43,6 +43,8 @@ jobs:
         env:
           CARAER_CMS_RUNTIME_ROOT: ${{ github.workspace }}/.ci/caraer-cms-runtime
         run: pytest tests/unit -q
+      - name: Verify canonical skill contents
+        run: python scripts/verify_skill_bundle.py --target cli
       - name: Build wheel
         run: |
           pip install build
