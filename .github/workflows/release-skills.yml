@@ -1,0 +1,48 @@
+name: Publish canonical skill patch
+on:
+  push:
+    branches: [main]
+    paths: ['skills/**']
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate canonical contents and build the package
+        run: |
+          python scripts/verify_skill_bundle.py --target cli
+          pip install build
+          python -m build
+      - name: Create a patch tag only for a versioned canonical update
+        env:
+          GH_TOKEN: ${{ secrets.CARAER_HQ_GITHUB_TOKEN }}
+        run: |
+          python - <<'PY'
+          import json, subprocess, tomllib
+          from pathlib import Path
+          if not Path('skills/canonical-source.json').is_file():
+              raise SystemExit('No canonical distribution manifest; retain the normal manual release path')
+          current=tomllib.loads(Path('pyproject.toml').read_text())['project']['version']
+          import runpy
+          assert runpy.run_path('caraer_cli/__init__.py')['__version__'] == current
+          previous=tomllib.loads(subprocess.check_output(['git','show','HEAD^:pyproject.toml'], text=True))['project']['version']
+          old=[int(p) for p in previous.split('.')]
+          if current != f'{old[0]}.{old[1]}.{old[2]+1}':
+              raise SystemExit('Canonical skill updates require a new patch version')
+          tag='v'+current
+          existing=subprocess.check_output(['git','ls-remote','--tags','origin',tag],text=True)
+          if existing:
+              print('Patch tag already exists; do not republish')
+          else:
+              subprocess.run(['git','tag',tag],check=True)
+              subprocess.run(['git','-c','credential.helper=!gh auth git-credential','push','origin',tag],check=True)
+          PY
