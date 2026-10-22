@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.10
+
+- Accept MINIMAL, LEGACY and EXPANDED webhook formats alongside USER_FRIENDLY
+  and RAW. Keep comma-separated `fields` selections through HTTP and serverless
+  pull/push, previews and layout upgrades; validate the string contract and
+  document explicit clearing with `fields: ""`.
+
 - CMS preview installs `@caraer/cms-runtime` v0.1.4, which adds
   `cookie_banner` to `ModuleKind` and exports site-chrome helpers. A preview
   that already has the packages reinstalls when that pin changes.

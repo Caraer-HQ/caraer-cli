@@ -18,7 +18,11 @@
     },
     "webhookFormat": {
       "type": "string",
-      "enum": ["USER_FRIENDLY", "RAW"]
+      "enum": ["USER_FRIENDLY", "RAW", "LEGACY", "EXPANDED", "MINIMAL"]
+    },
+    "fields": {
+      "type": "string",
+      "description": "Optional comma-separated main-record property names, for example firstname,email. Omitted or blank includes all available properties. Record identity remains; related records are not projected."
     },
     "description": { "type": "string" },
     "enabled": { "type": "boolean" },

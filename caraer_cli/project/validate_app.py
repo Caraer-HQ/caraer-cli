@@ -786,6 +786,12 @@ def _validate_webhooks(
         else:
             seen_topics.add(topic)
 
+        if "fields" in item and not isinstance(item["fields"], str):
+            _issue(
+                issues, "error", f"{rel}:fields",
+                "fields must be a comma-separated string of property names.",
+            )
+
         mode = str(item.get("deliveryMode") or "").strip().upper()
         if not mode:
             _issue(issues, "error", f"{rel}:deliveryMode", "deliveryMode is required.")

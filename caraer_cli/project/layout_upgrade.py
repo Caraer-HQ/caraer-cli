@@ -155,7 +155,7 @@ def _webhooks_by_function(root: Path, config: ProjectConfig) -> dict[str, list[d
         if not name:
             continue
         grouped.setdefault(str(name), []).append(
-            {k: v for k, v in item.items() if k in {"topic", "deliveryMode", "enabled", "webhookFormat"}}
+            {k: v for k, v in item.items() if k in {"topic", "deliveryMode", "enabled", "webhookFormat", "fields"}}
         )
     return grouped
 

@@ -510,3 +510,14 @@ caraer apps local test --function <name> --record <uuid>
 caraer apps local dev --invoke-schedule <schedule-name>
 caraer skill install --project
 ```
+
+### Record webhook payload selection
+
+Record webhooks may set `webhookFormat: "MINIMAL"` and
+`fields: "firstname,email"` in HTTP YAML or a function webhook manifest.
+`fields` uses internal property names and limits only the main record properties;
+record identity and included relation records remain. Omit it or use an empty
+string for all available properties. Use `fields: ""` to clear a saved selection.
+MINIMAL excludes event/user/context metadata and recognised webpage properties.
+Keep the default USER_FRIENDLY for existing handlers that expect its envelope.
+Use `caraer webhooks formats` to check backend support before adopting MINIMAL.

@@ -18,6 +18,29 @@ export const manifest = {
 
 `label` is the title on the app's Webhooks tab. The CLI fills it from the
 topic when you omit it (`record.candidate.created` → **Candidate created**).
+`webhookFormat: MINIMAL` opts into a record-and-relations payload without
+user/event/context metadata or recognised webpage properties. Other supported
+formats are `USER_FRIENDLY`, `EXPANDED` and `LEGACY` (`RAW` remains an alias).
+These options require a backend version that supports them; inspect
+`caraer webhooks formats` for the selected app.
+
+Use `fields` to limit the main record's properties in any record payload format:
+
+```yaml
+webhookFormat: MINIMAL
+fields: firstname,email
+```
+
+In a function's `exports.manifest.webhooks` / Python manifest, use
+`webhookFormat: "MINIMAL", fields: "firstname,email"` in the webhook object.
+The CLI retains both settings when pulling and pushing HTTP webhook files and
+serverless function manifests. Push previews detect changes to `fields`.
+
+Use internal property names separated by commas, matching record GET's `fields`
+query parameter. UUID/object identity remain; related records are not projected.
+Omit `fields` or set it to `""` for all available properties. To clear a saved
+selection explicitly, set `fields: ""`. MINIMAL's webpage exclusions still apply.
+
 `webhookFormat: USER_FRIENDLY` is the normal payload. The CLI also defaults
 it on push. A webhook created without a format shows a **LEGACY** chip in
 the UI. `RAW` is the platform event as stored.

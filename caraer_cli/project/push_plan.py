@@ -272,6 +272,7 @@ def _webhook_compare_payload(item: dict[str, Any]) -> dict[str, Any]:
         "topic",
         "deliveryMode",
         "webhookFormat",
+        "fields",
         "description",
         "url",
         "enabled",

@@ -19,6 +19,7 @@ LOCAL_WEBHOOK_KEYS = (
     "label",
     "deliveryMode",
     "webhookFormat",
+    "fields",
     "description",
     "url",
     "secret",
@@ -355,6 +356,8 @@ def _pull_webhooks_v21(
             "enabled": local.get("enabled", True),
             "webhookFormat": local.get("webhookFormat") or "USER_FRIENDLY",
         }
+        if "fields" in local:
+            hook["fields"] = local["fields"]
         if local.get("label"):
             hook["label"] = local["label"]
         by_function.setdefault(str(name), []).append(hook)
