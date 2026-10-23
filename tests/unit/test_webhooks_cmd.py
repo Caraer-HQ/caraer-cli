@@ -139,3 +139,18 @@ def test_resolve_webhook_uuid_cancelled_exits(
     with pytest.raises(typer.Exit) as exc:
         resolve_webhook_uuid(MagicMock(), "app-uuid", None)
     assert exc.value.exit_code == 1
+
+
+def test_deactivated_state_takes_precedence_over_manifest_enabled() -> None:
+    title = webhook_choice_title({"uuid": "w", "topic": "record.candidate.created", "enabled": True,
+                                  "deactivated": True, "lastFailureStatus": 404, "deactivatedAt": 123})
+    assert "Automatically deactivated" in title
+    assert "HTTP 404" in title
+    assert "123" in title
+
+
+def test_reactivate_uses_dedicated_action_not_configuration_update() -> None:
+    from caraer_cli.api.webhooks import reactivate_webhook
+    client = MagicMock()
+    reactivate_webhook(client, "a", "w")
+    client.request.assert_called_once_with("POST", "/api/v2/apps/a/webhooks/w/reactivate")
