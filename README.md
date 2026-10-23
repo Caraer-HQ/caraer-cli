@@ -388,3 +388,20 @@ build. Preview a push with `caraer apps push --dry-run` before you deploy.
 ## License
 
 Proprietary — see [LICENSE](LICENSE).
+
+
+### Automatically deactivated webhooks
+
+`caraer webhooks list --app <app>` and `caraer webhooks show <webhook-uuid> --app <app>`
+show the selected company's webhook status, failure count, HTTP status, reason and time.
+To explicitly resume future deliveries, use:
+
+```bash
+caraer webhooks reactivate <webhook-uuid> --app <app>
+```
+
+Reactivation resets the failure counter. Tests, configuration changes and project pushes
+preserve automatic deactivation; old queued events are not replayed. The caller needs
+the same permissions as webhook editing. Three combined 400/404 delivery failures
+(including retries) deactivate the subscription; 410 deactivates it immediately.
+Successful deliveries reset the counter. Lifecycle and app-bar hooks are excluded.

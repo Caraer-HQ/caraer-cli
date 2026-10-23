@@ -19,7 +19,13 @@ def webhook_choice_title(row: dict[str, Any]) -> str:
     topic = str(row.get("topic") or "webhook").strip() or "webhook"
     mode = str(row.get("deliveryMode") or "").strip()
     enabled = row.get("enabled")
-    if enabled is True:
+    if row.get("deactivated") is True:
+        status = "Automatically deactivated"
+        if row.get("lastFailureStatus") is not None:
+            status += f" (HTTP {row['lastFailureStatus']})"
+        if row.get("deactivatedAt") is not None:
+            status += f" at {row['deactivatedAt']}"
+    elif enabled is True:
         status = "enabled"
     elif enabled is False:
         status = "disabled"
@@ -149,4 +155,32 @@ def test(
     response = webhook_api.test_webhook(
         app_ctx.api_client(), resolved, webhook_uuid, record, event
     )
+    print_data(response.get("data", response), app_ctx.output)
+
+
+@app.command("list")
+def list_command(ctx: typer.Context,
+                 app_uuid: str | None = typer.Option(None, "--app", "--app-uuid"),
+                 page: int = typer.Option(1, min=1), limit: int = typer.Option(50, min=1, max=200)) -> None:
+    """List webhooks and company-specific automatic deactivation state."""
+    app_ctx: AppContext = ctx.obj
+    response = webhook_api.list_webhooks(app_ctx.api_client(), resolve_app_uuid(app_ctx, app_uuid), page, limit)
+    print_data(response.get("data", response), app_ctx.output)
+
+
+@app.command("show")
+def show(ctx: typer.Context, webhook_uuid: str = typer.Argument(...),
+         app_uuid: str | None = typer.Option(None, "--app", "--app-uuid")) -> None:
+    """Show webhook configuration, last failure, and automatic deactivation reason/time."""
+    app_ctx: AppContext = ctx.obj
+    response = webhook_api.get_webhook(app_ctx.api_client(), resolve_app_uuid(app_ctx, app_uuid), webhook_uuid)
+    print_data(response.get("data", response), app_ctx.output)
+
+
+@app.command("reactivate")
+def reactivate(ctx: typer.Context, webhook_uuid: str = typer.Argument(...),
+               app_uuid: str | None = typer.Option(None, "--app", "--app-uuid")) -> None:
+    """Explicitly reactivate this company's webhook and reset its failure counter."""
+    app_ctx: AppContext = ctx.obj
+    response = webhook_api.reactivate_webhook(app_ctx.api_client(), resolve_app_uuid(app_ctx, app_uuid), webhook_uuid)
     print_data(response.get("data", response), app_ctx.output)

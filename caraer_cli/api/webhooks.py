@@ -57,3 +57,7 @@ def test_webhook(
         "POST",
         f"/api/v2/apps/{app_uuid}/webhooks/test/{webhook_uuid}/{record_uuid}/{event}",
     )
+
+
+def reactivate_webhook(client: CaraerApiClient, app_uuid: str, webhook_uuid: str) -> dict[str, Any]:
+    return client.request("POST", f"/api/v2/apps/{app_uuid}/webhooks/{webhook_uuid}/reactivate")
