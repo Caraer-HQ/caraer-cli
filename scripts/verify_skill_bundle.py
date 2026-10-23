@@ -11,7 +11,8 @@ def verify(root, target):
     if not provenance.exists():
         return  # pre-bootstrap consumer; its existing skill tests still apply
     manifest = json.loads(provenance.read_text())
-    if manifest['repository'] != 'Caraer-HQ/caraer-docs':
+    # Published bundles from before the repository rename remain valid.
+    if manifest['repository'] not in {'Caraer-HQ/caraer-developer', 'Caraer-HQ/caraer-docs'}:
         raise ValueError('Unexpected canonical skill source')
     digest = hashlib.sha256()
     for name, expected in sorted(manifest['skills'].items()):
