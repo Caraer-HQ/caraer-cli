@@ -87,4 +87,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DOCS_DISPATCH_TOKEN || secrets.CARAER_HQ_GITHUB_TOKEN }}
         run: |
-          printf '%s' '{"event_type":"developer-release"}' | gh api --method POST repos/Caraer-HQ/caraer-docs/dispatches --input -
+          printf '%s' '{"event_type":"developer-release"}' | gh api --method POST repos/Caraer-HQ/caraer-developer/dispatches --input -
