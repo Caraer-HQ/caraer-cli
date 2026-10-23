@@ -225,6 +225,36 @@ Installation settings are for **admins installing the app**, not developers.
   the Caraer UI is rejected for build-deployed apps — always change code
   locally and `caraer apps push`.
 
+### Webhook deactivation and recovery
+
+For company record-event and date-due webhooks, three combined HTTP 400/404
+responses (including retries) automatically deactivate that company's subscription;
+410 deactivates immediately. A 2xx resets the counter; unrelated errors leave it
+unchanged. HTTP and serverless deliveries follow these rules. Lifecycle and
+app-bar hooks are excluded; 410 no longer deletes a webhook definition.
+
+Use CLI 0.1.12+ to inspect before proposing recovery:
+
+```bash
+caraer webhooks list --app <app-uuid>
+caraer webhooks show <webhook-uuid> --app <app-uuid>
+```
+
+Confirm the selected company and existing app-resource edit permissions. Fix and
+test the destination first. Only when the user explicitly asks to resume deliveries:
+
+```bash
+caraer webhooks reactivate <webhook-uuid> --app <app-uuid>
+caraer webhooks show <webhook-uuid> --app <app-uuid>
+```
+
+Expect `deactivated: false` and `failureCount: 0`; last incident metadata remains.
+Verify a new sandbox event reaches the destination. Old queued events are not
+replayed. Tests do not change activation state or the failure counter. Edits,
+pushes, installation rematerialization, and manifest `enabled` values cannot
+reactivate a subscription. See [webhook recovery](/guides/app-jobs#resume-an-automatically-deactivated-webhook)
+for status fields, payload retention, and the Python client response migration.
+
 ### Scaffolding commands
 
 | Need | Command |
