@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import tarfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
 from caraer_cli.project.modules_publish import (
     build_package_json,
     package_name,
+    pack_tarball,
     publish_modules,
     read_app_dependencies,
     stage_package,
@@ -152,6 +154,45 @@ def test_published_package_includes_shared_settings(tmp_path: Path) -> None:
 
 def test_read_app_dependencies_skips_missing_package_json(tmp_path: Path) -> None:
     assert read_app_dependencies(tmp_path) == {}
+
+
+def test_module_tarball_preserves_bundled_assets(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("npm_config_cache", str(tmp_path / "npm-cache"))
+    root = tmp_path / "app"
+    modules = root / "src" / "app" / "modules"
+    hero = modules / "hero"
+    hero.mkdir(parents=True)
+    (hero / "index.astro").write_text(
+        "---\nimport image from './assets/image.png';\n"
+        "import shared from '../_shared/image.webp';\n"
+        "export const manifest = { name: 'hero', kind: 'section', "
+        "label: 'Hero', category: 'content' };\n---\n<img src={image.src} />\n",
+        encoding="utf-8",
+    )
+    assets = [
+        "hero/assets/image.png", "hero/assets/image.JPG", "hero/assets/image.jpeg",
+        "hero/assets/image.gif", "hero/assets/image.avif", "hero/assets/icon.ico",
+        "hero/assets/font.woff", "hero/assets/font.woff2", "hero/assets/font.ttf",
+        "hero/assets/font.otf", "hero/assets/video.mp4", "hero/assets/video.webm",
+        "hero/assets/audio.mp3", "hero/assets/audio.wav", "hero/assets/audio.ogg",
+        "_shared/image.webp", "logo.png",
+    ]
+    for asset in assets:
+        path = modules / asset
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"bundled asset")
+    (hero / ".env").write_text("SECRET=excluded\n", encoding="utf-8")
+
+    config = ProjectConfig(platformVersion="2026.2", name="demo", srcDir="src")
+    staging, _ = stage_package(
+        root, config, app_name="demo", version="0.1.0", destination=tmp_path / "staged",
+    )
+    with tarfile.open(pack_tarball(staging)) as archive:
+        for asset in assets:
+            member = archive.extractfile(f"package/modules/{asset}")
+            assert member is not None
+            assert member.read() == b"bundled asset"
+        assert "package/modules/hero/.env" not in archive.getnames()
 
 
 def test_build_package_json_omits_empty_dependencies() -> None:

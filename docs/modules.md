@@ -58,6 +58,13 @@ const { fields } = Astro.props;
 
 `caraer apps validate` writes `types.d.ts`. Do not edit that file.
 
+Keep bundled images, fonts, audio and video under `src/app/modules/`, beside
+the module or in a shared `_`-prefixed folder. Publishing preserves their
+relative paths, so imports such as `import image from './assets/image.png'`
+also resolve in the installing company's site build. Supported asset formats
+are SVG, PNG, JPEG, GIF, WebP, AVIF, ICO, WOFF/WOFF2, TTF, OTF, MP4, WebM,
+MP3, WAV and OGG.
+
 `label`, `helpText`, and `description` are what the AI rewrite feature reads,
 so write them for a person.
 
