@@ -63,6 +63,22 @@ _ALLOWED_SUFFIXES = {
     ".svelte",
     ".vue",
     ".svg",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".avif",
+    ".ico",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".otf",
+    ".mp4",
+    ".webm",
+    ".mp3",
+    ".wav",
+    ".ogg",
 }
 
 
@@ -182,7 +198,7 @@ def _copy_allowed_files(source_dir: Path, dest_dir: Path, *, skip_generated: boo
     for source in source_dir.rglob("*"):
         if source.is_dir():
             continue
-        if source.suffix not in _ALLOWED_SUFFIXES:
+        if source.suffix.lower() not in _ALLOWED_SUFFIXES:
             continue
         if skip_generated and source.name in {GENERATED_TYPES_FILE, "fields.d.ts"}:
             continue
@@ -195,7 +211,7 @@ def _copy_allowed_files(source_dir: Path, dest_dir: Path, *, skip_generated: boo
 def _copy_shared_module_files(modules_src: Path, modules_root: Path) -> None:
     """Copy settings files and `_`-prefixed folders that modules import."""
     for child in modules_src.iterdir():
-        if child.is_file() and child.suffix in _ALLOWED_SUFFIXES:
+        if child.is_file() and child.suffix.lower() in _ALLOWED_SUFFIXES:
             shutil.copy2(child, modules_root / child.name)
         elif child.is_dir() and child.name.startswith("_"):
             _copy_allowed_files(child, modules_root / child.name)
