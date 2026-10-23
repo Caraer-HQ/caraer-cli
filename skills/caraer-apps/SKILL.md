@@ -55,7 +55,7 @@ Local loop without deploy:
 
 ```bash
 caraer apps local dev
-caraer apps local test --function <name> --sample-only
+caraer apps local test <name> --record <record-uuid> --sample-only
 ```
 
 ## Project layout (2026.2.1)

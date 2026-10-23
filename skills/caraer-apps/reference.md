@@ -504,9 +504,9 @@ caraer apps status
 caraer apps delete              # private app, creator company only
 caraer apps local logs --follow
 caraer apps state get
-caraer apps jobs list
+caraer apps jobs status <job-uuid>
 caraer apps connections list
-caraer apps local test --function <name> --record <uuid>
+caraer apps local test <name> --record <uuid>
 caraer apps local dev --invoke-schedule <schedule-name>
 caraer skill install --project
 ```
@@ -518,6 +518,14 @@ Record webhooks may set `webhookFormat: "MINIMAL"` and
 `fields` uses internal property names and limits only the main record properties;
 record identity and included relation records remain. Omit it or use an empty
 string for all available properties. Use `fields: ""` to clear a saved selection.
-MINIMAL excludes event/user/context metadata and recognised webpage properties.
+MINIMAL excludes user/context metadata and recognised webpage properties.
+Non-relation events omit event metadata. Relation events include `event.type`
+(`relation_created`, `relation_updated`, or `relation_deleted`),
+`event.relationName`, `event.fromRecord`, and `event.toRecord`. Each endpoint
+contains only `uuid` and `objectName`; missing legacy endpoint or relation data
+is omitted. Endpoints keep the original direction even when the watched
+`record` is the target, including same-object and self-links. `fields` does not
+remove endpoint identity; `relations` contains additionally requested records,
+not the changed link. See [the payload example](/guides/app-jobs#choose-record-webhook-payload-fields).
 Keep the default USER_FRIENDLY for existing handlers that expect its envelope.
 Use `caraer webhooks formats` to check backend support before adopting MINIMAL.
