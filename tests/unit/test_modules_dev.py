@@ -267,3 +267,48 @@ def test_harness_install_loads_workspace_build_approvals(
         "caraer_cli.project.modules_dev._package_manager", lambda: manager
     )
     assert _harness_install_command() == [manager, "install"]
+
+
+def test_property_choices_are_paginated_and_keep_only_picker_metadata() -> None:
+    from caraer_cli.project.modules_dev import fetch_properties
+
+    class Client:
+        def __init__(self):
+            self.pages = []
+
+        def request(self, method, path, *, json_body, company_uuid):
+            assert method == "POST"
+            assert path == "/api/v2/objects/blog/properties/index"
+            assert company_uuid == "company-1"
+            self.pages.append(json_body["page"])
+            if json_body["page"] == 1:
+                return {"data": [
+                    {"name": f"field_{i}", "label": f"Field {i}", "type": "string", "sensitive": True}
+                    for i in range(200)
+                ]}
+            return {"data": [
+                {"name": "image", "type": "file", "format": {"name": "image"}},
+                {"name": "removed", "deletedAt": "2026-01-01"},
+            ]}
+
+    client = Client()
+    properties = fetch_properties(client, "company-1", "blog")
+    assert client.pages == [1, 2]
+    assert len(properties) == 201
+    assert properties[-1] == {"name": "image", "label": None, "type": "file", "format": {"name": "image"}}
+    assert all("sensitive" not in row for row in properties)
+
+
+def test_property_pagination_follows_server_page_size() -> None:
+    from caraer_cli.project.modules_dev import fetch_properties
+
+    calls = []
+
+    class Client:
+        def request(self, method, path, *, json_body, company_uuid):
+            page = json_body['page']
+            calls.append(page)
+            return {'data': [{'name': f'field_{page}', 'type': 'string'}], 'perPage': 1, 'lastPage': 3}
+
+    assert len(fetch_properties(Client(), 'company', 'object')) == 3
+    assert calls == [1, 2, 3]

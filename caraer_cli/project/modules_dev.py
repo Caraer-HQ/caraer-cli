@@ -144,6 +144,39 @@ def fetch_forms(client: Any, company_uuid: str) -> list[dict[str, Any]]:
     return forms
 
 
+def fetch_properties(client: Any, company_uuid: str, object_ref: str) -> list[dict[str, Any]]:
+    """Read property choices through the authenticated, company-scoped schema API."""
+    from urllib.parse import quote
+
+    if not company_uuid or not object_ref:
+        return []
+    properties = []
+    page = 1
+    while True:
+        payload = client.request(
+            "POST",
+            f"/api/v2/objects/{quote(object_ref, safe='')}/properties/index",
+            json_body={"page": page, "limit": 200, "query": "", "filters": []},
+            company_uuid=company_uuid,
+        )
+        rows = payload.get("data", []) if isinstance(payload, dict) else []
+        if not isinstance(rows, list):
+            break
+        properties.extend(
+            {key: row.get(key) for key in ("name", "label", "type", "format")}
+            for row in rows
+            if isinstance(row, dict) and row.get("name") and not row.get("deletedAt")
+        )
+        last_page = payload.get("lastPage")
+        per_page = payload.get("perPage") or 200
+        if not rows or (isinstance(last_page, int) and page >= last_page):
+            break
+        if last_page is None and len(rows) < per_page:
+            break
+        page += 1
+    return properties
+
+
 def fetch_form(client: Any, company_uuid: str, form_ref: str) -> dict[str, Any] | None:
     """Full form definition for the preview, uuid or machine name.
 
@@ -253,7 +286,9 @@ def _sample_repeatable_item(item: dict[str, Any]) -> dict[str, Any]:
             row[child_name] = child["defaultValue"]
             continue
         child_type = str(child.get("type") or "").upper()
-        if child_type == "SINGLE_SELECT":
+        if child_type == "REPEATABLE":
+            row[child_name] = _sample_repeatable(child)
+        elif child_type == "SINGLE_SELECT":
             options = child.get("options") or []
             row[child_name] = options[0].get("name") if options else None
         elif child_type == "SINGLE_LINE":
@@ -409,15 +444,6 @@ const SAMPLE_RECORD = {
   parsedProperties: { title: 'Senior Developer', location: 'Utrecht' },
 };
 
-const SAMPLE_MENU = {
-  location: 'header',
-  title: 'Sample menu',
-  items: [
-    { label: 'Vacatures', url: '/vacatures' },
-    { label: 'Over ons', url: '/over-ons' },
-  ],
-};
-
 const SAMPLE_FORM = (form) => ({
   uuid: String(form),
   name: String(form),
@@ -442,6 +468,27 @@ const SAMPLE_FORM = (form) => ({
 const SAMPLE_FORMS = [
   { uuid: 'job-alert', name: 'job-alert', label: 'Sample form' },
 ];
+
+const SAMPLE_PROPERTIES = [
+  { name: 'title', label: 'Title', type: 'string' },
+  { name: 'description', label: 'Description', type: 'string', format: 'multi-line' },
+  { name: 'location', label: 'Location', type: 'string' },
+  { name: 'image', label: 'Image', type: 'file' },
+  { name: 'tags', label: 'Tags', type: 'multi-select' },
+  { name: 'publishedAt', label: 'Published at', type: 'date' },
+];
+const propertiesCache = new Map();
+const loadProperties = (subdomain, object) => {
+  if (!subdomain) return Promise.resolve(SAMPLE_PROPERTIES);
+  if (!object) return Promise.resolve([]);
+  const key = JSON.stringify([subdomain, object]);
+  if (!propertiesCache.has(key)) {
+    propertiesCache.set(key, harnessApi(
+      `/properties/${encodeURIComponent(subdomain)}/${encodeURIComponent(object)}`,
+    ).then((list) => Array.isArray(list) ? list : []));
+  }
+  return propertiesCache.get(key);
+};
 
 const text = (value) => (typeof value === 'string' && value.trim() ? value : null);
 
@@ -679,6 +726,11 @@ function socialAccounts(source) {
 }
 
 export const onRequest = defineMiddleware(async (context, next) => {
+  if (context.url.pathname === '/api/property-options') {
+    const company = context.url.searchParams.get('company') ?? SUBDOMAIN;
+    const object = context.url.searchParams.get('object') ?? RECORD_OBJECT ?? 'vacancy';
+    return Response.json(await loadProperties(company, object));
+  }
   if (context.url.pathname.startsWith('/api/')) {
     return next();
   }
@@ -760,9 +812,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   context.locals.getMenu = async (location) => {
     const menus = await live(`/menus?locale=nl`, {}, activeSubdomain);
     const match = Array.isArray(menus) ? menus.find((m) => m.location === location) : null;
-    // Every location falls back to the same sample menu, so a footer module
-    // with four columns still renders something recognisable.
-    return match ?? { ...SAMPLE_MENU, location };
+    return match ?? null;
   };
 
   context.locals.getForm = async (form) => {
@@ -1013,6 +1063,7 @@ def _harness_field_rows(fields_expr: str) -> str:
                 </label>
               ) : field.type === 'MULTI_LINE' ? (
                 <textarea id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}} rows="4">{{String(stored[field.name] ?? '')}}</textarea>
+{_harness_property_field_markup()}
 {_harness_file_field_markup()}              ) : field.type === 'FORM_SINGLE_SELECT' ? (
                 <select id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}}>
                   <option value="">Select a form</option>
@@ -1044,6 +1095,202 @@ def _harness_field_rows(fields_expr: str) -> str:
               {{field.helpText && <small class="hx-help">{{field.helpText}}</small>}}
             </div>
           ))}}
+"""
+
+
+def _harness_property_field_markup() -> str:
+    return """              ) : field.type === 'PROPERTY_SINGLE_SELECT' || field.type === 'PROPERTY_MULTI_SELECT' ? (
+                <div class="hx-property" data-field={JSON.stringify(field)}>
+                  <input type="hidden" name={`f.${field.name}`}
+                    value={Array.isArray(stored[field.name]) ? stored[field.name].join('\\n') : String(stored[field.name] ?? '')} />
+                  <div class="hx-property__chips"></div>
+                  <div class="hx-property__search">
+                    <input type="text" id={`f-${field.name}`} role="combobox" autocomplete="off"
+                      aria-autocomplete="list" aria-expanded="false" placeholder="Search properties…" />
+                    <button type="button" class="hx-property__clear" aria-label={`Clear ${field.label}`}>×</button>
+                  </div>
+                  <div class="hx-property__options" role="listbox" hidden></div>
+                </div>
+"""
+
+
+def _harness_property_field_script() -> str:
+    return r"""
+    <script is:inline>
+      (() => {
+        const form = document.querySelector('.harness__fields');
+        if (!form) return;
+        let properties = [];
+        let request = 0;
+        const pickers = new Map();
+        let sequence = 0;
+        let loaded = false;
+        const normalize = (value) => String(value ?? '').toLowerCase().replace(/_/g, '-');
+
+        const bind = (root) => {
+          if (pickers.has(root)) return;
+          const field = JSON.parse(root.dataset.field);
+          const hidden = root.querySelector('input[type="hidden"]');
+          const search = root.querySelector('[role="combobox"]');
+          const list = root.querySelector('[role="listbox"]');
+          const chips = root.querySelector('.hx-property__chips');
+          const clear = root.querySelector('.hx-property__clear');
+          const multiple = field.type === 'PROPERTY_MULTI_SELECT';
+          const id = `hx-properties-${sequence++}`;
+          list.id = id;
+          search.setAttribute('aria-controls', id);
+          let active = -1;
+          let matches = [];
+          let loading = !loaded;
+          const values = () => hidden.value.split(/[\n,]+/).filter(Boolean);
+          const label = (name) => properties.find((p) => p.name === name)?.label || name;
+          const close = () => {
+            list.hidden = true;
+            search.setAttribute('aria-expanded', 'false');
+            search.removeAttribute('aria-activedescendant');
+            active = -1;
+          };
+          const showValue = () => {
+            chips.replaceChildren();
+            if (multiple) {
+              for (const name of values()) {
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.textContent = `${label(name)} ×`;
+                chip.setAttribute('aria-label', `Remove ${label(name)}`);
+                chip.addEventListener('click', () => commit(values().filter((v) => v !== name)));
+                chips.append(chip);
+              }
+              search.value = '';
+            } else search.value = hidden.value ? label(hidden.value) : '';
+            clear.hidden = !hidden.value;
+          };
+          const commit = (next) => {
+            hidden.value = next.join('\n');
+            showValue();
+            close();
+            hidden.dispatchEvent(new Event('change', { bubbles: true }));
+          };
+          const choose = (property) => {
+            commit(multiple ? [...values(), property.name] : [property.name]);
+            search.focus();
+            if (multiple) paint();
+          };
+          const paint = () => {
+            const query = search.value.trim().toLowerCase();
+            const types = field.allowedPropertyTypes ?? field.filterPropertyTypes ?? [];
+            const formats = field.allowedPropertyFormats ?? field.filterPropertyFormats ?? [];
+            matches = properties.filter((p) => {
+              const format = p.format;
+              return (!multiple || !values().includes(p.name))
+                && (!types.length || types.some((t) => normalize(t) === normalize(p.type)))
+                && (!formats.length || formats.some((f) =>
+                  [typeof format === 'string' ? format : format?.name, format?.type]
+                    .some((v) => normalize(v) === normalize(f))))
+                && `${p.label || ''} ${p.name}`.toLowerCase().includes(query);
+            });
+            list.replaceChildren();
+            active = -1;
+            search.removeAttribute('aria-activedescendant');
+            matches.forEach((property, index) => {
+              const option = document.createElement('button');
+              option.type = 'button';
+              option.role = 'option';
+              option.id = `${id}-${index}`;
+              option.setAttribute('aria-selected', String(values().includes(property.name)));
+              option.textContent = property.label && property.label !== property.name
+                ? `${property.label} (${property.name})` : property.name;
+              option.addEventListener('mousedown', (event) => event.preventDefault());
+              option.addEventListener('click', () => choose(property));
+              list.append(option);
+            });
+            if (!matches.length) {
+              const empty = document.createElement('span');
+              empty.textContent = loading ? 'Loading properties…' : 'No matching properties';
+              list.append(empty);
+            }
+            list.hidden = false;
+            search.setAttribute('aria-expanded', 'true');
+          };
+          search.addEventListener('focus', () => { search.value = ''; paint(); });
+          search.addEventListener('click', () => { if (list.hidden) { search.value = ''; paint(); } });
+          search.addEventListener('input', (event) => { event.stopPropagation(); paint(); });
+          search.addEventListener('change', (event) => event.stopPropagation());
+          search.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault(); close(); showValue();
+            } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+              event.preventDefault();
+              if (list.hidden) { search.value = ''; paint(); }
+              if (!matches.length) return;
+              active = active < 0 ? (event.key === 'ArrowDown' ? 0 : matches.length - 1)
+                : (active + (event.key === 'ArrowDown' ? 1 : -1) + matches.length) % matches.length;
+              Array.from(list.children).forEach((option, i) => option.classList.toggle('is-active', i === active));
+              search.setAttribute('aria-activedescendant', `${id}-${active}`);
+              list.children[active]?.scrollIntoView({ block: 'nearest' });
+            } else if (event.key === 'Enter') {
+              event.preventDefault();
+              if (!list.hidden && matches[active < 0 ? 0 : active]) choose(matches[active < 0 ? 0 : active]);
+            }
+          });
+          root.addEventListener('focusout', (event) => {
+            if (!root.contains(event.relatedTarget)) { close(); showValue(); }
+          });
+          document.addEventListener('click', (event) => {
+            if (!root.contains(event.target)) { close(); showValue(); }
+          });
+          clear.addEventListener('click', () => { commit([]); search.focus(); });
+          showValue();
+          pickers.set(root, () => {
+            loading = false;
+            if (document.activeElement === search && !list.hidden) paint();
+            else showValue();
+          });
+        };
+        form.querySelectorAll('.hx-property').forEach(bind);
+        form.addEventListener('harness:property-picker', (event) => bind(event.detail));
+        const objectField = form.querySelector('.hx-field[data-type="OBJECT_SINGLE_SELECT"] [name]');
+        const load = async () => {
+          const current = ++request;
+          const params = new URLSearchParams({
+            company: form.elements.namedItem('company')?.value ?? '',
+            object: objectField?.value || 'vacancy',
+          });
+          properties = [];
+          loaded = false;
+          try {
+            const response = await fetch('/api/property-options?' + params);
+            const result = response.ok ? await response.json() : [];
+            if (current !== request) return;
+            properties = Array.isArray(result) ? result : [];
+          } catch { if (current !== request) return; }
+          loaded = true;
+          pickers.forEach((refresh, root) => {
+            if (root.isConnected) refresh(); else pickers.delete(root);
+          });
+        };
+        objectField?.addEventListener('change', load);
+        // The object picker is currently a text control in the local harness.
+        objectField?.addEventListener('input', load);
+        load();
+      })();
+    </script>
+"""
+
+
+def _harness_property_field_styles() -> str:
+    return """
+      .hx-property { position: relative; min-width: 0; }
+      .hx-property__search { position: relative; }
+      .hx-property__search input { width: 100%; padding-right: 2rem !important; }
+      .hx-property__clear { position: absolute; right: 0.4rem; top: 50%; transform: translateY(-50%); border: 0; background: none; color: var(--hx-muted); cursor: pointer; font-size: 1rem; }
+      .hx-property__options { position: absolute; z-index: 20; top: 100%; left: 0; right: 0; max-height: 15rem; overflow: auto; padding: 0.25rem; border: 1px solid var(--hx-line); border-radius: 7px; background: var(--hx-panel); box-shadow: 0 8px 24px #0005; }
+      .hx-property__options button { display: block; width: 100%; border: 0; border-radius: 4px; padding: 0.5rem; background: none; color: var(--hx-text); text-align: left; font: inherit; font-size: 0.75rem; cursor: pointer; overflow-wrap: anywhere; }
+      .hx-property__options button:hover, .hx-property__options .is-active { background: var(--hx-panel-2); outline: 1px solid var(--hx-accent); }
+      .hx-property__options > span { display: block; padding: 0.5rem; color: var(--hx-muted); font-size: 0.75rem; }
+      .hx-property__chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+      .hx-property__chips:empty { display: none; }
+      .hx-property__chips button { margin-bottom: 0.3rem; border: 1px solid var(--hx-line); border-radius: 5px; padding: 0.25rem 0.4rem; background: var(--hx-panel-2); color: var(--hx-text); font: inherit; font-size: 0.75rem; cursor: pointer; }
 """
 
 
@@ -1192,7 +1439,7 @@ def _harness_repeatable_script() -> str:
             continue;
           }
           if (field.type === 'SWITCH') row[field.name] = false;
-          else if (field.type === 'MULTI_FILE' || field.type === 'MULTI_SELECT') row[field.name] = [];
+          else if (field.type === 'MULTI_FILE' || field.type === 'MULTI_SELECT' || field.type === 'REPEATABLE') row[field.name] = [];
           else row[field.name] = '';
         }
         return row;
@@ -1281,12 +1528,49 @@ def _harness_repeatable_script() -> str:
         };
 
         const fieldControl = (field, value, onValue) => {
-          const wrap = document.createElement('label');
+          const wrap = document.createElement(field.type === 'REPEATABLE' ? 'div' : 'label');
           wrap.className = 'hx-repeat__field';
           const caption = document.createElement('span');
           caption.textContent = field.label || field.name;
           wrap.append(caption);
 
+          if (field.type === 'REPEATABLE') {
+            const nested = document.createElement('div');
+            nested.className = 'hx-repeat';
+            nested.dataset.min = String(field.min ?? 0);
+            nested.dataset.max = String(field.max ?? 20);
+            nested.dataset.itemLabel = field.itemLabel || 'Item';
+            nested.dataset.itemFields = JSON.stringify(field.itemFields ?? []);
+            nested.innerHTML = '<input type="hidden"><div class="hx-repeat__bar"><button type="button" class="hx-repeat__prev" aria-label="Previous item">‹</button><span class="hx-repeat__status"></span><button type="button" class="hx-repeat__next" aria-label="Next item">›</button></div><div class="hx-repeat__body"></div><div class="hx-repeat__actions"><button type="button" class="hx-repeat__add">Add</button><button type="button" class="hx-repeat__remove">Remove</button></div>';
+            const hidden = nested.querySelector('input[type="hidden"]');
+            hidden.value = JSON.stringify(Array.isArray(value) ? value : (field.defaultValue ?? []));
+            hidden.addEventListener('input', (event) => {
+              event.stopPropagation();
+              onValue(readRepeatItems(hidden));
+            });
+            wrap.append(nested);
+            // Bind after the parent paint attaches this editor to its form.
+            queueMicrotask(() => { if (nested.isConnected) bindRepeatable(nested); });
+            return wrap;
+          }
+
+          if (field.type === 'PROPERTY_SINGLE_SELECT' || field.type === 'PROPERTY_MULTI_SELECT') {
+            const picker = document.createElement('div');
+            picker.className = 'hx-property';
+            picker.dataset.field = JSON.stringify(field);
+            picker.innerHTML = '<input type="hidden"><div class="hx-property__chips"></div><div class="hx-property__search"><input type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" autocomplete="off" placeholder="Search properties…"><button type="button" class="hx-property__clear">×</button></div><div class="hx-property__options" role="listbox" hidden></div>';
+            const hidden = picker.querySelector('input[type="hidden"]');
+            hidden.value = Array.isArray(value) ? value.join('\\n') : String(value ?? '');
+            picker.querySelector('[role="combobox"]').setAttribute('aria-label', field.label || field.name);
+            picker.querySelector('.hx-property__clear').setAttribute('aria-label', `Clear ${field.label || field.name}`);
+            hidden.addEventListener('change', (event) => {
+              event.stopPropagation();
+              onValue(field.type === 'PROPERTY_MULTI_SELECT' ? hidden.value.split('\\n').filter(Boolean) : hidden.value);
+            });
+            wrap.append(picker);
+            document.querySelector('.harness__fields')?.dispatchEvent(new CustomEvent('harness:property-picker', { detail: picker }));
+            return wrap;
+          }
           if (field.type === 'MULTI_LINE') {
             const box = document.createElement('textarea');
             box.rows = 4;
@@ -1744,9 +2028,16 @@ const embedSrc = (() => {{
 
       <aside class="hx-modules">
         <h2>Modules</h2>
-        <ul>
+        <input
+          type="search"
+          class="hx-module-filter"
+          placeholder="Search modules"
+          aria-label="Search modules"
+          aria-controls="hx-module-list"
+        />
+        <ul id="hx-module-list">
           {{modules.map((m) => (
-            <li>
+            <li data-module-search={{`${{m.label}} ${{m.name}}`.toLowerCase()}}>
               <a href={{moduleHref(m.name)}} aria-current={{m.name === selected?.name ? 'page' : undefined}}>
                 <span class="hx-modules__name">{{m.label}}</span>
                 <span class="hx-kind" data-kind={{m.kind}}>{{m.kind}}</span>
@@ -1754,6 +2045,7 @@ const embedSrc = (() => {{
             </li>
           ))}}
         </ul>
+        <p class="hx-empty hx-module-empty" role="status" hidden>No modules found.</p>
       </aside>
 
       <main class="hx-canvas">
@@ -2006,7 +2298,23 @@ const embedSrc = (() => {{
       }}
     </script>
 {_harness_file_field_script()}
+{_harness_property_field_script()}
 {_harness_repeatable_script()}
+
+    <script is:inline>
+      const moduleFilter = document.querySelector('.hx-module-filter');
+      const moduleItems = document.querySelectorAll('[data-module-search]');
+      const moduleEmpty = document.querySelector('.hx-module-empty');
+      moduleFilter?.addEventListener('input', () => {{
+        const query = moduleFilter.value.trim().toLowerCase();
+        let visible = 0;
+        moduleItems.forEach((item) => {{
+          item.hidden = !item.dataset.moduleSearch.includes(query);
+          if (!item.hidden) visible++;
+        }});
+        if (moduleEmpty) moduleEmpty.hidden = visible > 0;
+      }});
+    </script>
 
     <script is:inline>
       // Company switch. A reload rather than a partial swap: the whole document
@@ -2216,14 +2524,15 @@ const embedSrc = (() => {{
       }}
       .hx-panel__note code {{ font-size: 0.625rem; }}
 
-      .hx-token-filter {{
+      .hx-token-filter, .hx-module-filter {{
+        box-sizing: border-box;
         width: 100%; margin-bottom: 0.75rem;
         padding: 0.4rem 0.6rem;
         background: var(--hx-panel-2); color: var(--hx-text);
         border: 1px solid var(--hx-line); border-radius: 7px;
         font: inherit; font-size: 0.75rem;
       }}
-      .hx-token-filter:focus {{ outline: none; border-color: var(--hx-accent); }}
+      .hx-token-filter:focus, .hx-module-filter:focus {{ outline: none; border-color: var(--hx-accent); }}
 
       .hx-token-group {{ margin-bottom: 1rem; }}
       .hx-token-group[hidden] {{ display: none; }}
@@ -2428,6 +2737,7 @@ const embedSrc = (() => {{
       }}
 
 {_harness_file_field_styles()}
+{_harness_property_field_styles()}
       /* Switch */
       .hx-switch {{ display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }}
       .hx-switch input {{ position: absolute; opacity: 0; width: 0; height: 0; }}

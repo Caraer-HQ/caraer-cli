@@ -89,6 +89,12 @@ not build its own API client.
 
 ## Preview
 
+`REPEATABLE` fields can contain nested `REPEATABLE` fields in `itemFields`,
+for example navigation links with child links. Each list has its own
+`min`, `max`, `itemLabel`, and add/remove controls; child values are stored
+as arrays of objects inside their parent row. Declare `defaultValue: []`
+for an initially empty child list.
+
 ```bash
 caraer apps local dev
 ```
@@ -100,3 +106,13 @@ Mark rendered nodes with `data-caraer-field="<name>"` (and
 `data-caraer-item="<index>"` on a REPEATABLE row). In `caraer apps local`
 and the CMS builder, clicking that node focuses the matching sidebar
 field. The live site ignores the attributes.
+
+The local preview sidebar uses searchable property pickers for
+`PROPERTY_SINGLE_SELECT` and `PROPERTY_MULTI_SELECT`. Search by label or machine
+name, use the arrow keys and Enter to choose, and clear a selection with ×.
+Multi-property fields keep the selected order and show removable chips.
+Choices respect `allowedPropertyTypes` / `allowedPropertyFormats` (and their
+`filterProperty*` aliases). With a company selected, choices come from that
+company's schema for the module's first `OBJECT_SINGLE_SELECT` field; sample
+mode offers sample properties. Restart the local dev server after updating
+the CLI to regenerate the preview.

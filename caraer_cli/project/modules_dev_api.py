@@ -49,6 +49,7 @@ def start_company_api(
     *,
     fetch_forms: Callable[[str], list[dict[str, Any]]] | None = None,
     fetch_form: Callable[[str, str], dict[str, Any] | None] | None = None,
+    fetch_properties: Callable[[str, str], list[dict[str, Any]]] | None = None,
     host: str = "127.0.0.1",
 ) -> CompanyApi:
     """Serve the company list and per-company branding on an ephemeral port.
@@ -57,6 +58,7 @@ def start_company_api(
     its result is held in memory only. ``fetch_forms`` is keyed by company
     uuid so switching preview company lists that company's forms.
     ``fetch_form`` loads one form by uuid or name for ``CaraerForm``.
+    ``fetch_properties`` loads schema choices per company and object.
     """
     token = secrets.token_urlsafe(24)
     lock = threading.Lock()
@@ -136,6 +138,38 @@ def start_company_api(
                         self._send(200, company)
                         return
                 self._send(404, {"error": "unknown company"})
+                return
+
+            if path.startswith("/properties/"):
+                parts = path[len("/properties/") :].split("/")
+                if len(parts) != 2:
+                    self._send(400, {"error": "company and object required"})
+                    return
+                company_key, object_ref = map(unquote, parts)
+                company_uuid = next(
+                    (
+                        company.get("uuid")
+                        for company in companies()
+                        if company_key in (company.get("subdomain"), company.get("uuid"))
+                    ),
+                    None,
+                )
+                if not company_uuid:
+                    self._send(404, {"error": "unknown company"})
+                    return
+                with lock:
+                    key = f"properties:{company_uuid}:{object_ref}"
+                    if key not in cache:
+                        try:
+                            cache[key] = (
+                                fetch_properties(str(company_uuid), object_ref)
+                                if fetch_properties else []
+                            )
+                        except Exception as error:
+                            log.debug("Could not list preview properties: %s", error)
+                            cache[key] = []
+                    result = cache[key]
+                self._send(200, result)
                 return
 
             if path.startswith("/forms/"):

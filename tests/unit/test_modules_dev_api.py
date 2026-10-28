@@ -120,3 +120,28 @@ def test_a_failing_fetch_serves_an_empty_list(api) -> None:
         assert _get(served, "/companies") == []
     finally:
         served.shutdown()
+
+
+def test_property_choices_are_scoped_and_cached_by_company_and_object() -> None:
+    calls = []
+
+    def fetch_properties(company_uuid, object_ref):
+        calls.append((company_uuid, object_ref))
+        return [{"name": f"{company_uuid}-{object_ref}", "type": "string"}]
+
+    served = start_company_api(lambda: COMPANIES, fetch_properties=fetch_properties)
+    try:
+        assert _get(served, "/properties/gartenlux/blog")[0]["name"] == "u-1-blog"
+        assert _get(served, "/properties/gartenlux/blog")[0]["name"] == "u-1-blog"
+        assert _get(served, "/properties/argo/blog")[0]["name"] == "u-2-blog"
+        assert _get(served, "/properties/gartenlux/vacancy")[0]["name"] == "u-1-vacancy"
+        assert calls == [("u-1", "blog"), ("u-2", "blog"), ("u-1", "vacancy")]
+        with pytest.raises(urllib.error.HTTPError) as caught:
+            _get(served, "/properties/unknown/blog")
+        assert caught.value.code == 404
+        assert len(calls) == 3
+        with pytest.raises(urllib.error.HTTPError) as caught:
+            _get(served, "/properties/gartenlux/blog", token="wrong")
+        assert caught.value.code == 401
+    finally:
+        served.shutdown()

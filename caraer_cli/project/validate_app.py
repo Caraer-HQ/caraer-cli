@@ -2102,13 +2102,7 @@ def _validate_repeatable_field(
                 f"field '{name}.{child_name}' is missing 'type'.",
             )
         elif child_type == "REPEATABLE":
-            _issue(
-                issues,
-                "error",
-                rel_config,
-                f"field '{name}.{child_name}' cannot be REPEATABLE. Nesting lists "
-                "is not supported; keep one itemFields level.",
-            )
+            _validate_repeatable_field(child, f"{name}.{child_name}", rel_config, issues)
         elif child_type in DISALLOWED_MODULE_FIELD_TYPES:
             _issue(
                 issues,

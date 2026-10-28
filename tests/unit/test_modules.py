@@ -357,6 +357,32 @@ def test_codegen_maps_repeatable_to_array_of_items(tmp_path: Path) -> None:
     assert "steps: Array<{ title: string; text: string | null }>;" in types
 
 
+def test_nested_repeatable_validates_and_generates_nested_types(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    child = {
+        "name": "children", "label": "Children", "type": "REPEATABLE",
+        "itemFields": [
+            {"name": "text", "label": "Text", "type": "SINGLE_LINE"},
+            {"name": "link", "label": "Link", "type": "SINGLE_LINE"},
+        ],
+    }
+    config = {
+        "name": "navigation", "label": "Navigation", "kind": "header",
+        "fields": [{
+            "name": "links", "label": "Links", "type": "REPEATABLE",
+            "itemFields": [child],
+        }],
+    }
+    _write_module(root, "navigation", config)
+    assert _errors(root) == []
+    module = discover_local_modules(root, load_workspace(root))[0]
+    assert "children: Array<{ text: string | null; link: string | null }>" in render_module_types(module)
+
+    child["itemFields"][1]["type"] = "SECRET"
+    _write_module(root, "navigation", config)
+    assert any("links.children.link" in error and "SECRET" in error for error in _errors(root))
+
+
 def test_codegen_runs_during_validation(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     _write_module(
