@@ -86,8 +86,7 @@ Allowed: `SINGLE_LINE`, `MULTI_LINE`, `SINGLE_SELECT`, `MULTI_SELECT`,
 `RECORD_*`, `FORM_SINGLE_SELECT`, `OBJECT_*`, `PROPERTY_*`, `SWITCH`,
 `MAPPING`, `FILE`, `MULTI_FILE`, `IMAGE`, `COLOR`, `REPEATABLE`.
 
-Rejected: `SECRET`, `ACTION`, serverless `optionsSource`. Nested `REPEATABLE`
-fields are supported; declare `itemFields` for each list.
+Rejected: `SECRET`, `ACTION`, serverless `optionsSource`, nested `REPEATABLE`.
 
 | Flag / type | Meaning |
 | --- | --- |
