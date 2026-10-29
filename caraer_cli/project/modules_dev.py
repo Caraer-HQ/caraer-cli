@@ -2019,6 +2019,17 @@ const embedSrc = (() => {{
           </select>
         </label>
 
+        <div class="hx-size" aria-label="Preview size">
+          <input id="hx-width" type="number" min="240" max="3840" aria-label="Preview width in pixels" />
+          <span>×</span>
+          <input id="hx-height" type="number" min="200" max="3840" aria-label="Preview height in pixels" />
+          <span>px</span>
+        </div>
+        <div class="hx-seg hx-zoom" role="group" aria-label="Preview zoom">
+          <button type="button" id="hx-zoom-out" aria-label="Zoom out">−</button>
+          <button type="button" id="hx-zoom-reset" title="Reset zoom to 100% (Ctrl/Cmd+0)">100%</button>
+          <button type="button" id="hx-zoom-in" aria-label="Zoom in">+</button>
+        </div>
         <div class="hx-seg" role="group" aria-label="Viewport width">
           <button type="button" data-width="390">Mobile</button>
           <button type="button" data-width="820">Tablet</button>
@@ -2056,6 +2067,9 @@ const embedSrc = (() => {{
             title="Module preview"
             src={{embedSrc}}
           ></iframe>
+          <button type="button" class="hx-resize hx-resize--width" data-resize="width" aria-label="Resize preview width" title="Drag to resize width; arrow keys adjust by 10px"></button>
+          <button type="button" class="hx-resize hx-resize--height" data-resize="height" aria-label="Resize preview height" title="Drag to resize height; arrow keys adjust by 10px"></button>
+          <button type="button" class="hx-resize hx-resize--both" data-resize="both" aria-label="Resize preview width and height" title="Drag to resize; arrow keys adjust by 10px">↘</button>
         </div>
       </main>
 
@@ -2381,20 +2395,129 @@ const embedSrc = (() => {{
     </script>
 
     <script is:inline>
-      // Viewport width toggle. Chrome-only, so it lives here rather than in the
-      // live-update script that talks to the server.
+      // Scale the iframe visually without changing its responsive viewport.
       const frame = document.getElementById('harness-frame');
-      document.querySelectorAll('.hx-bar .hx-seg button').forEach((button) => {{
-        button.addEventListener('click', () => {{
-          document.querySelectorAll('.hx-bar .hx-seg button').forEach((b) => {{
-            b.classList.remove('is-on');
+      const canvas = document.querySelector('.hx-canvas');
+      const previewDoc = document.querySelector('iframe.hx-frame__doc');
+      if (frame && canvas && previewDoc) {{
+        let zoom = 1;
+        let viewportWidth = 0;
+        let viewportHeight = 0;
+        const widthInput = document.getElementById('hx-width');
+        const heightInput = document.getElementById('hx-height');
+        const zoomOut = document.getElementById('hx-zoom-out');
+        const zoomIn = document.getElementById('hx-zoom-in');
+        const zoomReset = document.getElementById('hx-zoom-reset');
+        const layoutPreview = () => {{
+          const style = getComputedStyle(canvas);
+          const width = viewportWidth || Math.max(1, canvas.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
+          const height = viewportHeight || Math.max(1, canvas.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom));
+          frame.style.width = `${{width * zoom}}px`;
+          frame.style.height = `${{height * zoom}}px`;
+          previewDoc.style.width = `${{width}}px`;
+          previewDoc.style.height = `${{height}}px`;
+          previewDoc.style.transform = `scale(${{zoom}})`;
+          frame.toggleAttribute('data-constrained', Boolean(viewportWidth));
+          widthInput.value = String(Math.round(width));
+          heightInput.value = String(Math.round(height));
+          zoomReset.textContent = `${{Math.round(zoom * 100)}}%`;
+          zoomOut.disabled = zoom <= 0.25;
+          zoomIn.disabled = zoom >= 2;
+        }};
+        const resizePreview = (width, height) => {{
+          viewportWidth = Math.max(240, Math.min(3840, Math.round(width)));
+          viewportHeight = Math.max(200, Math.min(3840, Math.round(height)));
+          document.querySelectorAll('.hx-bar button[data-width]').forEach((b) => b.classList.remove('is-on'));
+          layoutPreview();
+        }};
+        [widthInput, heightInput].forEach((input) => {{
+          input.addEventListener('input', () => {{
+            if (widthInput.value && heightInput.value && widthInput.validity.valid && heightInput.validity.valid) {{
+              resizePreview(Number(widthInput.value), Number(heightInput.value));
+            }}
           }});
-          button.classList.add('is-on');
-          const width = Number(button.dataset.width);
-          frame.style.maxWidth = width ? width + 'px' : '';
-          frame.toggleAttribute('data-constrained', Boolean(width));
+          input.addEventListener('change', () => {{
+            resizePreview(Number(widthInput.value), Number(heightInput.value));
+          }});
         }});
-      }});
+        frame.querySelectorAll('[data-resize]').forEach((handle) => {{
+          let drag = null;
+          handle.addEventListener('pointerdown', (event) => {{
+            if (event.button !== 0) return;
+            event.preventDefault();
+            const style = getComputedStyle(canvas);
+            const available = canvas.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+            const width = parseFloat(previewDoc.style.width);
+            drag = {{ x: event.clientX, y: event.clientY, width,
+              height: parseFloat(previewDoc.style.height), available, zoom,
+              right: width * zoom <= available ? (available + width * zoom) / 2 : width * zoom }};
+            handle.setPointerCapture(event.pointerId);
+            frame.classList.add('is-resizing');
+          }});
+          handle.addEventListener('pointermove', (event) => {{
+            if (!drag) return;
+            const right = drag.right + event.clientX - drag.x;
+            // The frame is centered until it fills the canvas, then scrolls.
+            const width = (right <= drag.available ? 2 * right - drag.available : right) / drag.zoom;
+            resizePreview(handle.dataset.resize === 'height' ? drag.width : width,
+              handle.dataset.resize === 'width' ? drag.height : drag.height + (event.clientY - drag.y) / drag.zoom);
+          }});
+          const finish = () => {{ drag = null; frame.classList.remove('is-resizing'); }};
+          handle.addEventListener('pointerup', finish);
+          handle.addEventListener('pointercancel', finish);
+          handle.addEventListener('lostpointercapture', finish);
+          handle.addEventListener('keydown', (event) => {{
+            const horizontal = ['ArrowLeft', 'ArrowRight'].includes(event.key);
+            const vertical = ['ArrowUp', 'ArrowDown'].includes(event.key);
+            if ((!horizontal && !vertical) || (horizontal && handle.dataset.resize === 'height') || (vertical && handle.dataset.resize === 'width')) return;
+            event.preventDefault();
+            const delta = (event.shiftKey ? 50 : 10) * (['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : 1);
+            resizePreview(Number(widthInput.value) + (horizontal ? delta : 0), Number(heightInput.value) + (vertical ? delta : 0));
+          }});
+        }});
+        const setZoom = (value) => {{
+          zoom = Math.max(0.25, Math.min(2, Math.round(value * 100) / 100));
+          layoutPreview();
+        }};
+        zoomOut.addEventListener('click', () => setZoom(zoom - 0.1));
+        zoomIn.addEventListener('click', () => setZoom(zoom + 0.1));
+        zoomReset.addEventListener('click', () => setZoom(1));
+        const onZoomKey = (event) => {{
+          if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+          if (['-', '+', '=', '0'].includes(event.key)) {{
+            event.preventDefault();
+            setZoom(event.key === '0' ? 1 : zoom + (event.key === '-' ? -0.1 : 0.1));
+          }}
+        }};
+        const onZoomWheel = (event) => {{
+          if (!(event.ctrlKey || event.metaKey)) return;
+          event.preventDefault();
+          if (event.deltaY) setZoom(zoom + (event.deltaY > 0 ? -0.05 : 0.05));
+        }};
+        window.addEventListener('keydown', onZoomKey);
+        canvas.addEventListener('wheel', onZoomWheel, {{ passive: false }});
+        // Iframe events do not bubble into the editor. Rebind after each reload.
+        const bindPreviewZoom = () => {{
+          try {{
+            previewDoc.contentWindow.addEventListener('keydown', onZoomKey);
+            previewDoc.contentWindow.addEventListener('wheel', onZoomWheel, {{ passive: false }});
+          }} catch {{ /* A module may navigate the frame to another origin. */ }}
+        }};
+        previewDoc.addEventListener('load', bindPreviewZoom);
+        bindPreviewZoom();
+        document.querySelectorAll('.hx-bar button[data-width]').forEach((button) => {{
+          button.addEventListener('click', () => {{
+            document.querySelectorAll('.hx-bar button[data-width]').forEach((b) => {{
+              b.classList.toggle('is-on', b === button);
+            }});
+            viewportWidth = Number(button.dataset.width);
+            viewportHeight = 0;
+            layoutPreview();
+          }});
+        }});
+        new ResizeObserver(layoutPreview).observe(canvas);
+        layoutPreview();
+      }}
     </script>
 
     <style is:global>
@@ -2512,6 +2635,8 @@ const embedSrc = (() => {{
         font: inherit; font-size: 0.6875rem;
         padding: 0.3rem 0.6rem; border-radius: 6px; cursor: pointer;
       }}
+      .hx-zoom button:disabled {{ opacity: 0.4; cursor: default; }}
+      #hx-zoom-reset {{ min-width: 3.5rem; }}
       .hx-seg button:hover {{ color: var(--hx-text); }}
       .hx-seg button.is-on {{ background: var(--hx-bg); color: var(--hx-text); }}
 
@@ -2623,7 +2748,8 @@ const embedSrc = (() => {{
       /* Preview canvas */
       .hx-canvas {{
         padding: 1.25rem;
-        overflow: hidden;
+        overflow: auto;
+        min-width: 0;
         min-height: 0;
         display: flex;
         flex-direction: column;
@@ -2645,17 +2771,16 @@ const embedSrc = (() => {{
         position: relative;
         margin: 0 auto;
         width: 100%;
-        flex: 1 1 auto;
-        min-height: 0;
+        flex: none;
         background: var(--caraer-color-background, #fff);
         box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
-        transition: max-width 180ms ease;
       }}
       .hx-frame[data-constrained] {{
         border-radius: 14px;
-        overflow: hidden;
       }}
+      .hx-frame[data-constrained] .hx-frame__doc {{ border-radius: 14px; }}
       .hx-frame__doc {{
+        transform-origin: top left;
         position: absolute;
         inset: 0;
         width: 100%;
@@ -2663,6 +2788,15 @@ const embedSrc = (() => {{
         border: 0;
         background: var(--caraer-color-background, #fff);
       }}
+
+      .hx-size {{ display: flex; align-items: center; gap: 0.3rem; color: var(--hx-muted); font-size: 0.6875rem; }}
+      .hx-size input {{ width: 4.2rem; padding: 0.3rem; border: 1px solid var(--hx-line); border-radius: 5px; background: var(--hx-bg); color: var(--hx-text); font: inherit; }}
+      .hx-resize {{ position: absolute; z-index: 2; padding: 0; border: 0; background: var(--hx-line); color: var(--hx-text); touch-action: none; }}
+      .hx-resize:hover, .hx-resize:focus-visible {{ background: var(--hx-accent); }}
+      .hx-resize--width {{ right: -12px; top: 0; width: 10px; height: 100%; cursor: ew-resize; }}
+      .hx-resize--height {{ bottom: -12px; left: 0; height: 10px; width: 100%; cursor: ns-resize; }}
+      .hx-resize--both {{ right: -14px; bottom: -14px; width: 14px; height: 14px; cursor: nwse-resize; }}
+      .hx-frame.is-resizing .hx-frame__doc {{ pointer-events: none; }}
 
       /* Field panel */
       .hx-fields {{

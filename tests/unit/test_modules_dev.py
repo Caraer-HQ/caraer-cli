@@ -117,7 +117,7 @@ def test_harness_preview_uses_an_iframe_so_media_queries_see_the_frame_width(
     assert '<iframe' in page
     assert 'class="hx-frame__doc"' in page
     assert "HTMLIFrameElement" in page
-    assert "querySelectorAll('.hx-bar .hx-seg button')" in page
+    assert "querySelectorAll('.hx-bar button[data-width]')" in page
     assert "closest('[data-caraer-field]')" in page
     assert "focusSidebarField" in page
 
