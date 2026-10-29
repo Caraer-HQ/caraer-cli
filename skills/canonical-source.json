@@ -1,9 +1,9 @@
 {
   "repository": "Caraer-HQ/caraer-developer",
-  "commit": "5be63206bb2ea417508ec36ac6d85b9d85ec984c",
-  "bundleVersion": "48d9e1e9e73f3716ee3acf3e77086778dcc3dc7322ab98b6598dfa7d43a5afde",
+  "commit": "8da5246cebfcd81a2b0686c30f6e8650dc8953b1",
+  "bundleVersion": "89a8561b4bca6deb6d8b0f322b2212d65bd524e662b3309f2095f90eb8aba3a3",
   "skills": {
     "caraer-apps": "9dbf97e488bce87b385a997a5631b151ef108d9c1f5f5ae630d37c68df44197c",
-    "caraer-cms": "0dad74f1555404672db758e49f39fc0f165ce726f3bd9be9b7eb0f9b0cf4d98c"
+    "caraer-cms": "6acdd4b50c01bc475a36199cf04f3b7f9ed6fb1f5ab0617b5382d2015646d7a2"
   }
 }
