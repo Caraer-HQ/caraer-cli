@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 from caraer_cli.project.modules_publish import (
     build_package_json,
     package_name,
@@ -148,6 +150,36 @@ def test_published_package_includes_shared_settings(tmp_path: Path) -> None:
 
     assert (staging / "modules" / "settings.ts").is_file()
     assert (staging / "modules" / "_theme" / "colors.ts").is_file()
+
+
+@pytest.mark.parametrize("extension", ["png", "jpg", "jpeg", "gif", "webp", "avif", "ico", "svg", "PNG", "SVG"])
+@pytest.mark.parametrize("asset_folder", [".", "_shared/assets/nested", "hero/assets/nested"])
+def test_staged_package_preserves_image_assets(
+    tmp_path: Path, extension: str, asset_folder: str
+) -> None:
+    root = tmp_path / "app"
+    modules = root / "src" / "app" / "modules"
+    hero = modules / "hero"
+    hero.mkdir(parents=True)
+    (hero / "index.astro").write_text(
+        "---\nexport const manifest = { name: 'hero', kind: 'section', "
+        "label: 'Hero', category: 'content' };\n---\n<div></div>\n",
+        encoding="utf-8",
+    )
+    asset = modules / asset_folder / f"arbitrary-name.{extension}"
+    asset.parent.mkdir(parents=True, exist_ok=True)
+    content = b"image bytes preserved without transformation"
+    asset.write_bytes(content)
+    excluded = asset.with_name("private.pem")
+    excluded.write_bytes(b"not a module asset")
+
+    config = ProjectConfig(platformVersion="2026.2", name="demo", srcDir="src")
+    staging, _ = stage_package(
+        root, config, app_name="demo", version="0.1.0", destination=tmp_path / "staged"
+    )
+
+    assert (staging / "modules" / asset.relative_to(modules)).read_bytes() == content
+    assert not (staging / "modules" / excluded.relative_to(modules)).exists()
 
 
 def test_read_app_dependencies_skips_missing_package_json(tmp_path: Path) -> None:
