@@ -83,6 +83,21 @@ on a field, and do not use a top-level `components` list. Ungrouped fields
 stay at the top. `advanced: true` (outside a group) still collapses under
 **Advanced settings**.
 
+The same group objects work inside a `REPEATABLE` field's `itemFields`:
+
+```ts
+itemFields: [
+  { name: "heading", label: "Heading", type: "SINGLE_LINE" },
+  { group: "Heading settings", fields: [headingSizeField, headingColorField] },
+  { group: "Text settings", fields: [textSizeField, textColorField] },
+]
+```
+
+Each item gets its own expandable groups. Groups organize the editor only:
+the item still stores `heading`, `heading_size`, and other field values in
+one flat object. Field names must be unique across every group in that item.
+Visibility rules can reference fields in another item group or the parent module.
+
 For anything that needs the platform (rich text, images, links, menus, forms,
 record lists), import the component from `@caraer/cms-runtime`. A module does
 not build its own API client.

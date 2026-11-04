@@ -19,6 +19,7 @@ from caraer_cli.project.modules_sync import (
     GENERATED_TYPES_FILE,
     LocalModule,
     discover_local_modules,
+    flatten_module_fields,
 )
 from caraer_cli.project.schema import ProjectConfig
 
@@ -77,7 +78,7 @@ def _field_type(item: dict[str, Any]) -> str:
         nested = item.get("itemFields")
         if isinstance(nested, list) and nested:
             parts: list[str] = []
-            for child in nested:
+            for child in flatten_module_fields(nested):
                 if not isinstance(child, dict):
                     continue
                 child_name = str(child.get("name") or "").strip()

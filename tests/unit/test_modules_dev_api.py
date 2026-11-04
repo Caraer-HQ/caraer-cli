@@ -145,3 +145,45 @@ def test_property_choices_are_scoped_and_cached_by_company_and_object() -> None:
         assert caught.value.code == 401
     finally:
         served.shutdown()
+
+
+def test_object_choices_are_company_scoped_authenticated_and_cached() -> None:
+    calls = []
+
+    def fetch_objects(company_uuid):
+        calls.append(company_uuid)
+        return [{'name': f'{company_uuid}-object', 'label': 'Object'}]
+
+    served = start_company_api(lambda: COMPANIES, fetch_objects=fetch_objects)
+    try:
+        assert _get(served, '/objects/gartenlux')[0]['name'] == 'u-1-object'
+        assert _get(served, '/objects/u-1')[0]['name'] == 'u-1-object'
+        assert _get(served, '/objects/argo')[0]['name'] == 'u-2-object'
+        assert calls == ['u-1', 'u-2']
+        for path, token, status in [('/objects/unknown', None, 404), ('/objects/argo', 'wrong', 401)]:
+            with pytest.raises(urllib.error.HTTPError) as caught:
+                _get(served, path, token=token)
+            assert caught.value.code == status
+        assert calls == ['u-1', 'u-2']
+    finally:
+        served.shutdown()
+
+
+def test_object_fetch_failure_is_not_cached_as_an_empty_list() -> None:
+    calls = []
+
+    def fetch_objects(company_uuid):
+        calls.append(company_uuid)
+        if len(calls) == 1:
+            raise RuntimeError('offline')
+        return []
+
+    served = start_company_api(lambda: COMPANIES, fetch_objects=fetch_objects)
+    try:
+        with pytest.raises(urllib.error.HTTPError) as caught:
+            _get(served, '/objects/argo')
+        assert caught.value.code == 502
+        assert _get(served, '/objects/argo') == []
+        assert calls == ['u-2', 'u-2']
+    finally:
+        served.shutdown()

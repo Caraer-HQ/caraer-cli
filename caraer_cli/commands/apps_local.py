@@ -325,6 +325,7 @@ def app_dev(
             fetch_form,
             fetch_forms,
             fetch_properties,
+            fetch_objects,
         )
 
         # Served from memory for the life of the preview rather than written
@@ -346,11 +347,17 @@ def app_dev(
                 return []
             return fetch_properties(app_ctx.api_client(), company_uuid, object_ref)
 
+        def _objects_for_company(company_uuid: str) -> list:
+            if not app_ctx.token:
+                raise RuntimeError("Sign in to load company objects")
+            return fetch_objects(app_ctx.api_client(), company_uuid)
+
         company_api = start_company_api(
             lambda: fetch_companies(app_ctx.api_client()) if app_ctx.token else [],
             fetch_forms=_forms_for_company,
             fetch_form=_form_for_company,
             fetch_properties=_properties_for_company,
+            fetch_objects=_objects_for_company,
         )
 
         harness_env: dict[str, str] = {

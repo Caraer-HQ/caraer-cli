@@ -383,6 +383,36 @@ def test_nested_repeatable_validates_and_generates_nested_types(tmp_path: Path) 
     assert any("links.children.link" in error and "SECRET" in error for error in _errors(root))
 
 
+def test_repeatable_groups_validate_and_keep_generated_row_types_flat(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    heading = {"name": "heading", "label": "Heading", "type": "SINGLE_LINE", "required": True}
+    color = {"name": "color", "label": "Color", "type": "SINGLE_LINE", "defaultValue": "none",
+             "visibleWhen": [{"field": "heading", "operator": "IS_SET"}]}
+    text = {"name": "text", "label": "Text", "type": "MULTI_LINE"}
+    config = {"name": "media", "label": "Media", "kind": "section", "fields": [{
+        "name": "items", "label": "Items", "type": "REPEATABLE", "itemFields": [heading,
+            {"group": "Heading settings", "fields": [color]},
+            {"group": "Text settings", "fields": [text]},
+        ],
+    }]}
+    _write_module(root, "media", config)
+    assert _errors(root) == []
+    module = discover_local_modules(root, load_workspace(root))[0]
+    assert "items: Array<{ heading: string; color: string | null; text: string | null }>" in render_module_types(module)
+
+    text["name"] = "color"
+    _write_module(root, "media", config)
+    assert any("duplicate itemFields name 'color'" in error for error in _errors(root))
+    text["name"] = "text"
+    color["visibleWhen"][0]["field"] = "missing"
+    _write_module(root, "media", config)
+    assert any("items.color" in error and "unknown field 'missing'" in error for error in _errors(root))
+    color.pop("visibleWhen")
+    color["type"] = "SECRET"
+    _write_module(root, "media", config)
+    assert any("items.color" in error and "SECRET" in error for error in _errors(root))
+
+
 def test_codegen_runs_during_validation(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     _write_module(

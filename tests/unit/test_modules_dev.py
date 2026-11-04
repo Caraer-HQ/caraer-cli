@@ -11,9 +11,21 @@ from caraer_cli.project.cms_pins import PUBLISHED_RUNTIME_SPEC, PUBLISHED_TOKENS
 from caraer_cli.project.modules_dev import (
     _harness_install_command,
     _harness_ready,
+    _sample_repeatable_item,
     write_harness,
 )
 from caraer_cli.project.schema import load_workspace
+
+
+def test_grouped_repeatable_sample_defaults_stay_in_the_row() -> None:
+    row = _sample_repeatable_item({"itemFields": [
+        {"name": "heading", "type": "SINGLE_LINE", "label": "Heading"},
+        {"group": "Heading settings", "fields": [
+            {"name": "color", "type": "SINGLE_SELECT", "defaultValue": "none"},
+            {"name": "visible", "type": "SWITCH", "defaultValue": False},
+        ]},
+    ]})
+    assert row == {"heading": "Heading", "color": "none", "visible": False}
 
 
 def _workspace(tmp_path: Path) -> Path:
@@ -311,4 +323,36 @@ def test_property_pagination_follows_server_page_size() -> None:
             return {'data': [{'name': f'field_{page}', 'type': 'string'}], 'perPage': 1, 'lastPage': 3}
 
     assert len(fetch_properties(Client(), 'company', 'object')) == 3
+    assert calls == [1, 2, 3]
+
+
+def test_object_selector_uses_searchable_picker() -> None:
+    from caraer_cli.project.modules_dev import _harness_property_field_markup, _harness_property_field_script
+
+    markup = _harness_property_field_markup()
+    assert "field.type === 'OBJECT_SINGLE_SELECT'" in markup
+    assert 'role="combobox"' in markup
+    assert 'Search objects…' in markup
+    assert '/api/object-options?' in _harness_property_field_script()
+
+
+def test_object_choices_load_every_page_and_only_picker_metadata() -> None:
+    from caraer_cli.project.modules_dev import fetch_objects
+
+    calls = []
+
+    class Client:
+        def request(self, method, path, *, json_body, company_uuid):
+            assert (method, path, company_uuid) == ('POST', '/api/v2/objects/index', 'company-1')
+            page = json_body['page']
+            calls.append(page)
+            return {'data': [
+                {'uuid': f'id-{page}', 'name': f'object_{page}', 'label': f'Object {page}', 'private': 'omit'},
+                {'uuid': 'removed', 'name': 'removed', 'deletedAt': '2026-01-01'},
+            ], 'perPage': 2, 'lastPage': 3}
+
+    assert fetch_objects(Client(), 'company-1') == [
+        {'uuid': f'id-{page}', 'name': f'object_{page}', 'label': f'Object {page}'}
+        for page in range(1, 4)
+    ]
     assert calls == [1, 2, 3]

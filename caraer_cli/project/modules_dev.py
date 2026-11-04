@@ -19,7 +19,11 @@ from typing import Any
 
 from caraer_cli.project.cms_pins import PUBLISHED_RUNTIME_SPEC, PUBLISHED_TOKENS_SPEC
 from caraer_cli.project.modules_publish import read_app_dependencies
-from caraer_cli.project.modules_sync import LocalModule, discover_local_modules
+from caraer_cli.project.modules_sync import (
+    LocalModule,
+    discover_local_modules,
+    flatten_module_fields,
+)
 from caraer_cli.project.paths import modules_dir
 from caraer_cli.project.schema import ProjectConfig
 
@@ -142,6 +146,34 @@ def fetch_forms(client: Any, company_uuid: str) -> list[dict[str, Any]]:
             }
         )
     return forms
+
+
+def fetch_objects(client: Any, company_uuid: str) -> list[dict[str, Any]]:
+    """List all accessible object choices, without records or full schemas."""
+    if not company_uuid:
+        return []
+    objects: dict[str, dict[str, Any]] = {}
+    page = 1
+    while True:
+        payload = client.request(
+            "POST", "/api/v2/objects/index",
+            json_body={"page": page, "limit": 200, "query": "", "filters": []},
+            company_uuid=company_uuid,
+        )
+        rows = payload.get("data", []) if isinstance(payload, dict) else []
+        if not isinstance(rows, list):
+            raise ValueError("Invalid object choices response")
+        for row in rows:
+            if isinstance(row, dict) and row.get("name") and not row.get("deletedAt"):
+                objects[row["name"]] = {key: row.get(key) for key in ("uuid", "name", "label")}
+        last_page = payload.get("lastPage")
+        per_page = payload.get("perPage") or 200
+        if not rows or (isinstance(last_page, int) and page >= last_page):
+            break
+        if last_page is None and len(rows) < per_page:
+            break
+        page += 1
+    return sorted(objects.values(), key=lambda item: (item.get("label") or item["name"]).casefold())
 
 
 def fetch_properties(client: Any, company_uuid: str, object_ref: str) -> list[dict[str, Any]]:
@@ -276,7 +308,7 @@ def _sample_repeatable_item(item: dict[str, Any]) -> dict[str, Any]:
     nested = item.get("itemFields")
     if not isinstance(nested, list):
         return row
-    for child in nested:
+    for child in flatten_module_fields(nested):
         if not isinstance(child, dict):
             continue
         child_name = str(child.get("name") or "")
@@ -726,6 +758,13 @@ function socialAccounts(source) {
 }
 
 export const onRequest = defineMiddleware(async (context, next) => {
+  if (context.url.pathname === '/api/object-options') {
+    const company = context.url.searchParams.get('company') ?? SUBDOMAIN;
+    if (!company) return Response.json([{ name: 'vacancy', label: 'Sample vacancies' }]);
+    const objects = await harnessApi(`/objects/${encodeURIComponent(company)}`);
+    return Array.isArray(objects) ? Response.json(objects)
+      : Response.json({ error: 'Could not load objects. Check your CLI connection and company access.' }, { status: 502 });
+  }
   if (context.url.pathname === '/api/property-options') {
     const company = context.url.searchParams.get('company') ?? SUBDOMAIN;
     const object = context.url.searchParams.get('object') ?? RECORD_OBJECT ?? 'vacancy';
@@ -1099,14 +1138,14 @@ def _harness_field_rows(fields_expr: str) -> str:
 
 
 def _harness_property_field_markup() -> str:
-    return """              ) : field.type === 'PROPERTY_SINGLE_SELECT' || field.type === 'PROPERTY_MULTI_SELECT' ? (
+    return """              ) : field.type === 'OBJECT_SINGLE_SELECT' || field.type === 'PROPERTY_SINGLE_SELECT' || field.type === 'PROPERTY_MULTI_SELECT' ? (
                 <div class="hx-property" data-field={JSON.stringify(field)}>
                   <input type="hidden" name={`f.${field.name}`}
                     value={Array.isArray(stored[field.name]) ? stored[field.name].join('\\n') : String(stored[field.name] ?? '')} />
                   <div class="hx-property__chips"></div>
                   <div class="hx-property__search">
                     <input type="text" id={`f-${field.name}`} role="combobox" autocomplete="off"
-                      aria-autocomplete="list" aria-expanded="false" placeholder="Search properties…" />
+                      aria-autocomplete="list" aria-expanded="false" placeholder={field.type === 'OBJECT_SINGLE_SELECT' ? 'Search objects…' : 'Search properties…'} />
                     <button type="button" class="hx-property__clear" aria-label={`Clear ${field.label}`}>×</button>
                   </div>
                   <div class="hx-property__options" role="listbox" hidden></div>
@@ -1121,6 +1160,9 @@ def _harness_property_field_script() -> str:
         const form = document.querySelector('.harness__fields');
         if (!form) return;
         let properties = [];
+        let objects = [];
+        let objectsLoaded = false;
+        let objectsError = false;
         let request = 0;
         const pickers = new Map();
         let sequence = 0;
@@ -1135,15 +1177,17 @@ def _harness_property_field_script() -> str:
           const list = root.querySelector('[role="listbox"]');
           const chips = root.querySelector('.hx-property__chips');
           const clear = root.querySelector('.hx-property__clear');
+          const objectPicker = field.type === 'OBJECT_SINGLE_SELECT';
+          const choices = () => objectPicker ? objects : properties;
           const multiple = field.type === 'PROPERTY_MULTI_SELECT';
           const id = `hx-properties-${sequence++}`;
           list.id = id;
           search.setAttribute('aria-controls', id);
           let active = -1;
           let matches = [];
-          let loading = !loaded;
+          let loading = objectPicker ? !objectsLoaded : !loaded;
           const values = () => hidden.value.split(/[\n,]+/).filter(Boolean);
-          const label = (name) => properties.find((p) => p.name === name)?.label || name;
+          const label = (name) => choices().find((p) => p.name === name || p.uuid === name)?.label || name;
           const close = () => {
             list.hidden = true;
             search.setAttribute('aria-expanded', 'false');
@@ -1180,7 +1224,7 @@ def _harness_property_field_script() -> str:
             const query = search.value.trim().toLowerCase();
             const types = field.allowedPropertyTypes ?? field.filterPropertyTypes ?? [];
             const formats = field.allowedPropertyFormats ?? field.filterPropertyFormats ?? [];
-            matches = properties.filter((p) => {
+            matches = choices().filter((p) => {
               const format = p.format;
               return (!multiple || !values().includes(p.name))
                 && (!types.length || types.some((t) => normalize(t) === normalize(p.type)))
@@ -1206,7 +1250,9 @@ def _harness_property_field_script() -> str:
             });
             if (!matches.length) {
               const empty = document.createElement('span');
-              empty.textContent = loading ? 'Loading properties…' : 'No matching properties';
+              empty.textContent = objectPicker
+                ? (loading ? 'Loading objects…' : objectsError ? 'Could not load objects. Check your CLI connection and company access.' : 'No matching objects')
+                : (loading ? 'Loading properties…' : 'No matching properties');
               list.append(empty);
             }
             list.hidden = false;
@@ -1242,23 +1288,40 @@ def _harness_property_field_script() -> str:
           clear.addEventListener('click', () => { commit([]); search.focus(); });
           showValue();
           pickers.set(root, () => {
-            loading = false;
+            loading = objectPicker ? !objectsLoaded : !loaded;
             if (document.activeElement === search && !list.hidden) paint();
             else showValue();
           });
         };
         form.querySelectorAll('.hx-property').forEach(bind);
         form.addEventListener('harness:property-picker', (event) => bind(event.detail));
+        const refreshPickers = () => pickers.forEach((refresh, root) => {
+          if (root.isConnected) refresh(); else pickers.delete(root);
+        });
+        const loadObjects = async () => {
+          const params = new URLSearchParams({ company: form.elements.namedItem('company')?.value ?? '' });
+          try {
+            const response = await fetch('/api/object-options?' + params);
+            if (!response.ok) throw new Error('Object choices unavailable');
+            const result = await response.json();
+            if (!Array.isArray(result)) throw new Error('Invalid object choices');
+            objects = result;
+          } catch { objectsError = true; }
+          objectsLoaded = true;
+          refreshPickers();
+        };
         const objectField = form.querySelector('.hx-field[data-type="OBJECT_SINGLE_SELECT"] [name]');
         const load = async () => {
           const current = ++request;
           const params = new URLSearchParams({
             company: form.elements.namedItem('company')?.value ?? '',
-            object: objectField?.value || 'vacancy',
+            object: objectField ? objectField.value : 'vacancy',
           });
           properties = [];
           loaded = false;
+          refreshPickers();
           try {
+            if (objectField && !objectField.value) { loaded = true; refreshPickers(); return; }
             const response = await fetch('/api/property-options?' + params);
             const result = response.ok ? await response.json() : [];
             if (current !== request) return;
@@ -1270,8 +1333,7 @@ def _harness_property_field_script() -> str:
           });
         };
         objectField?.addEventListener('change', load);
-        // The object picker is currently a text control in the local harness.
-        objectField?.addEventListener('input', load);
+        if (form.querySelector('.hx-field[data-type="OBJECT_SINGLE_SELECT"]')) loadObjects();
         load();
       })();
     </script>
@@ -1431,9 +1493,12 @@ def _harness_repeatable_script() -> str:
     """Pages through REPEATABLE items so the sidebar does not grow a long list."""
     return r"""
     <script is:inline>
+      const repeatItemFields = (fields) => fields.flatMap((field) =>
+        field.group && Array.isArray(field.fields) ? field.fields : [field],
+      );
       const emptyRepeatItem = (fields) => {
         const row = {};
-        for (const field of fields) {
+        for (const field of repeatItemFields(fields)) {
           if (field.defaultValue !== undefined && field.defaultValue !== null) {
             row[field.name] = field.defaultValue;
             continue;
@@ -1481,7 +1546,7 @@ def _harness_repeatable_script() -> str:
         }
         let index = 0;
         const visibilityKeys = [...new Set(
-          fields.flatMap((field) => (Array.isArray(field.visibleWhen) ? field.visibleWhen : [])
+          repeatItemFields(fields).flatMap((field) => (Array.isArray(field.visibleWhen) ? field.visibleWhen : [])
             .map((rule) => rule && rule.field)
             .filter(Boolean)),
         )];
@@ -1554,13 +1619,14 @@ def _harness_repeatable_script() -> str:
             return wrap;
           }
 
-          if (field.type === 'PROPERTY_SINGLE_SELECT' || field.type === 'PROPERTY_MULTI_SELECT') {
+          if (field.type === 'OBJECT_SINGLE_SELECT' || field.type === 'PROPERTY_SINGLE_SELECT' || field.type === 'PROPERTY_MULTI_SELECT') {
             const picker = document.createElement('div');
             picker.className = 'hx-property';
             picker.dataset.field = JSON.stringify(field);
             picker.innerHTML = '<input type="hidden"><div class="hx-property__chips"></div><div class="hx-property__search"><input type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" autocomplete="off" placeholder="Search properties…"><button type="button" class="hx-property__clear">×</button></div><div class="hx-property__options" role="listbox" hidden></div>';
             const hidden = picker.querySelector('input[type="hidden"]');
             hidden.value = Array.isArray(value) ? value.join('\\n') : String(value ?? '');
+            picker.querySelector('[role="combobox"]').placeholder = field.type === 'OBJECT_SINGLE_SELECT' ? 'Search objects…' : 'Search properties…';
             picker.querySelector('[role="combobox"]').setAttribute('aria-label', field.label || field.name);
             picker.querySelector('.hx-property__clear').setAttribute('aria-label', `Clear ${field.label || field.name}`);
             hidden.addEventListener('change', (event) => {
@@ -1678,17 +1744,30 @@ def _harness_repeatable_script() -> str:
           const current = items[index] && typeof items[index] === 'object' ? items[index] : {};
           const context = { ...readParentValues(), ...current };
           body.replaceChildren();
-          for (const field of fields) {
+          const appendField = (parent, field) => {
             const rules = Array.isArray(field.visibleWhen) ? field.visibleWhen : [];
             if (rules.length && !rules.every((rule) => itemConditionHolds(rule, context))) {
-              continue;
+              return;
             }
-            body.append(
-              fieldControl(field, current[field.name], (nextValue) => {
+            parent.append(
+              fieldControl(field, current[field.name] ?? field.defaultValue, (nextValue) => {
                 items[index] = { ...items[index], [field.name]: nextValue };
                 commit();
               }),
             );
+          };
+          for (const field of fields) {
+            if (field.group && Array.isArray(field.fields)) {
+              const group = document.createElement('details');
+              group.className = 'hx-repeat__group';
+              const title = document.createElement('summary');
+              title.textContent = field.group;
+              group.append(title);
+              for (const child of field.fields) appendField(group, child);
+              if (group.children.length > 1) body.append(group);
+            } else {
+              appendField(body, field);
+            }
           }
         };
 
@@ -2843,6 +2922,11 @@ const embedSrc = (() => {{
         font-size: 0.7rem; color: var(--hx-muted);
       }}
       .hx-advanced[open] summary::after {{ content: '▾'; }}
+      .hx-repeat__group {{
+        border-top: 1px solid var(--hx-line); padding-top: 0.5rem;
+      }}
+      .hx-repeat__group > summary {{ cursor: pointer; font-size: 0.75rem; font-weight: 600; }}
+      .hx-repeat__group > .hx-repeat__field {{ margin-top: 0.875rem; }}
       .hx-field__label {{
         display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
         font-size: 0.75rem; font-weight: 600;

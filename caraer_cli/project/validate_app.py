@@ -27,6 +27,7 @@ from caraer_cli.project.modules_sync import (
     MODULE_KINDS,
     PINNED_FRAMEWORK_MAJORS,
     discover_local_modules,
+    flatten_module_fields,
     is_module_field_group,
     parse_major,
 )
@@ -1889,6 +1890,7 @@ def _validate_module_fields(
         nested = item.get("itemFields")
         if not isinstance(nested, list):
             continue
+        nested = flatten_module_fields(nested)
         nested_names = set(field_names)
         for child in nested:
             if isinstance(child, dict):
@@ -2052,8 +2054,38 @@ def _validate_repeatable_field(
             f"field '{name}' max ({maximum}) is less than min ({minimum}).",
         )
 
+    # A group only organizes the editor; its children share the row's namespace.
+    children: list[dict] = []
+    for entry in nested:
+        if isinstance(entry, dict) and is_module_field_group(entry):
+            title = str(entry.get("group") or "").strip()
+            if entry.get("name") or entry.get("type"):
+                _issue(
+                    issues, "error", rel_config,
+                    f"field '{name}' group '{title}' must not declare name or type.",
+                )
+            if not entry["fields"]:
+                _issue(
+                    issues, "error", rel_config,
+                    f"field '{name}' group '{title}' has no fields.",
+                )
+            for child in entry["fields"]:
+                if isinstance(child, dict) and child.get("group") is not None:
+                    _issue(
+                        issues, "error", rel_config,
+                        f"field '{name}' group '{title}' must contain fields, not another group.",
+                    )
+                children.append(child)
+        else:
+            if isinstance(entry, dict) and entry.get("group") is not None:
+                _issue(
+                    issues, "error", rel_config,
+                    f"field '{name}' must use {{ group: \"Style\", fields: [...] }} for an item group.",
+                )
+            children.append(entry)
+
     child_names: set[str] = set()
-    for child in nested:
+    for child in children:
         if not isinstance(child, dict):
             _issue(
                 issues,
