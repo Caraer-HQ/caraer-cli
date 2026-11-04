@@ -122,8 +122,10 @@ Mark rendered nodes with `data-caraer-field="<name>"` (and
 and the CMS builder, clicking that node focuses the matching sidebar
 field. The live site ignores the attributes.
 
-The local preview sidebar uses searchable property pickers for
-`PROPERTY_SINGLE_SELECT` and `PROPERTY_MULTI_SELECT`. Search by label or machine
+The local preview sidebar uses searchable pickers for `OBJECT_SINGLE_SELECT`,
+`PROPERTY_SINGLE_SELECT` and `PROPERTY_MULTI_SELECT`. The object picker lists all
+accessible objects in the selected company, including objects without pages.
+Search by label or machine
 name, use the arrow keys and Enter to choose, and clear a selection with ×.
 Multi-property fields keep the selected order and show removable chips.
 Choices respect `allowedPropertyTypes` / `allowedPropertyFormats` (and their
