@@ -107,6 +107,9 @@ _APP_BAR_FIELDS = (
     "description",
     "actionLabel",
     "iframeUrl",
+    "navigationPlacement",
+    "requiredUserScopes",
+    "routeAliases",
     "icon",
     "settingsSchema",
 )
