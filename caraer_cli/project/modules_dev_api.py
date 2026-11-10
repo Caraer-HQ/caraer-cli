@@ -51,6 +51,7 @@ def start_company_api(
     fetch_form: Callable[[str, str], dict[str, Any] | None] | None = None,
     fetch_properties: Callable[[str, str], list[dict[str, Any]]] | None = None,
     fetch_objects: Callable[[str], list[dict[str, Any]]] | None = None,
+    prepare_company: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     host: str = "127.0.0.1",
 ) -> CompanyApi:
     """Serve the company list and per-company branding on an ephemeral port.
@@ -137,7 +138,15 @@ def start_company_api(
                 wanted = unquote(path[len("/companies/") :])
                 for company in companies():
                     if company.get("subdomain") == wanted:
-                        self._send(200, company)
+                        try:
+                            with lock:
+                                key = f"branding:{wanted}"
+                                if key not in cache:
+                                    cache[key] = prepare_company(company) if prepare_company else company
+                                prepared = cache[key]
+                            self._send(200, prepared)
+                        except Exception:
+                            self._send(502, {"error": "Could not resolve company branding assets"})
                         return
                 self._send(404, {"error": "unknown company"})
                 return

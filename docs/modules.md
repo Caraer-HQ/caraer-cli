@@ -133,3 +133,13 @@ Choices respect `allowedPropertyTypes` / `allowedPropertyFormats` (and their
 company's schema for the module's first `OBJECT_SINGLE_SELECT` field; sample
 mode offers sample properties. Restart the local dev server after updating
 the CLI to regenerate the preview.
+
+## Exporting a company-styled catalog image
+
+Run `caraer apps local dev --cms`, select a company, and choose **Export catalog image**. The browser downloads `<module>-<company>-desktop.webp`. First use prepares Chromium; the preview remains usable if browser preparation fails. `CARAER_CHROMIUM_PATH` can select an already-installed browser.
+
+Exports use the module's manifest defaults plus deterministic sample content, ignoring sidebar edits and saved local sample overrides. Company colours, typography, custom fonts and branding assets still apply. Company file keys are resolved through the ordinary company-scoped file API; credentials stay in the CLI process. Empty defaults remain empty, so some modules intentionally show placeholders.
+
+Capture has a fixed desktop viewport of 1440×900 CSS pixels at 1× scale and includes the module's complete height. Editor zoom and window size do not change the image. Fonts/images must load successfully; animations and video are frozen. Images taller than 16384px are rejected with a recoverable error. Output is lossless WebP, with no intermediate PNG file and no automatic upload.
+
+The portable capture, font-loading, sample, and asset helpers live in `caraer_cli/project/catalog_assets` and are included in the CLI package. The hosted playground vendors these same helpers. After changing them, run `node scripts/sync-catalog-helpers.mjs` from the sibling `caraer-web/playground` checkout, then run both CLI and playground checks. Update the backend's capture/sample fingerprint version when rendering behaviour changes so stored previews refresh.

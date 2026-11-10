@@ -352,18 +352,24 @@ def app_dev(
                 raise RuntimeError("Sign in to load company objects")
             return fetch_objects(app_ctx.api_client(), company_uuid)
 
+        from caraer_cli.project.modules_catalog import sign_company_assets
+
         company_api = start_company_api(
             lambda: fetch_companies(app_ctx.api_client()) if app_ctx.token else [],
             fetch_forms=_forms_for_company,
             fetch_form=_form_for_company,
             fetch_properties=_properties_for_company,
             fetch_objects=_objects_for_company,
+            prepare_company=lambda selected: sign_company_assets(app_ctx.api_client(), selected),
         )
 
+        capture_host = "127.0.0.1" if host in ("0.0.0.0", "::") else host
+        capture_host = f"[{capture_host}]" if ":" in capture_host else capture_host
         harness_env: dict[str, str] = {
             "CARAER_API_BASE_URL": ctx.obj.profile.base_url,
             "CARAER_HARNESS_API": company_api.url,
             "CARAER_HARNESS_TOKEN": company_api.token,
+            "CARAER_CATALOG_ORIGIN": f"http://{capture_host}:{cms_port}",
         }
         if company:
             harness_env["CARAER_SUBDOMAIN"] = company

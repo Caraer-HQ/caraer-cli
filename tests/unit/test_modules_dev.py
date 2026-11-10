@@ -185,6 +185,8 @@ def test_harness_ready_rejects_broken_cms_package_links(tmp_path: Path) -> None:
     (caraer / "cms-tokens").unlink()
     (caraer / "cms-runtime").symlink_to(tmp_path / "runtime")
     (caraer / "cms-tokens").symlink_to(tmp_path / "tokens")
+    (harness / "node_modules" / "playwright").mkdir(exist_ok=True)
+    (harness / "node_modules" / "sharp").mkdir(exist_ok=True)
     assert _harness_ready(harness)
 
     (harness / "package.json").write_text(
