@@ -1117,9 +1117,10 @@ def _harness_field_rows(fields_expr: str) -> str:
                   )}}
                 </select>
               ) : field.options ? (
-                <select id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}}>
+                <select id={{`f-${{field.name}}`}} name={{`f.${{field.name}}`}}
+                  data-hx-original-value={{field.type === 'SINGLE_SELECT' && !field.options.some(o => o.name === stored[field.name]) && field.options.some(o => o.name === field.defaultValue) && stored[field.name] != null ? String(stored[field.name]) : undefined}}>
                   {{field.options.map((o) => (
-                    <option value={{o.name}} selected={{stored[field.name] === o.name}}>{{o.label}}</option>
+                    <option value={{o.name}} selected={{(field.options.some(option => option.name === stored[field.name]) ? stored[field.name] : field.defaultValue) === o.name}}>{{o.label}}</option>
                   ))}}
                 </select>
               ) : (
@@ -1655,11 +1656,13 @@ def _harness_repeatable_script() -> str:
           }
           if (field.type === 'SINGLE_SELECT' && Array.isArray(field.options)) {
             const select = document.createElement('select');
+            const selected = field.options.some(option => String(option.name) === String(value ?? ''))
+              ? value : field.defaultValue;
             for (const option of field.options) {
               const node = document.createElement('option');
               node.value = option.name;
               node.textContent = option.label || option.name;
-              if (String(value ?? '') === String(option.name)) node.selected = true;
+              if (String(selected ?? '') === String(option.name)) node.selected = true;
               select.append(node);
             }
             select.addEventListener('change', () => onValue(select.value));
@@ -2247,8 +2250,14 @@ const embedSrc = (() => {{
         let timer;
         let inFlight;
 
+        form.querySelectorAll('select[data-hx-original-value]').forEach(select => {{
+          select.addEventListener('change', () => delete select.dataset.hxOriginalValue);
+        }});
         const render = async () => {{
           const params = new URLSearchParams(new FormData(form));
+          form.querySelectorAll('select[data-hx-original-value]').forEach(select => {{
+            params.set(select.name, select.dataset.hxOriginalValue);
+          }});
 
           // An unchecked checkbox submits nothing, so the value would fall back
           // to the sample and a switch could never be turned off.
