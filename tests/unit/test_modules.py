@@ -818,6 +818,12 @@ def test_a_module_without_a_manifest_says_what_is_missing(tmp_path: Path) -> Non
     assert any("export const manifest" in error for error in _errors(root))
 
 
+def test_previews_is_a_valid_module_category(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _write_module(root, "preview", {"name": "preview", "label": "Preview", "kind": "section", "category": "previews"})
+    assert not any("category" in error for error in _errors(root))
+
+
 def test_category_must_be_one_of_the_standard_set(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     _write_module(

@@ -70,6 +70,7 @@ MODULE_CATEGORIES = frozenset(
         "hero",
         "content",
         "listing",
+        "previews",
         "layout",
         "media",
         "form",
