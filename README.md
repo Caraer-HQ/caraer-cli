@@ -405,3 +405,14 @@ preserve automatic deactivation; old queued events are not replayed. The caller 
 the same permissions as webhook editing. Three combined 400/404 delivery failures
 (including retries) deactivate the subscription; 410 deactivates it immediately.
 Successful deliveries reset the counter. Lifecycle and app-bar hooks are excluded.
+
+### App-tool navigation metadata
+
+App-bar source declarations and pull/push projections retain the optional
+`navigationPlacement`, `requiredUserScopes` and `routeAliases` fields. A
+`TOOL_BAR` with `navigationPlacement: SETTINGS` does not require a suite; aliases
+are app-declared settings-relative slugs. Omission retains server metadata,
+`SUITE` explicitly restores suite placement, and `[]` clears a list. The backend
+remains authoritative for tenant, installation, scope and reserved-route checks.
+These fields do not add hosting or credentials. The bundled app schema types the
+same optional fields without inserting defaults.
