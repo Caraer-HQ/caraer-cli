@@ -141,3 +141,15 @@ def test_write_app_bars_keeps_function_when_remote_omits_webhook(tmp_path: Path)
     _path, bar = discover_local_app_bars(tmp_path, config)[0]
     assert bar["webhook"]["topic"] == "app.bar.triggered"
     assert bar["webhook"]["serverlessFunction"]["name"] == "hello-world"
+
+
+def test_capability_action_preserves_declaration_and_required_user_permissions() -> None:
+    bar = {
+        "name": "video-meeting",
+        "label": "Add video meeting",
+        "location": "RECORD_TRAIT",
+        "capability": "events.video",
+        "capabilityFunction": "video-capability",
+        "requiredUserScopes": ["records.event.update", "records.event.property.meeting_link.write"],
+    }
+    assert sanitize_app_bar(bar) == bar

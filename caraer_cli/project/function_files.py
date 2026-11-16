@@ -109,6 +109,9 @@ _APP_BAR_FIELDS = (
     "iframeUrl",
     "icon",
     "settingsSchema",
+    "capability",
+    "capabilityFunction",
+    "requiredUserScopes",
 )
 
 

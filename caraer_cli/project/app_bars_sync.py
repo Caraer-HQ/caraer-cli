@@ -21,6 +21,9 @@ LOCAL_APP_BAR_KEYS = (
     "iframeUrl",
     "icon",
     "settingsSchema",
+    "capability",
+    "capabilityFunction",
+    "requiredUserScopes",
     "webhook",
 )
 
