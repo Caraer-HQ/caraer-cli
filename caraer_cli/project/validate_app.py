@@ -1778,6 +1778,19 @@ def _validate_modules(
                 '{ group: "Style", fields: [...] }.',
             )
 
+        presentation = module.config.get("recordPreview")
+        if presentation is not None:
+            properties = {
+                field.get("name") for field in module.field_entries
+                if field.get("type") in {"PROPERTY_SINGLE_SELECT", "PROPERTY_MULTI_SELECT"}
+            }
+            if kind != "preview" or not isinstance(presentation, dict) or not presentation.get("titleField"):
+                _issue(issues, "error", rel_config, "recordPreview requires kind preview and a titleField.")
+            elif set(presentation) - {"titleField", "subtitleField", "imageField"} or any(
+                not isinstance(value, str) or value not in properties for value in presentation.values()
+            ):
+                _issue(issues, "error", rel_config, "recordPreview must reference declared property fields.")
+
         _validate_module_fields(module, rel_config, issues)
         _validate_module_frameworks(module, rel_dir, rel_config, issues)
 

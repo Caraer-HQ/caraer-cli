@@ -864,3 +864,36 @@ def test_cookie_banner_is_a_valid_distinct_module_kind(tmp_path: Path) -> None:
     _write_module(root, "consent", {"name": "consent", "label": "Consent", "kind": "cookie_banner"})
     assert _errors(root) == []
     assert discover_local_modules(root, load_workspace(root))[0].kind == "cookie_banner"
+
+
+def test_record_preview_kind_preserves_native_binding_and_order(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _write_module(root, "record_card", {
+        "name": "record_card", "label": "Record card", "kind": "preview",
+        "recordPreview": {"titleField": "title"},
+        "fields": [{"name": "title", "label": "Title", "type": "PROPERTY_MULTI_SELECT"}],
+    })
+    assert not _errors(root)
+    config = load_workspace(root)
+    module = discover_local_modules(root, config)[0]
+    assert module.to_manifest_entry()["recordPreview"] == {"titleField": "title"}
+
+
+def test_record_preview_native_binding_must_reference_property_fields(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _write_module(root, "record_card", {
+        "name": "record_card", "label": "Record card", "kind": "preview",
+        "recordPreview": {"titleField": "title"},
+        "fields": [{"name": "title", "label": "Title", "type": "SINGLE_LINE"}],
+    })
+    assert any("recordPreview must reference" in error for error in _errors(root))
+
+
+def test_record_preview_rejects_invalid_binding_shapes_without_crashing(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _write_module(root, "record_card", {
+        "name": "record_card", "label": "Record card", "kind": "preview",
+        "recordPreview": {"titleField": ["title"]},
+        "fields": [{"name": "title", "label": "Title", "type": "PROPERTY_MULTI_SELECT"}],
+    })
+    assert any("recordPreview must reference" in error for error in _errors(root))

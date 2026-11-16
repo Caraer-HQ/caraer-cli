@@ -61,7 +61,7 @@ def module_entry_path(directory: Path) -> Path:
 GENERATED_TYPES_FILE = "types.d.ts"
 
 #: What the module renders as, which decides where it may be placed.
-MODULE_KINDS = frozenset({"section", "page", "header", "footer", "cookie_banner"})
+MODULE_KINDS = frozenset({"section", "page", "header", "footer", "cookie_banner", "preview"})
 
 #: How the library picker groups modules. A fixed set, so the same kind of
 #: block lands in the same place whichever app shipped it.
@@ -188,7 +188,7 @@ class LocalModule:
             "kind": self.kind,
             "fields": self.fields,
         }
-        for key in ("description", "category", "icon", "preview", "uuid"):
+        for key in ("description", "category", "icon", "preview", "recordPreview", "uuid"):
             value = self.config.get(key)
             if value:
                 entry[key] = value
