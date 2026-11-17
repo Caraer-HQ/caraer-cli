@@ -666,3 +666,36 @@ def test_markdown_display_content_contract(tmp_path: Path, interval: int, valid:
         "refreshIntervalSeconds": interval}])
     report = validate_local_app(tmp_path)
     assert report.ok is valid
+
+
+def test_action_capability_requires_existing_function_and_explicit_permissions(tmp_path: Path) -> None:
+    _write_workspace(tmp_path)
+    _write_function(tmp_path, "action")
+    _write_function(tmp_path, "capability")
+    bar = {
+        "name": "availability", "location": "RECORD_TRAIT", "label": "Check availability",
+        "capability": "events.availability", "capabilityFunction": "capability",
+        "requiredUserScopes": ["records.event.availability.read"],
+        "webhook": {"deliveryMode": "SERVERLESS", "serverlessFunction": {"name": "action"}},
+    }
+    _write_manifest(tmp_path, appBars=[bar])
+    result = validate_local_app(tmp_path)
+    assert not [issue for issue in result.issues if issue.severity == "error"]
+    bar["capabilityFunction"] = "other-app-function"
+    bar["requiredUserScopes"] = []
+    _write_manifest(tmp_path, appBars=[bar])
+    result = validate_local_app(tmp_path)
+    errors = [issue for issue in result.issues if issue.severity == "error"]
+    assert any("capabilityFunction" in issue.path for issue in errors)
+    assert any("requiredUserScopes" in issue.path for issue in errors)
+
+
+def test_published_info_callbacks_remain_read_only_and_synchronous(tmp_path: Path) -> None:
+    _write_workspace(tmp_path)
+    _write_function(tmp_path, "status")
+    field = {"name": "status", "label": "Sync status", "type": "INFO", "actionSource": {"type": "SERVERLESS", "serverlessFunctionName": "status", "enqueue": False}}
+    _write_manifest(tmp_path, settingsSchema=[field])
+    assert not [issue for issue in validate_local_app(tmp_path).issues if issue.severity == "error"]
+    field["actionSource"]["enqueue"] = True
+    _write_manifest(tmp_path, settingsSchema=[field])
+    assert any("enqueue" in issue.path for issue in validate_local_app(tmp_path).issues if issue.severity == "error")

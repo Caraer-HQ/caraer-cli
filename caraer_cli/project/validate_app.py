@@ -72,6 +72,7 @@ SETTING_FIELD_TYPES = frozenset(
         "SECRET",
         "ACTION",
         "MARKDOWN",
+        "INFO",
         "REPEATABLE",
     }
 )
@@ -1070,7 +1071,7 @@ def _validate_settings(
     action_names = {
         str(item.get("name") or "").strip()
         for _rel, item in rows
-        if str(item.get("type") or "").strip().upper() in {"ACTION", "MARKDOWN"}
+        if str(item.get("type") or "").strip().upper() in {"ACTION", "MARKDOWN", "INFO"}
         and str(item.get("name") or "").strip()
     }
     seen: set[str] = set()
@@ -1128,7 +1129,7 @@ def _validate_settings(
                 _issue(issues, "error", f"{rel}:itemFields", "Declare SECRET fields outside REPEATABLE settings.")
         elif field_type == "MARKDOWN":
             _validate_markdown_content(item, rel, function_names, issues)
-        elif field_type == "ACTION":
+        elif field_type in {"ACTION", "INFO"}:
             if item.get("required") is True:
                 _issue(
                     issues,
@@ -1260,6 +1261,8 @@ def _validate_action_source(
             "ACTION fields require actionSource with a serverless function name.",
         )
         return
+    if str(item.get("type", "")).upper() == "INFO" and source.get("enqueue") is not False:
+        _issue(issues, "error", f"{rel}:actionSource.enqueue", "INFO callbacks must set enqueue: false.")
     source_type = str(source.get("type") or "").strip().upper()
     if source_type and source_type != "SERVERLESS":
         _issue(
@@ -1505,6 +1508,18 @@ def _validate_app_bars(
                 f"location must be one of: {', '.join(sorted(APP_BAR_LOCATIONS))}.",
             )
             continue
+        capability = item.get("capability")
+        capability_function = item.get("capabilityFunction")
+        if capability is not None or capability_function is not None:
+            if location not in ACTION_BASED_LOCATIONS:
+                _issue(issues, "error", f"{rel}:capability", "Capabilities require an action-based app bar.")
+            if not isinstance(capability, str) or not re.fullmatch(r"[a-z][a-z0-9_.-]{0,99}", capability):
+                _issue(issues, "error", f"{rel}:capability", "Use a namespaced capability name.")
+            if not isinstance(capability_function, str) or capability_function not in function_names:
+                _issue(issues, "error", f"{rel}:capabilityFunction", "Declare an existing function on this app.")
+            scopes = item.get("requiredUserScopes")
+            if not isinstance(scopes, list) or not scopes or any(not isinstance(scope, str) or not re.fullmatch(r"[a-zA-Z0-9_:-]+(?:\.[a-zA-Z0-9_:-]+)+", scope) for scope in scopes):
+                _issue(issues, "error", f"{rel}:requiredUserScopes", "Action capabilities require explicit caller permission names.")
         if location in ACTION_BASED_LOCATIONS:
             webhook = item.get("webhook")
             if not isinstance(webhook, dict):
@@ -1566,7 +1581,7 @@ def _validate_app_bar_settings(
         str(item.get("name") or "").strip()
         for item in fields
         if isinstance(item, dict)
-        and str(item.get("type") or "").strip().upper() in {"ACTION", "MARKDOWN"}
+        and str(item.get("type") or "").strip().upper() in {"ACTION", "MARKDOWN", "INFO"}
         and str(item.get("name") or "").strip()
     }
     seen: set[str] = set()
@@ -1625,7 +1640,7 @@ def _validate_app_bar_settings(
                 )
         elif field_type == "MARKDOWN":
             _validate_markdown_content(item, where, function_names, issues)
-        elif field_type == "ACTION":
+        elif field_type in {"ACTION", "INFO"}:
             if item.get("required") is True:
                 _issue(
                     issues,
