@@ -117,6 +117,7 @@ MODULE_FIELD_TYPES = frozenset(
         "PROPERTY_MULTI_SELECT",
         "SWITCH",
         "MAPPING",
+        "FILTER",
         "FILE",
         "MULTI_FILE",
         "IMAGE",

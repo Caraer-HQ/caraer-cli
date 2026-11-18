@@ -169,3 +169,15 @@ def test_markdown_content_survives_serialization_and_function_resolution() -> No
     assert payload["refreshIntervalSeconds"] == 15
     assert payload["contentSource"]["serverlessFunctionUuid"] == "owned-function"
     assert "serverlessFunctionUuid" not in field["contentSource"]
+
+
+def test_filter_setting_round_trip_preserves_context_and_typed_value(tmp_path: Path) -> None:
+    field = {
+        "name": "selection", "type": "FILTER", "filterObject": "vacancy",
+        "value": {"groups": [{"items": [
+            {"property": "salary", "operator": "bigger_than", "value": 4500},
+        ]}]},
+    }
+    write_settings_files(tmp_path, CONFIG, [field])
+    discovered = discover_local_settings(tmp_path, CONFIG)
+    assert discovered[0][1] == field

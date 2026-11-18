@@ -65,6 +65,7 @@ SETTING_FIELD_TYPES = frozenset(
         "PROPERTY_MULTI_SELECT",
         "SWITCH",
         "MAPPING",
+        "FILTER",
         "FILE",
         "MULTI_FILE",
         "IMAGE",
@@ -1086,6 +1087,7 @@ def _validate_settings(
         seen.add(key)
         _validate_visible_when(item, name, known_names, action_names, rel, issues)
         _validate_filter_traits(item, rel, issues)
+        _validate_filter_object(item, rel, issues)
         _validate_property_filters(item, rel, issues)
         value_scope = str(item.get("valueScope") or "").strip().upper()
         if value_scope and value_scope not in ("COMPANY", "USER"):
@@ -1322,6 +1324,15 @@ def _validate_filter_traits(
                 f"{where}[{index}]",
                 "Each filterTraits entry must be a non-empty trait name.",
             )
+
+
+def _validate_filter_object(item: dict[str, Any], where: str, issues: list[ValidationIssue]) -> None:
+    target = item.get("filterObject")
+    if str(item.get("type") or "").upper() == "FILTER":
+        if not isinstance(target, str) or not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", target):
+            _issue(issues, "error", f"{where}:filterObject", "FILTER needs an internal target object name.")
+    elif target is not None:
+        _issue(issues, "error", f"{where}:filterObject", "filterObject applies only to FILTER fields.")
 
 
 def _validate_property_filters(
@@ -1600,6 +1611,7 @@ def _validate_app_bar_settings(
         seen.add(key)
         _validate_visible_when(item, name, known_names, action_names, where, issues)
         _validate_filter_traits(item, where, issues)
+        _validate_filter_object(item, where, issues)
         _validate_property_filters(item, where, issues)
         field_type = str(item.get("type") or "").strip().upper()
         if not field_type:
@@ -2053,6 +2065,7 @@ def _validate_one_module_field(
         _validate_repeatable_field(item, name, rel_config, issues)
 
     _validate_filter_traits(item, f"{rel_config}:{name}", issues)
+    _validate_filter_object(item, f"{rel_config}:{name}", issues)
     _validate_property_filters(item, f"{rel_config}:{name}", issues)
 
 
@@ -2179,6 +2192,7 @@ def _validate_repeatable_field(
                 rel_config,
                 f"field '{name}.{child_name}' is missing 'label'.",
             )
+        _validate_filter_object(child, f"{rel_config}:{name}.{child_name}", issues)
         child_type = str(child.get("type") or "").strip()
         if not child_type:
             _issue(
