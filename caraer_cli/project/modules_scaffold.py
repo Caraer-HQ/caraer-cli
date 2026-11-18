@@ -53,6 +53,21 @@ def _manifest_source(name: str, label: str, kind: str, framework: str | None) ->
 
 
 def _entry_source(name: str, label: str, kind: str, framework: str | None) -> str:
+    if kind == "form":
+        return f"""---
+import type {{ ModuleManifest, CaraerForm }} from '@caraer/cms-runtime';
+import FormLayout from '@caraer/cms-runtime/FormLayout.astro';
+import Input from '@caraer/cms-runtime/FormInput.astro';
+export const manifest = {{
+  name: '{name}', label: '{label}', kind: 'form', category: 'form',
+  inputs: [{{ name: 'text', label: 'Text', allowedPropertyTypes: ['string'], allowedPropertyFormats: ['single-line'] }}],
+  fields: [],
+}} satisfies ModuleManifest;
+interface Props {{ form: CaraerForm; idPrefix: string; preview?: boolean; }}
+const {{ form, idPrefix, preview }} = Astro.props;
+---
+<FormLayout form={{form}} idPrefix={{idPrefix}} preview={{preview}} renderers={{{{text: Input}}}} />
+"""
     interface = f"{_pascal_case(name)}Fields"
     island = f"{_pascal_case(name)}Island"
 

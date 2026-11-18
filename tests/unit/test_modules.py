@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import pytest
 import os
 import shutil
 import subprocess
@@ -897,3 +898,33 @@ def test_record_preview_rejects_invalid_binding_shapes_without_crashing(tmp_path
         "fields": [{"name": "title", "label": "Title", "type": "PROPERTY_MULTI_SELECT"}],
     })
     assert any("recordPreview must reference" in error for error in _errors(root))
+
+
+def test_form_inputs_are_reusable_and_transported(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    inputs = [{"name": "text", "label": "Text", "allowedPropertyTypes": ["string"],
+               "allowedPropertyFormats": ["single-line"], "fields": [
+                   {"name": "hint", "label": "Hint", "type": "SINGLE_LINE"}]}]
+    _write_module(root, "company_form", {"name": "company_form", "label": "Company form", "kind": "form", "category": "form", "inputs": inputs})
+    assert _errors(root) == []
+    module = discover_local_modules(root, load_workspace(root))[0]
+    assert module.to_manifest_entry()["inputs"] == inputs
+    generated = render_module_types(module)
+    assert "CompanyFormInputName = 'text'" in generated
+    assert "CompanyFormTextInputFields" in generated
+    assert "hint?: string | null" in generated
+
+
+@pytest.mark.parametrize("inputs", [[], [{"name": "text", "label": "Text", "allowedPropertyTypes": ["progress"]}],
+    [{"name": "text", "label": "Text", "allowedPropertyTypes": ["string"], "allowedPropertyFormats": ["invalid-format"]}],
+    [{"name": "text", "label": "Text", "allowedPropertyTypes": ["string"]}] * 2])
+def test_form_inputs_reject_invalid_contracts(tmp_path: Path, inputs: list) -> None:
+    root = _workspace(tmp_path)
+    _write_module(root, "company_form", {"name": "company_form", "label": "Company form", "kind": "form", "category": "form", "inputs": inputs})
+    assert _errors(root)
+
+
+def test_section_cannot_declare_form_inputs(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _write_module(root, "section", {"name": "section", "label": "Section", "kind": "section", "inputs": []})
+    assert any("inputs requires kind form" in error for error in _errors(root))
