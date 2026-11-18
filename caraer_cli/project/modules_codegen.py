@@ -169,6 +169,16 @@ def render_module_types(module: LocalModule) -> str:
         lines.append(f"  {name}: {ts_type}{' | null' if nullable else ''};")
 
     lines.append("}")
+    if module.kind == "form":
+        inputs = module.config.get("inputs") or []
+        names = " | ".join(repr(input["name"]) for input in inputs)
+        lines.extend(["", f"export type {_pascal_case(module.name)}InputName = {names or 'never'};"])
+        for input in inputs:
+            lines.append(f"export interface {_pascal_case(module.name)}{_pascal_case(input['name'])}InputFields {{")
+            for field in flatten_module_fields(input.get("fields") or []):
+                if field.get("name"):
+                    lines.append(f"  {field['name']}?: {_field_type(field)} | null;")
+            lines.append("}")
     lines.append("")
     return "\n".join(lines)
 

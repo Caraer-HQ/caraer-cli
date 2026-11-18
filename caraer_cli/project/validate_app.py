@@ -1793,6 +1793,32 @@ def _validate_modules(
                 '{ group: "Style", fields: [...] }.',
             )
 
+        inputs = module.config.get("inputs")
+        if kind == "form" and (not isinstance(inputs, list) or not inputs):
+            _issue(issues, "error", rel_config, "Form modules require non-empty inputs.")
+        if inputs is not None and kind != "form":
+            _issue(issues, "error", rel_config, "inputs requires kind form.")
+        input_names: set[str] = set()
+        writable_formats = {"single-line", "multi-line", "email", "phone", "url", "date", "file", "multi-file", "recurrence", "multi-select", "tag", "currency", "number", "duration", "single-checkbox", "single-select", "structure", "number-range", "currency-range", "date-range", "location", "map-point"}
+        writable_types = {"string", "number", "date", "file", "checkbox", "single-select", "multi-select", "tag", "range", "location", "recurrence", "structure"}
+        for input in inputs if isinstance(inputs, list) else []:
+            if not isinstance(input, dict):
+                _issue(issues, "error", rel_config, "Invalid form input declaration.")
+                continue
+            name = input.get("name")
+            types = input.get("allowedPropertyTypes")
+            formats = input.get("allowedPropertyFormats")
+            if not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*", name) or name in input_names or not input.get("label"):
+                _issue(issues, "error", rel_config, "Inputs need unique snake_case names and labels.")
+            if isinstance(name, str):
+                input_names.add(name)
+            if not isinstance(types, list) or not types or any(not isinstance(t, str) or t not in writable_types for t in types):
+                _issue(issues, "error", rel_config, "Inputs need explicit writable allowedPropertyTypes.")
+            if formats is not None and (not isinstance(formats, list) or any(not isinstance(f, str) or f not in writable_formats for f in formats)):
+                _issue(issues, "error", rel_config, "allowedPropertyFormats must be a list of format names.")
+            from .modules_sync import LocalModule
+            _validate_module_fields(LocalModule(module.name, module.directory, {"fields": input.get("fields", [])}), rel_config, issues)
+
         presentation = module.config.get("recordPreview")
         if presentation is not None:
             properties = {

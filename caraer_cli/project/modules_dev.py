@@ -421,9 +421,10 @@ export default defineConfig({{
       alias: [
         {{ find: '@modules', replacement: '{modules_path.as_posix()}' }},
         {{
-          find: /^@caraer\\/cms-runtime\\/(Caraer\\w+\\.astro)$/,
+          find: /^@caraer\\/cms-runtime\\/((?:Caraer\\w+|FormLayout|FormInput)\\.astro)$/,
           replacement: '{runtime}/src/components/$1',
         }},
+        {{ find: '@caraer/cms-runtime/form-controls', replacement: '{runtime}/src/form-complex.ts' }},
         {{ find: '@caraer/cms-runtime/components', replacement: '{runtime}/src/components/index.ts' }},
         {{ find: '@caraer/cms-runtime', replacement: '{runtime}/src/index.ts' }},
         {{ find: '@caraer/cms-tokens/tokens.css', replacement: '{tokens}/src/tokens.css' }},
@@ -1908,6 +1909,7 @@ def _harness_page(modules: list[LocalModule], app_label: str) -> str:
             "kind": m.kind,
             "description": m.config.get("description") or "",
             "fields": m.fields,
+            "inputs": m.config.get("inputs") or [],
             "frameworks": m.frameworks,
         }
         for m in modules
@@ -1922,6 +1924,7 @@ def _harness_page(modules: list[LocalModule], app_label: str) -> str:
 import {{ DEFAULT_TOKENS, toCustomProperties, toResponsiveTypeCss, toStyleAttribute }} from '@caraer/cms-tokens';
 import {{ isFieldVisible, resolveFieldValues, flattenModuleFields, isModuleFieldGroup, renderModuleErrorHtml, withModuleBoundary }} from '@caraer/cms-runtime';
 
+import CaraerForm from '@caraer/cms-runtime/CaraerForm.astro';
 import samples from '../../samples.json';
 
 const modules = {json.dumps(catalog, ensure_ascii=False, indent=2)};
@@ -1995,7 +1998,8 @@ let loadError = null;
 if (selected?.name && loaders[selected.name]) {{
   try {{
     const loaded = await loaders[selected.name]();
-    Selected = withModuleBoundary(loaded.default, {{
+    if (selected.kind === 'form') Astro.locals.resolveFormModule = () => ({{component: loaded.default, manifest: loaded.manifest}});
+    Selected = selected.kind === 'form' ? CaraerForm : withModuleBoundary(loaded.default, {{
       moduleRef: `local/${{selected.name}}`,
       detail: true,
     }}, selected);
@@ -2014,6 +2018,16 @@ try {{
     company: Astro.locals.company,
     module: {{ id: 'sample', ref: `local/${{selected?.name}}`, kind: selected?.kind }},
     editor: null,
+    ...(selected?.kind === 'form' ? {{
+      form: 'sample', preview: true,
+      formData: {{ uuid: 'sample', name: 'sample', label: selected.label, module: `local/${{selected.name}}`, moduleFields: stored, wizard: true,
+        steps: [{{title: 'Inputs', fields: selected.inputs.map((input,index)=>({{
+          id: `sample-${{index}}`,uuid:`property-${{index}}`,name:input.name,label:input.label,input:input.name,
+          type:input.allowedPropertyTypes[0],format:input.allowedPropertyFormats?.[0] ?? input.allowedPropertyTypes[0],
+          options: ['single-select','multi-select','tag'].includes(input.allowedPropertyTypes[0]) ? [{{name:'one',label:'First option'}},{{name:'two',label:'Second option'}}] : undefined,
+        }}))}},{{title:'Review',fields:[]}}]
+      }}
+    }} : {{}}),
   }};
 }} catch (error) {{
   loadError ??= error;
