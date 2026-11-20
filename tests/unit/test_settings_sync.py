@@ -181,3 +181,20 @@ def test_filter_setting_round_trip_preserves_context_and_typed_value(tmp_path: P
     write_settings_files(tmp_path, CONFIG, [field])
     discovered = discover_local_settings(tmp_path, CONFIG)
     assert discovered[0][1] == field
+
+
+def test_filter_object_survives_yaml_and_upload_archive(tmp_path: Path) -> None:
+    import zipfile
+    import yaml
+    from caraer_cli.api.projects import pack_project_archive
+
+    config = ProjectConfig(platformVersion="2026.2.1", name="demo_app", runtime="nodejs22")
+    folder = tmp_path / "src" / "app"
+    folder.mkdir(parents=True)
+    field = {"name": "selection", "type": "FILTER", "filterObject": "event", "valueScope": "USER"}
+    (folder / "settings.yaml").write_text(yaml.safe_dump([field]))
+    (folder / "app.caraer.json").write_text(json.dumps({"name": "demo_app"}))
+    archive = pack_project_archive(tmp_path, config)
+    with zipfile.ZipFile(archive) as source:
+        manifest = json.loads(source.read("src/app/.build/manifest.json"))
+    assert manifest["settingsSchema"] == [field]
