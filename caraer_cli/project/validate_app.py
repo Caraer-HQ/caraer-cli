@@ -74,6 +74,7 @@ SETTING_FIELD_TYPES = frozenset(
         "MARKDOWN",
         "INFO",
         "REPEATABLE",
+        "FILTER",
     }
 )
 SELECT_FIELD_TYPES = frozenset(
@@ -1115,6 +1116,8 @@ def _validate_settings(
                     f"{rel}:options",
                     "SELECT fields require options or optionsSource.",
                 )
+        elif field_type == "FILTER":
+            _validate_filter_object(item, rel, issues)
         elif field_type == "SECRET":
             if item.get("defaultValue") is not None or item.get("value") is not None:
                 _issue(
@@ -1139,6 +1142,12 @@ def _validate_settings(
                 )
             _validate_action_source(item, rel, function_names, issues)
     return len(rows)
+
+
+def _validate_filter_object(item: dict[str, Any], rel: str, issues: list[ValidationIssue]) -> None:
+    name = item.get("filterObject")
+    if not isinstance(name, str) or not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", name):
+        _issue(issues, "error", f"{rel}:filterObject", "FILTER fields require an internal object name.")
 
 
 def _merged_settings_sections(
@@ -1632,6 +1641,8 @@ def _validate_app_bar_settings(
                         f"{where}:optionsSource.serverlessFunctionName",
                         f"Unknown local function '{fn_name}'.",
                     )
+        elif field_type == "FILTER":
+            _validate_filter_object(item, where, issues)
         elif field_type == "SECRET":
             if item.get("defaultValue") is not None or item.get("value") is not None:
                 _issue(

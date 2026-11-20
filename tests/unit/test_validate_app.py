@@ -71,6 +71,17 @@ def test_validate_local_app_ok(tmp_path: Path) -> None:
     assert not any(i.severity == "error" for i in report.issues)
 
 
+@pytest.mark.parametrize("object_name, valid", [("event", True), ("custom_event", True), (None, False), ("event with spaces", False)])
+def test_filter_setting_requires_an_object(tmp_path: Path, object_name: str | None, valid: bool) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(tmp_path, settingsSchema=[{"name": "selection", "type": "FILTER", "filterObject": object_name}])
+    _write_function(tmp_path)
+    report = validate_local_app(tmp_path)
+    assert report.ok is valid
+    if not valid:
+        assert any(issue.path.endswith(":filterObject") for issue in report.issues)
+
+
 def test_validate_missing_details(tmp_path: Path) -> None:
     _write_workspace(tmp_path)
     _write_manifest(tmp_path, details=None)
