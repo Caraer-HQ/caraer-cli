@@ -142,6 +142,7 @@ if (preview) {
                 <button id="export-draft" type="button">Export draft</button>
               </div>
             </div>
+            <p class="field-help preview-note">This is a local preview. Not connected to a live page.</p>
             <details class="metadata">
               <summary><strong>Metadata &amp; sharing</strong></summary>
               <div class="metadata-fields">
@@ -208,7 +209,7 @@ if (preview) {
   .editor-bar a[aria-current] { background: #35435c; }
   .status { margin-inline-start: auto; color: #c2c9d5; }
   .editor-grid { display: grid; grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); }
-  aside { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
+  aside { display: grid; grid-template-rows: minmax(0, 1fr) auto auto; min-width: 0; min-height: 0; }
   .sidebar-content { overflow-y: auto; padding: 16px; }
   .sidebar-content > label { display: block; margin-top: 9px; margin-bottom: 4px; }
   h2 { font-size: 16px; margin-block: 20px 8px; }
@@ -236,6 +237,7 @@ if (preview) {
   #open-share-preview { width: 100%; }
   .metadata :global(.field) { margin-bottom: 6px; }
   .field-help { color: #c2c9d5; font-size: 12px; margin: 0 0 12px; }
+  .preview-note { margin: 0; padding: 8px 16px; }
   .checkbox { display: flex; align-items: center; gap: 6px; margin: 12px 0; }
   dialog { width: min(500px, calc(100vw - 32px)); max-height: 90dvh; box-sizing: border-box; padding: 20px; color: inherit; background: #171a21; border: 1px solid #4b5363; border-radius: 14px; }
   dialog::backdrop { background: #080a10b8; }
