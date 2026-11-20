@@ -699,3 +699,11 @@ def test_published_info_callbacks_remain_read_only_and_synchronous(tmp_path: Pat
     field["actionSource"]["enqueue"] = True
     _write_manifest(tmp_path, settingsSchema=[field])
     assert any("enqueue" in issue.path for issue in validate_local_app(tmp_path).issues if issue.severity == "error")
+
+
+@pytest.mark.parametrize("target,valid", [("vacancy", True), (None, False), ("vacancy) MATCH(n)", False)])
+def test_filter_setting_uses_shared_target_contract(tmp_path: Path, target, valid) -> None:
+    _write_workspace(tmp_path)
+    _write_manifest(tmp_path, settingsSchema=[{"name": "selection", "type": "FILTER", "filterObject": target}])
+    report = validate_local_app(tmp_path)
+    assert report.ok == valid

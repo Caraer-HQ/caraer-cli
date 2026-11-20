@@ -27,6 +27,7 @@ LOCAL_SETTING_KEYS = (
     "hidden",
     "advanced",
     "filterTraits",
+    "filterObject",
     "filterPropertyTypes",
     "filterPropertyFormats",
     "allowedPropertyTypes",
