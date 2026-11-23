@@ -867,6 +867,19 @@ def test_cookie_banner_is_a_valid_distinct_module_kind(tmp_path: Path) -> None:
     assert discover_local_modules(root, load_workspace(root))[0].kind == "cookie_banner"
 
 
+def test_ordered_module_tabs_reach_the_catalog(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    tabs = ["overview", "appearance"]
+    _write_module(root, "hero", {
+        "name": "hero", "label": "Hero", "kind": "section", "category": "hero",
+        "tabs": tabs, "fields": [{"name": "title", "label": "Title", "type": "SINGLE_LINE", "tab": "overview"}],
+    })
+    assert not _errors(root)
+    entry = discover_local_modules(root, load_workspace(root))[0].to_manifest_entry()
+    assert entry["tabs"] == tabs
+    assert entry["fields"][0]["tab"] == "overview"
+
+
 def test_record_preview_kind_preserves_native_binding_and_order(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     _write_module(root, "record_card", {

@@ -1831,6 +1831,14 @@ def _validate_modules(
             from .modules_sync import LocalModule
             _validate_module_fields(LocalModule(module.name, module.directory, {"fields": input.get("fields", [])}), rel_config, issues)
 
+        tabs = module.config.get("tabs")
+        if tabs is not None and (
+            not isinstance(tabs, list)
+            or any(not isinstance(tab, str) or not tab or tab != tab.strip() for tab in tabs)
+            or len(set(tabs)) != len(tabs)
+        ):
+            _issue(issues, "error", rel_config, "Module tabs must be an ordered list of unique, nonempty, trimmed names.")
+
         presentation = module.config.get("recordPreview")
         if presentation is not None:
             properties = {

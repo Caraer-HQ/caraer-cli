@@ -189,7 +189,7 @@ class LocalModule:
             "kind": self.kind,
             "fields": self.fields,
         }
-        for key in ("description", "category", "icon", "preview", "recordPreview", "inputs", "uuid"):
+        for key in ("description", "category", "icon", "preview", "recordPreview", "inputs", "tabs", "uuid"):
             value = self.config.get(key)
             if value:
                 entry[key] = value
