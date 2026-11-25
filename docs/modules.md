@@ -10,6 +10,24 @@ tab (private and public apps). It lists every module the app publishes,
 including retired ones: label, kind, category, and `ref · version`. The
 company library picker still hides retired modules.
 
+## Publish to installed companies
+
+When you publish a public app with CMS modules, `caraer apps push` asks whether
+every company that already has the app installed should review the release.
+Customer companies review releases by default. Choosing all companies also
+requires the publisher company to review the release if it has the app
+installed. Each company keeps its accepted module version until an editor
+previews and promotes the update from **Settings → Website Settings → Review updates**.
+
+For a non-interactive release, pass the option explicitly.
+
+```bash
+caraer apps push --yes --version 1.2.3 --publish-to-all
+```
+
+This option applies to production releases of public CMS module apps. It
+requires a Caraer backend that supports publishing to all installations.
+
 ## Add one
 
 ```bash
@@ -117,9 +135,11 @@ caraer apps local dev
 The preview top bar switches between sample data and any company you can
 reach, so you can check the module against real branding before you push.
 
-Mark rendered nodes with `data-caraer-field="<name>"` (and
-`data-caraer-item="<index>"` on a REPEATABLE row). In `caraer apps local`
-and the CMS builder, clicking that node focuses the matching sidebar
+Modules with settings must declare at least one `data-caraer-field="<name>"`
+in the entry Astro template to pass `caraer apps validate`. Use the field's
+manifest name. When marking a REPEATABLE row, also use
+`data-caraer-item="<index>"` with its zero-based index. In `caraer apps local`
+and the CMS builder, clicking the marked element focuses the matching sidebar
 field. The live site ignores the attributes.
 
 The local preview sidebar uses searchable pickers for `OBJECT_SINGLE_SELECT`,

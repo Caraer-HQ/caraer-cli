@@ -94,7 +94,7 @@ def _module_source(name: str, label: str, kind: str, *, legacy: bool) -> str:
             },
         ]
         markup = '''<section class="starter-section starter-hero"><div class="caraer-container">
-  <h1 data-caraer-field={fieldNames ? fieldNames.heading : 'heading'}>{fields.heading}</h1>
+  <h1 data-caraer-field={Astro.props["data-caraer-field"] ?? (fieldNames ? fieldNames.heading : 'heading')}>{fields.heading}</h1>
   <div data-caraer-field={fieldNames ? fieldNames.body : 'body'}>{fields.body && <CaraerRichText value={fields.body} />}</div>
   <span data-caraer-field={fieldNames ? fieldNames.button_label : 'button_label'}><CaraerLink href={fields.button_url} class="starter-button">{fields.button_label}</CaraerLink></span>
 </div></section>'''
@@ -135,7 +135,7 @@ def _module_source(name: str, label: str, kind: str, *, legacy: bool) -> str:
         fields = [_text_field("heading", "Page heading", "A great place to start"), _text_field("body", "Introduction", "Create a website that feels like your company. Start with these sections and make them your own.", multiline=True), _text_field("features_heading", "Features heading", "Everything you need to get started"), _text_field("contact_heading", "Contact heading", "Ready to make it yours?"), _text_field("contact_body", "Contact text", "Tell your story, introduce your team, and invite visitors to take the next step.", multiline=True), _text_field("contact_label", "Contact button label", "Get in touch"), _text_field("contact_url", "Contact button link", "mailto:hello@example.com")]
         code = "\n// A page owns its editable fields and passes the platform context to its sections.\n"
         markup = '''<main>
-  <Hero {...Astro.props} fieldNames={{ heading: 'heading', body: 'body' }} fields={{ heading: fields.heading, body: fields.body, button_label: 'Explore the possibilities', button_url: '#features' }} />
+  <Hero {...Astro.props} data-caraer-field="heading" fieldNames={{ body: 'body' }} fields={{ heading: fields.heading, body: fields.body, button_label: 'Explore the possibilities', button_url: '#features' }} />
   <Features {...Astro.props} fieldNames={{ heading: 'features_heading' }} fields={{ heading: fields.features_heading, items: exampleFeatures }} />
   <CallToAction {...Astro.props} fieldNames={{ heading: 'contact_heading', body: 'contact_body', button_label: 'contact_label' }} fields={{ heading: fields.contact_heading, body: fields.contact_body, button_label: fields.contact_label, button_url: fields.contact_url }} />
 </main>'''
@@ -144,7 +144,8 @@ def _module_source(name: str, label: str, kind: str, *, legacy: bool) -> str:
     manifest = {"name": name, "label": label, "kind": kind, "category": category, "description": f"Example {label.lower()} for your company website.", "fields": fields}
     source = "---\n" + "\n".join(imports) + "\nimport CaraerLink from '@caraer/cms-runtime/CaraerLink.astro';\nimport CaraerRichText from '@caraer/cms-runtime/CaraerRichText.astro';\nimport type { ModuleManifest, ModuleProps } from '@caraer/cms-runtime';\n"
     source += f"import type {{ {_pascal_case(name)}Fields }} from './types.d.ts';\n\nexport const manifest = " + json.dumps(manifest, indent=2) + " satisfies ModuleManifest;\n"
-    source += f"\ntype Props = ModuleProps<{_pascal_case(name)}Fields> & {{ fieldNames?: Partial<Record<keyof {_pascal_case(name)}Fields, string>> }};\nconst {{ fields, fieldNames }} = Astro.props;\n" + code + "---\n\n" + markup + "\n"
+    preview_field_prop = '; "data-caraer-field"?: string' if name == "hero" else ""
+    source += f"\ntype Props = ModuleProps<{_pascal_case(name)}Fields> & {{ fieldNames?: Partial<Record<keyof {_pascal_case(name)}Fields, string>>{preview_field_prop} }};\nconst {{ fields, fieldNames }} = Astro.props;\n" + code + "---\n\n" + markup + "\n"
     return source + ("\n<style>" + style + "\n</style>\n" if style else "")
 
 

@@ -17,11 +17,14 @@ def publish_module_package(
     client: CaraerApiClient,
     app_uuid: str,
     payload: dict[str, Any],
+    *,
+    publish_to_all: bool = False,
 ) -> dict[str, Any]:
     """Upload a staged tarball. The API publishes it and registers the catalog."""
+    path = f"/api/v2/apps/{app_uuid}/cms-modules/package"
     return client.request(
         "POST",
-        f"/api/v2/apps/{app_uuid}/cms-modules/package",
+        f"{path}/publish-to-all" if publish_to_all else path,
         json_body=payload,
         timeout_seconds=180.0,
     )

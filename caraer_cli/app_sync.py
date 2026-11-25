@@ -605,6 +605,7 @@ def push_app(
     version: str | None = None,
     release_notes: str | None = None,
     interactive: bool = True,
+    publish_to_all: bool = False,
 ) -> dict[str, Any]:
     from caraer_cli.formatters.output import PushProgress, print_success, print_warning
 
@@ -648,6 +649,11 @@ def push_app(
         release_notes=release_notes,
         interactive=interactive,
     )
+    if publish_to_all:
+        version = (functions_result.get("build") or {}).get("version")
+        if not version or not functions_result.get("deploy"):
+            raise ValueError("Publishing to all installations requires a deployed app build.")
+        release_notes = _resolved_release_notes(functions_result)
     progress.start("Refreshing app manifest (lifecycle / app bars)")
     try:
         manifest_result = push_manifest(
@@ -706,6 +712,7 @@ def push_app(
         functions_result=functions_result,
         version=version,
         release_notes=release_notes,
+        publish_to_all=publish_to_all,
     )
     progress.finish()
 
@@ -734,6 +741,7 @@ def push_cms_modules(
     functions_result: dict[str, Any] | None = None,
     version: str | None = None,
     release_notes: str | None = None,
+    publish_to_all: bool = False,
 ) -> dict[str, Any]:
     """Publish CMS modules to the registry and register the catalog.
 
@@ -748,6 +756,8 @@ def push_cms_modules(
 
     modules = [m for m in discover_local_modules(root, config) if m.config and m.entry.is_file()]
     if not modules:
+        if publish_to_all:
+            raise ValueError("Publishing to all installations requires CMS modules.")
         return {"modules": 0}
 
     app_name = (config.name or "").strip()
@@ -758,6 +768,8 @@ def push_cms_modules(
     # app version gets exactly the modules that shipped with it.
     resolved_version = version or _resolved_build_version(functions_result, root)
     if not resolved_version:
+        if publish_to_all:
+            raise ValueError("Publishing to all installations requires a release version.")
         return {
             "modules": len(modules),
             "published": False,
@@ -775,6 +787,7 @@ def push_cms_modules(
         private=bool(config.privateApp),
         company=_selected_company_subdomain(client),
         client=client,
+        publish_to_all=publish_to_all,
     )
 
     if not summary.get("published"):
@@ -783,6 +796,8 @@ def push_cms_modules(
 
     if summary.get("via") == "api":
         print_success("Published CMS modules through Caraer.")
+        if summary.get("publishToAll"):
+            print_success("Published the CMS module release for review by all installed companies.")
         return summary
 
     if config.appUuid:

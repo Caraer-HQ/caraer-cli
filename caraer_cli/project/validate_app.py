@@ -18,6 +18,7 @@ from caraer_cli.project.paths import (
     webhooks_dir,
 )
 from caraer_cli.project.modules_codegen import generate_module_types
+from caraer_cli.project.modules_manifest import has_preview_field_marker
 from caraer_cli.project.scaffold import ensure_package_json, ensure_tsconfig
 from caraer_cli.project.modules_sync import (
     DISALLOWED_MODULE_FIELD_TYPES,
@@ -1853,6 +1854,17 @@ def _validate_modules(
                 _issue(issues, "error", rel_config, "recordPreview must reference declared property fields.")
 
         _validate_module_fields(module, rel_config, issues)
+        if module.field_entries and not has_preview_field_marker(
+            module.entry.read_text(encoding="utf-8")
+        ):
+            _issue(
+                issues,
+                "error",
+                rel_config,
+                'Modules with settings require at least one data-caraer-field in the Astro '
+                'template. Add data-caraer-field="<field_name>" to a preview element, '
+                'using a field name from the manifest.',
+            )
         _validate_module_frameworks(module, rel_dir, rel_config, issues)
 
     # Types are only worth writing once the shape is known to be sound.

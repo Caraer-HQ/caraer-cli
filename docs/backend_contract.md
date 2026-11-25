@@ -82,6 +82,11 @@ Headers:
   `{package, version, modules, tarballBase64, filename?}`. The API publishes
   the tarball with the host registry token and replaces the catalog. Developers
   do not set `CARAER_REGISTRY_*`.
+- `POST /api/v2/apps/{appUuid}/cms-modules/package/publish-to-all` accepts the
+  same body. For public apps, the creator company or a platform super admin can
+  publish a release for review by all existing installations, including the
+  creator's own installation. Each company separately previews and promotes
+  its pending release before it goes to production.
 - `PUT /api/v2/apps/{appUuid}/cms-modules` — catalog only (operator / retry)
 - `GET /api/v2/apps/{appUuid}/cms-modules`
 

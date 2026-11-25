@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -108,8 +109,69 @@ def test_push_without_company_skips_install(
     assert result.exit_code == 0, result.output
     assert pushed.call_args.kwargs["deploy"] is True
     assert pushed.call_args.kwargs["wait"] is False
+    assert pushed.call_args.kwargs["publish_to_all"] is False
     install.assert_not_called()
     assert "Skipped company install" in result.output
+
+
+@pytest.mark.parametrize(
+    ("private", "interactive", "opt_in", "expected"),
+    [
+        (False, True, False, False),
+        (False, True, True, True),
+        (False, False, True, True),
+        (True, True, False, False),
+        (True, False, True, None),
+    ],
+)
+def test_push_public_module_rollout_option(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    private: bool, interactive: bool, opt_in: bool, expected: bool | None,
+) -> None:
+    root = tmp_path / "demo"
+    scaffold_app_project(
+        root,
+        app_payload=build_public_app_placeholder(label="Demo", name="demo"),
+        app_uuid="app-1",
+        sample_function=None,
+        force=True,
+    )
+    module = root / "src" / "app" / "modules" / "hero" / "hero.astro"
+    module.parent.mkdir(parents=True, exist_ok=True)
+    module.write_text(
+        "---\nexport const manifest = { name: 'hero', kind: 'section', "
+        "label: 'Hero', category: 'content' };\n---\n<div></div>\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(root)
+    stream = SimpleNamespace(isatty=lambda: interactive)
+    monkeypatch.setattr(apps_commands, "sys", SimpleNamespace(stdin=stream, stdout=stream))
+    args = ["--version", "1.0.0"]
+    if not interactive:
+        args.extend(["--yes", "--publish-to-all"])
+    with (
+        patch("caraer_cli.api.apps.fetch_app", return_value={"data": {"privateApp": private}}),
+        patch("caraer_cli.wizard.prompts.ask_confirm", return_value=opt_in) as prompt,
+        patch("caraer_cli.commands.apps._confirm_push_plan", return_value=True),
+        patch("caraer_cli.commands.apps._run_push", return_value={"appUuid": "app-1"}) as pushed,
+        patch("caraer_cli.app_install.install_app_on_company", return_value={}) as install,
+    ):
+        result = _invoke_push(_app_ctx(company_uuid="publisher"), args)
+    if interactive and not private:
+        prompt.assert_called_once()
+        assert prompt.call_args.kwargs["default"] is False
+    else:
+        prompt.assert_not_called()
+    if expected is None:
+        assert result.exit_code != 0
+        pushed.assert_not_called()
+    else:
+        assert result.exit_code == 0, result.output
+        assert pushed.call_args.kwargs["publish_to_all"] is expected
+    if expected is False:
+        install.assert_called_once()
+    else:
+        install.assert_not_called()
 
 
 def test_push_installs_when_company_selected(

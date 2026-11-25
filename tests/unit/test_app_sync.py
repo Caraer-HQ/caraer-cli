@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from caraer_cli.commands.apps import build_public_app_placeholder
 from caraer_cli.project.scaffold import scaffold_app_project
 
@@ -59,7 +61,8 @@ def test_canonicalize_app_uuid_resolves_name() -> None:
         assert _canonicalize_app_uuid(client, "demo") == "f66e0650-26ab-4bd0-942f-10e0c52a6ff8"
 
 
-def test_push_app_pipeline_order(tmp_path: Path) -> None:
+@pytest.mark.parametrize("publish_to_all", [False, True])
+def test_push_app_pipeline_order(tmp_path: Path, publish_to_all: bool) -> None:
     root = tmp_path / "demo"
     scaffold_app_project(
         root,
@@ -90,6 +93,8 @@ def test_push_app_pipeline_order(tmp_path: Path) -> None:
 
     def track_functions(*_a, **_k):
         calls.append("functions")
+        if publish_to_all:
+            return {"build": {"version": "1.0.1", "releaseNotes": "Confirmed notes"}, "deploy": {"uuid": "deploy-1"}}
         return {"mode": "legacy", "functions": []}
 
     def track_webhooks(*_a, **_k):
@@ -120,11 +125,15 @@ def test_push_app_pipeline_order(tmp_path: Path) -> None:
         patch(
             "caraer_cli.app_sync.push_cms_modules",
             side_effect=lambda *_a, **_k: calls.append("cms") or {"modules": 0},
-        ),
+        ) as publish_modules,
     ):
         from caraer_cli.app_sync import push_app
 
-        result = push_app(client, root, app_uuid="app-1", legacy_functions=True)
+        result = push_app(
+            client, root, app_uuid="app-1", deploy=publish_to_all,
+            legacy_functions=not publish_to_all, publish_to_all=publish_to_all,
+            version="1.0.0",
+        )
 
     assert calls == [
         "manifest",
@@ -140,6 +149,8 @@ def test_push_app_pipeline_order(tmp_path: Path) -> None:
     assert "schedules" in result
     assert "inbound" in result
     assert "externalOAuthProviders" in result
+    assert publish_modules.call_args.kwargs["version"] == ("1.0.1" if publish_to_all else "1.0.0")
+    assert publish_modules.call_args.kwargs["publish_to_all"] is publish_to_all
 
 
 def test_push_app_stops_on_validation_errors(tmp_path: Path, capsys) -> None:

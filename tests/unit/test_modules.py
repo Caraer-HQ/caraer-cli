@@ -43,7 +43,9 @@ def _workspace(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _write_module(root: Path, name: str, config: dict, *, entry: bool = True) -> Path:
+def _write_module(
+    root: Path, name: str, config: dict, *, entry: bool = True, markup: str | None = None
+) -> Path:
     """A module on disk: one .astro carrying both manifest and markup.
 
     JSON is a subset of the object literal syntax the manifest uses, so the
@@ -53,9 +55,13 @@ def _write_module(root: Path, name: str, config: dict, *, entry: bool = True) ->
     directory.mkdir(parents=True, exist_ok=True)
     if entry:
         payload = {"category": "content", **config}
+        if markup is None:
+            fields = flatten_module_fields(config.get("fields", []))
+            field = next((field["name"] for field in fields if field.get("name")), None)
+            markup = f'<div data-caraer-field="{field}" />' if field else "<div />"
         (directory / "index.astro").write_text(
             f"---\nexport const manifest = {json.dumps(payload, indent=2)} "
-            "satisfies ModuleManifest;\n---\n<div />\n",
+            f"satisfies ModuleManifest;\n---\n{markup}\n",
             encoding="utf-8",
         )
     return directory
@@ -162,6 +168,53 @@ def test_valid_module_passes(tmp_path: Path) -> None:
             "fields": [{"name": "heading", "label": "Heading", "type": "SINGLE_LINE"}],
         },
     )
+    assert _errors(root) == []
+
+
+@pytest.mark.parametrize(
+    ("markup", "valid"),
+    [
+        ("<h1 />", False),
+        ('<p>Use data-caraer-field="heading" here.</p>', False),
+        ("""<p title='Use data-caraer-field="heading" here' />""", False),
+        ('<!-- <h1 data-caraer-field="heading" /> -->', False),
+        ('{/* <h1 data-caraer-field="heading" /> */}', False),
+        ('<script>const sample = \'<h1 data-caraer-field="heading" />\';</script>', False),
+        ('<h1 data-caraer-field="" />', False),
+        ('<h1 data-caraer-field="heading" />', True),
+        ('<Heading\n  data-caraer-field={fieldNames.heading}\n/>', True),
+    ],
+)
+def test_module_settings_require_preview_field(
+    tmp_path: Path, markup: str, valid: bool
+) -> None:
+    root = _workspace(tmp_path)
+    directory = _write_module(
+        root,
+        "hero",
+        {
+            "name": "hero",
+            "label": "Hero",
+            "kind": "section",
+            "fields": [{
+                "name": "heading", "label": "Heading", "type": "SINGLE_LINE",
+                "defaultValue": '<h1 data-caraer-field="heading" />',
+            }],
+        },
+        markup=markup,
+    )
+    errors = _errors(root)
+    if valid:
+        assert errors == []
+    else:
+        assert len(errors) == 1
+        assert errors[0].startswith(f"{directory.relative_to(root)}/index.astro:")
+        assert "require at least one data-caraer-field" in errors[0]
+
+
+def test_module_without_settings_does_not_require_preview_field(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _write_module(root, "hero", {"name": "hero", "label": "Hero", "kind": "section"})
     assert _errors(root) == []
 
 
@@ -540,7 +593,7 @@ export const manifest = {
 
 const { fields } = Astro.props;
 ---
-<div>{fields.heading}</div>
+<div data-caraer-field="heading">{fields.heading}</div>
 """,
         encoding="utf-8",
     )
@@ -604,7 +657,7 @@ export const manifest = {
   fields: [widthField],
 } satisfies ModuleManifest;
 ---
-<div style={`max-width: ${containerMaxWidth('max')}`} />
+<div style={`max-width: ${containerMaxWidth('max')}`} data-caraer-field="width" />
 """,
         encoding="utf-8",
     )
@@ -675,7 +728,7 @@ export const manifest = {
   ],
 } satisfies ModuleManifest;
 ---
-<div />
+<div data-caraer-field="card_style" />
 """,
         encoding="utf-8",
     )
@@ -731,7 +784,7 @@ export const manifest = {
   fields: [...backgroundFields],
 } satisfies ModuleManifest;
 ---
-<div />
+<div data-caraer-field="background_color" />
 """,
         encoding="utf-8",
     )
@@ -789,7 +842,7 @@ export const manifest = {
   fields: [...headingTextFields],
 } satisfies ModuleManifest;
 ---
-<div />
+<div data-caraer-field="heading_color" />
 """,
         encoding="utf-8",
     )

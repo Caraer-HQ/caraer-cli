@@ -857,6 +857,7 @@ def _run_push(
     delete_missing: bool,
     legacy_functions: bool,
     target: str,
+    publish_to_all: bool = False,
 ) -> dict[str, Any]:
     from caraer_cli.app_sync import push_app
     from caraer_cli.wizard.prompts import WizardCancelled
@@ -876,6 +877,7 @@ def _run_push(
             version=version,
             release_notes=release_notes,
             interactive=not yes,
+            publish_to_all=publish_to_all,
         )
     except WizardCancelled:
         raise typer.Exit(code=1) from None
@@ -953,6 +955,11 @@ def push_public(
         "--legacy-functions",
         help="Sync functions via create/update APIs instead of a build.",
     ),
+    publish_to_all: bool = typer.Option(
+        False,
+        "--publish-to-all",
+        help="Publish the public CMS module release for review by every installing company, including the publisher.",
+    ),
     target: str = typer.Option("production", "--target", help="production|sandbox"),
 ) -> None:
     """Validate the local app, then push it to Caraer and deploy it.
@@ -965,6 +972,9 @@ def push_public(
     from caraer_cli.app_install import install_app_on_company
     from caraer_cli.app_sync import validate_before_push
     from caraer_cli.formatters.output import print_error
+    from caraer_cli.project.modules_sync import discover_local_modules
+    from caraer_cli.project.schema import load_workspace
+    from caraer_cli.wizard.prompts import WizardCancelled, ask_confirm
 
     app_ctx: AppContext = ctx.obj
     version, release_notes = _normalize_release_args(
@@ -990,16 +1000,51 @@ def push_public(
             "but function runtime code is shared with production."
         )
     company = app_ctx.profile.company_uuid
-    extra = f"Would install on company {company}." if dry_run and company else None
+    interactive = sys.stdin.isatty() and sys.stdout.isatty() and not yes and not dry_run
+    client = app_ctx.api_client()
+    if publish_to_all or interactive:
+        config = load_workspace(root)
+        eligible = (
+            deploy and not legacy_functions and target == "production"
+            and not app_ctx.profile.sandbox_uuid
+            and any(module.config and module.entry.is_file() for module in discover_local_modules(root, config))
+        )
+        private = config.privateApp
+        linked_uuid = app_uuid or config.appUuid
+        if eligible and linked_uuid:
+            remote = apps_api.fetch_app(client, linked_uuid).get("data")
+            private = apps_api.is_private_remote(remote)
+        eligible = eligible and not private
+        if publish_to_all and not eligible:
+            raise typer.BadParameter(
+                "--publish-to-all requires a production release of a public app with CMS modules."
+            )
+        if interactive and eligible and not publish_to_all:
+            try:
+                publish_to_all = ask_confirm(
+                    "Publish CMS modules for review by all installed companies, including the publisher?",
+                    default=False,
+                )
+            except WizardCancelled:
+                raise typer.Exit(code=1) from None
+    extra = None
+    if dry_run:
+        if publish_to_all:
+            extra = "Would make the CMS release pending review for all installed companies."
+        elif company:
+            extra = f"Would install on company {company}."
     if not _confirm_push_plan(
         app_ctx,
-        app_ctx.api_client(),
+        client,
         root,
         app_uuid=app_uuid,
         delete_missing=delete_missing,
         dry_run=dry_run,
         yes=yes,
-        confirm_message="Proceed with push?",
+        confirm_message=(
+            "Proceed with push and require review from all installed companies?"
+            if publish_to_all else "Proceed with push?"
+        ),
         extra_dry_run=extra,
     ):
         return
@@ -1017,12 +1062,15 @@ def push_public(
         delete_missing=delete_missing,
         legacy_functions=legacy_functions,
         target=target,
+        publish_to_all=publish_to_all,
     )
     from caraer_cli.formatters.output import PushProgress
 
     installed_uuid = str(result.get("appUuid") or "")
     progress = PushProgress()
-    if company and installed_uuid:
+    if publish_to_all:
+        print_success("Pushed app for review by its existing installations.")
+    elif company and installed_uuid:
         progress.start("Installing on company")
         result["install"] = install_app_on_company(app_ctx.api_client(), installed_uuid)
         progress.finish()

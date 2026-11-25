@@ -32,7 +32,10 @@ def test_private_package_skips_existing_prefix() -> None:
     )
 
 
-def test_publish_modules_uses_caraer_api_not_env_tokens(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("publish_to_all", [False, True])
+def test_publish_modules_uses_caraer_api_not_env_tokens(
+    tmp_path: Path, monkeypatch, publish_to_all: bool
+) -> None:
     root = tmp_path / "app"
     modules = root / "src" / "app" / "modules" / "hero"
     modules.mkdir(parents=True)
@@ -56,17 +59,6 @@ def test_publish_modules_uses_caraer_api_not_env_tokens(tmp_path: Path, monkeypa
         return packed
 
     monkeypatch.setattr("caraer_cli.project.modules_publish.pack_tarball", fake_pack)
-    captured: dict = {}
-
-    def fake_publish(_client, app_uuid, payload):
-        captured.update(payload)
-        return {"data": {"appUuid": app_uuid, **payload}}
-
-    monkeypatch.setattr(
-        "caraer_cli.api.modules.publish_module_package",
-        fake_publish,
-    )
-
     config = ProjectConfig(platformVersion="2026.2", name="demo", srcDir="src", appUuid="app-1")
     summary = publish_modules(
         root,
@@ -75,13 +67,19 @@ def test_publish_modules_uses_caraer_api_not_env_tokens(tmp_path: Path, monkeypa
         version="0.1.0",
         release_notes="Fixed the hero.",
         client=client,
+        publish_to_all=publish_to_all,
     )
 
     assert summary["published"] is True
     assert summary["via"] == "api"
     assert summary["package"] == "@caraer/demo"
     assert "tarballBase64" not in summary
-    assert captured["releaseNotes"] == "Fixed the hero."
+    assert summary.get("publishToAll", False) is publish_to_all
+    path = "/api/v2/apps/app-1/cms-modules/package"
+    if publish_to_all:
+        path += "/publish-to-all"
+    assert client.request.call_args.args == ("POST", path)
+    assert client.request.call_args.kwargs["json_body"]["releaseNotes"] == "Fixed the hero."
 
 
 def test_published_package_includes_app_dependencies(tmp_path: Path) -> None:

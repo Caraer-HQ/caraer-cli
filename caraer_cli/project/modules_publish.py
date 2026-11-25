@@ -330,6 +330,7 @@ def publish_modules(
     private: bool = False,
     company: str | None = None,
     client: Any | None = None,
+    publish_to_all: bool = False,
 ) -> dict[str, Any]:
     """Stage and publish an app's modules. Returns a summary for the caller.
 
@@ -343,6 +344,8 @@ def publish_modules(
 
     registry_url = registry_url or os.environ.get("CARAER_REGISTRY_URL") or ""
     token = token or os.environ.get("CARAER_REGISTRY_TOKEN") or ""
+    if publish_to_all and (private or not config.appUuid or client is None):
+        raise ValueError("Publishing to all installations requires a public app and the Caraer API.")
 
     with tempfile.TemporaryDirectory(prefix="caraer-modules-") as tmp:
         staging, modules = stage_package(
@@ -380,10 +383,13 @@ def publish_modules(
                     "tarballBase64": base64.b64encode(tarball.read_bytes()).decode("ascii"),
                     "filename": tarball.name,
                 },
+                publish_to_all=publish_to_all,
             )
             summary["published"] = True
             summary["catalog"] = True
             summary["via"] = "api"
+            if publish_to_all:
+                summary["publishToAll"] = True
             return summary
 
         if not registry_url or not token:

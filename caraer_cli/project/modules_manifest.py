@@ -49,6 +49,22 @@ def frontmatter(source: str) -> str | None:
     return match.group(1) if match else None
 
 
+def has_preview_field_marker(source: str) -> bool:
+    """Check for an explicit field binding in the Astro template."""
+    markup = _FRONTMATTER.sub("", source, count=1)
+    markup = re.sub(
+        r"<!--.*?-->|\{/\*.*?\*/\}|<(script|style)\b[^>]*>.*?</\1\s*>",
+        "",
+        markup,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    return bool(re.search(
+        r"""<[a-zA-Z][\w:.-]*(?=\s)(?:[^<>"'{}]|"[^"]*"|'[^']*'|\{(?:[^{}]|\{[^{}]*\})*\})*?"""
+        r"""\sdata-caraer-field\s*=\s*(?:"[^"\s]+"|'[^'\s]+'|\{\s*[^}\s])""",
+        markup,
+    ))
+
+
 def _balanced_literal(text: str, start: int) -> str:
     """Slice a balanced ``{...}`` or ``[...]`` starting at ``start``.
 
