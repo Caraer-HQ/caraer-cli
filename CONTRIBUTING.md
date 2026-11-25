@@ -26,6 +26,26 @@ npm install --global typescript@5.6.3
 # or: pytest tests/unit -q
 ```
 
+## Publish the CLI
+
+The `publish.yml` workflow builds the wheel and source distribution, then
+uploads them to PyPI using Trusted Publishing. Set up a GitHub Actions
+[Trusted Publisher](https://docs.pypi.org/trusted-publishers/adding-a-publisher/)
+under the Caraer organization's existing `caraer-cli` project settings on PyPI.
+
+- GitHub owner: `Caraer-HQ`
+- Repository: `caraer-cli`
+- Workflow filename: `publish.yml`
+- GitHub environment: `pypi`
+
+For a release, bump the version in `pyproject.toml` and
+`caraer_cli/__init__.py`, refresh `uv.lock`, and update the changelog. After
+CI passes on the release commit, push a new matching tag such as `v0.1.18`.
+A manual dispatch must also select a release tag. Verify the workflow and
+install the exact version from PyPI in a fresh environment. After the first
+successful trusted release, remove the legacy GitHub `API_TOKEN` secret and
+revoke the old PyPI token if it was used only for this workflow.
+
 ## Guidelines
 
 - Keep the CLI thin: talk to Caraer REST APIs; do not require GCP credentials.
