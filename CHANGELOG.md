@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.1.17
+
+- CMS modules with settings now require at least one `data-caraer-field`
+  attribute in the Astro entry template. Existing modules without a marker
+  must add one before they pass `caraer apps validate` or `caraer apps push`.
+  Use the setting's manifest name, for example `data-caraer-field="heading"`.
+- Support authoring and previewing reusable form modules and wizard layouts.
+- Validate and preserve shared `FILTER` settings and ordered CMS module
+  settings tabs.
+- Public CMS module releases can opt into requiring review at all installed
+  companies with `caraer apps push --publish-to-all`, including the publisher
+  company if it has the app installed. This requires a compatible Caraer backend.
+
 ## 0.1.10
 
 - Accept MINIMAL, LEGACY and EXPANDED webhook formats alongside USER_FRIENDLY

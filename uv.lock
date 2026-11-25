@@ -74,7 +74,7 @@ wheels = [
 
 [[package]]
 name = "caraer-cli"
-version = "0.1.8"
+version = "0.1.17"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
@@ -92,6 +92,7 @@ dependencies = [
 [package.optional-dependencies]
 dev = [
     { name = "build" },
+    { name = "jsonschema" },
     { name = "pytest" },
 ]
 schemas = [
@@ -102,6 +103,7 @@ schemas = [
 requires-dist = [
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.2.1" },
     { name = "httpx", specifier = ">=0.27.0" },
+    { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.22.0" },
     { name = "jsonschema", marker = "extra == 'schemas'", specifier = ">=4.22.0" },
     { name = "keyring", specifier = ">=25.2.1" },
     { name = "platformdirs", specifier = ">=4.2.2" },
