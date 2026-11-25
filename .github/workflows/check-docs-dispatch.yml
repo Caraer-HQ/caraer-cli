@@ -1,0 +1,40 @@
+name: Check developer docs dispatch credential
+
+on:
+  push:
+    branches: [codex/check-developer-docs-dispatch]
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check release notification credential visibility
+        env:
+          DOCS_TOKEN: ${{ secrets.DOCS_DISPATCH_TOKEN }}
+          FALLBACK_TOKEN: ${{ secrets.CARAER_HQ_GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          token = os.environ["DOCS_TOKEN"] or os.environ["FALLBACK_TOKEN"]
+          print("Selected credential:", "DOCS_DISPATCH_TOKEN" if os.environ["DOCS_TOKEN"] else "CARAER_HQ_GITHUB_TOKEN")
+          if not token:
+              raise SystemExit("No notification credential is available")
+          for repo in ["caraer-cli", "caraer-developer"]:
+              request = urllib.request.Request(
+                  f"https://api.github.com/repos/Caraer-HQ/{repo}",
+                  headers={"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json"},
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=15) as response:
+                      permissions = json.load(response).get("permissions", {})
+                      print(f"{repo}: HTTP {response.status}; push access: {permissions.get('push', 'not reported')}")
+              except urllib.error.HTTPError as error:
+                  print(f"{repo}: HTTP {error.code}")
+          PY
