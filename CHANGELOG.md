@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.1.18
+
+- Publish Caraer CLI distributions through PyPI Trusted Publishing using
+  short-lived GitHub Actions credentials.
+
 ## 0.1.17
 
 - CMS modules with settings now require at least one `data-caraer-field`
