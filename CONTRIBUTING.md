@@ -46,6 +46,12 @@ install the exact version from PyPI in a fresh environment. After the first
 successful trusted release, remove the legacy GitHub `API_TOKEN` secret and
 revoke the old PyPI token if it was used only for this workflow.
 
+After upload, the release job records the distributions and notifies
+`Caraer-HQ/caraer-developer`. Store a fine-grained GitHub token as the
+`DOCS_DISPATCH_TOKEN` Actions repository secret in `caraer-cli`. Give it
+access to `caraer-developer` with **Contents: Read and write**. The release
+receipt is still recorded if the notification is skipped or fails.
+
 ## Guidelines
 
 - Keep the CLI thin: talk to Caraer REST APIs; do not require GCP credentials.

@@ -88,6 +88,10 @@ jobs:
       - name: Notify developer documentation assessment
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ secrets.DOCS_DISPATCH_TOKEN || secrets.CARAER_HQ_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.DOCS_DISPATCH_TOKEN }}
         run: |
-          printf '%s' '{"event_type":"developer-release"}' | gh api --method POST repos/Caraer-HQ/caraer-developer/dispatches --input -
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::Developer docs notification skipped. Set DOCS_DISPATCH_TOKEN with Contents write access to Caraer-HQ/caraer-developer."
+            exit 0
+          fi
+          gh api --method POST repos/Caraer-HQ/caraer-developer/dispatches -f event_type=developer-release
