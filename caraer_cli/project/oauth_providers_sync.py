@@ -36,6 +36,7 @@ def _sanitize_provider(raw: dict[str, Any]) -> dict[str, Any]:
         "scopes",
         "pkce",
         "connectionOwner",
+        "allowMultipleConnections",
     ):
         if key in raw and raw[key] is not None:
             out[key] = _env_expand(raw[key])

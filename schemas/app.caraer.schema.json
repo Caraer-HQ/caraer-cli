@@ -719,7 +719,11 @@
         "connectionOwner": {
           "type": "string",
           "enum": ["COMPANY", "USER"],
-          "description": "COMPANY (default): one shared connection per install. USER: one connection per Caraer user (Google Calendar)."
+          "description": "COMPANY (default): one shared account per installation. USER: accounts belong to individual Caraer users."
+        },
+        "allowMultipleConnections": {
+          "type": "boolean",
+          "description": "For USER providers, set false to allow one account per user and installation. When omitted for a new provider, multiple accounts are allowed."
         },
         "scopes": {
           "type": "array",

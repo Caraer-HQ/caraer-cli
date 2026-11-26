@@ -993,6 +993,15 @@ def _validate_oauth_providers(
                 f"{rel}:connectionOwner",
                 "connectionOwner must be COMPANY or USER.",
             )
+        if "allowMultipleConnections" in item and (
+            owner != "USER" or not isinstance(item["allowMultipleConnections"], bool)
+        ):
+            _issue(
+                issues,
+                "error",
+                f"{rel}:allowMultipleConnections",
+                "allowMultipleConnections must be a boolean on a USER OAuth provider.",
+            )
         logo = str(item.get("logo") or "").strip()
         if not logo:
             _issue(
