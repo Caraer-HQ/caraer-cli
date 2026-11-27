@@ -74,7 +74,7 @@ class CliConfig:
 
 
 def config_dir() -> Path:
-    return Path(user_config_dir(CONFIG_DIRNAME))
+    return Path(os.environ.get("CARAER_CLI_CONFIG_DIR") or user_config_dir(CONFIG_DIRNAME))
 
 
 def config_path() -> Path:

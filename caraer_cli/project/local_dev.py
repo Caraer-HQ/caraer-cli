@@ -357,7 +357,8 @@ def serve_functions(
     When enable_installation_shim is True, also serves local installation APIs.
     Reloads function discovery when files under src/ change (hot reload).
     """
-    load_dotenv(root / ".env")
+    if os.environ.get("CARAER_LOCAL_STACK") != "1":
+        load_dotenv(root / ".env")
     available = list_local_function_names(root, config)
     if function_names:
         unknown = [name for name in function_names if name not in available]

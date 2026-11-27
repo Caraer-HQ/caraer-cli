@@ -6,15 +6,15 @@ from pathlib import Path
 from typing import Any
 
 import keyring
-from platformdirs import user_config_dir
+
+from .config import config_dir
 
 
-APP_NAME = "caraer-cli"
 SERVICE_NAME = "caraer-cli-session"
 
 
 def _fallback_session_path() -> Path:
-    path = Path(user_config_dir(APP_NAME)) / "sessions.json"
+    path = config_dir() / "sessions.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
         path.write_text("{}", encoding="utf-8")

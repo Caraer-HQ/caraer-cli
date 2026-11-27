@@ -3228,8 +3228,10 @@ def install_harness(harness: Path, *, force: bool = False) -> int:
     if not force and _harness_ready(harness):
         return 0
 
+    command = _harness_install_command()
+    command[0] = shutil.which(command[0]) or command[0]
     code = subprocess.run(
-        _harness_install_command(), cwd=harness, env={**os.environ}, check=False
+        command, cwd=harness, env={**os.environ}, check=False
     ).returncode
     if code == 0:
         _record_cms_specs(harness)
@@ -3248,32 +3250,14 @@ def start_harness(
     Non-blocking so the caller can run the function server in the foreground at
     the same time; the two together are what "run my app locally" means.
     """
-    astro = harness / "node_modules" / ".bin" / "astro"
-    command = (
-        [
-            str(astro),
-            "dev",
-            "--port",
-            str(port),
-            "--host",
-            host,
-            "--ignore-lock",
-        ]
-        if astro.is_file()
-        else [
-            _package_manager(),
-            "exec",
-            "astro",
-            "dev",
-            "--port",
-            str(port),
-            "--host",
-            host,
-            # A crashed previous run leaves a lock behind and Astro then refuses
-            # to start, which would look like the harness is simply broken.
-            "--ignore-lock",
-        ]
-    )
+    astro = harness / "node_modules" / ".bin" / ("astro.cmd" if os.name == "nt" else "astro")
+    if astro.is_file():
+        command = [str(astro)]
+    else:
+        manager = _package_manager()
+        command = [shutil.which(manager) or manager, "exec", "astro"]
+    # A crashed previous run may leave Astro's lock behind.
+    command.extend(["dev", "--port", str(port), "--host", host, "--ignore-lock"])
     return subprocess.Popen(
         command,
         cwd=harness,
