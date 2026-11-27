@@ -109,6 +109,29 @@ def test_harness_preview_uses_block_flow_like_live_pages(tmp_path: Path) -> None
     assert "justify-content: center;" not in preview
 
 
+def test_pages_editor_uses_the_workspace_catalog_and_local_drafts(tmp_path: Path) -> None:
+    config = dict(app_name="demo_app", runtime_spec="latest", tokens_spec="latest")
+    scopes = []
+    for workspace_name in ("first", "second"):
+        workspace = tmp_path / workspace_name
+        workspace.mkdir()
+        root = _workspace(workspace)
+        _write_module(root, "intro")
+        harness, _ = write_harness(root, load_workspace(root), **config)
+        index = (harness / "src/pages/index.astro").read_text(encoding="utf-8")
+        pages = (harness / "src/pages/pages.astro").read_text(encoding="utf-8")
+        catalog = (harness / "src/page-catalog.ts").read_text(encoding="utf-8")
+        editor = (harness / "src/page-editor.ts").read_text(encoding="utf-8")
+        assert "'/pages'" in index
+        assert 'export const appName = "demo_app";' in catalog
+        assert '"intro": () => import("@modules/intro/index.astro")' in catalog
+        assert 'data-workspace={workspaceKey}' in pages
+        assert 'localStorage.setItem(storageKey' in editor
+        assert 'toCaraerPageDocument(current(), appName' in editor
+        scopes.append(catalog.split("export const workspaceKey = ", 1)[1].split(";", 1)[0])
+    assert scopes[0] != scopes[1]
+
+
 def test_harness_preview_uses_an_iframe_so_media_queries_see_the_frame_width(
     tmp_path: Path,
 ) -> None:

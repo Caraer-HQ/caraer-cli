@@ -122,6 +122,17 @@ caraer apps validate
 caraer apps local dev           # local server: POST /functions/<name>
 ```
 
+The local CMS preview has **Modules** for individual components and **Pages**
+for composing pages from the current app's sections. Pages saves drafts in this
+browser, scoped to the app workspace. Its preview uses the local modules and
+the selected company's branding when available.
+
+Use **Metadata & sharing** to edit the excerpt and SEO fields and see example
+search and social cards. **Export draft** downloads a CMS v2 page document with
+module references, stable placement IDs, and field overrides plus defaults.
+Images remain references, and shared site chrome and live record data are
+resolved by Caraer. The editor and export do not write to the connected CMS.
+
 Deploy only when you mean to. `caraer apps push` syncs the manifest, functions,
 webhooks, schedules, inbound routes, and OAuth providers, deploys the function
 build, publishes CMS modules, and installs the app on the selected company.

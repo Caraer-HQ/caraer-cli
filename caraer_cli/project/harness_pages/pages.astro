@@ -1,0 +1,266 @@
+---
+import { resolveFieldValues, renderModuleErrorHtml, withModuleBoundary } from '@caraer/cms-runtime';
+import { DEFAULT_TOKENS, toCustomProperties, toResponsiveTypeCss, toStyleAttribute } from '@caraer/cms-tokens';
+import { appName, workspaceKey, modules, loaders } from '../page-catalog';
+import { materializeModuleFields, recordValue } from '../page-fields';
+import { shareMetadata, type Draft, type Section } from '../page-document';
+
+const library = modules.map(module => ({
+  ...module,
+  defaults: materializeModuleFields(module.fields, {}),
+}));
+const catalog = new Map(modules.map(module => [module.name, module]));
+const companyChoice = Astro.url.searchParams.get('company');
+const companyQuery = companyChoice === null ? '' : '?' + new URLSearchParams({ company: companyChoice });
+const previewParams = new URLSearchParams(companyQuery);
+previewParams.set('preview', '1');
+const formAction = '/pages?' + previewParams;
+const preview = Astro.url.searchParams.get('preview') === '1';
+Astro.response.headers.set('Cache-Control', 'no-store');
+Astro.response.headers.set('Content-Security-Policy', "frame-ancestors 'self'");
+
+let draft: Draft = { title: 'Untitled page', slug: '/', sections: [] };
+if (preview && Astro.request.method === 'POST') {
+  try {
+    const data = (await Astro.request.formData()).get('draft');
+    if (typeof data !== 'string' || data.length > 1_000_000) throw new Error('Invalid draft size');
+    const raw: Draft = JSON.parse(data);
+    if (!recordValue(raw) || typeof raw.title !== 'string' || typeof raw.slug !== 'string'
+        || !Array.isArray(raw.sections)) throw new Error('Invalid draft');
+    draft = {
+      title: raw.title,
+      slug: raw.slug,
+      seo: {
+        title: typeof raw.seo?.title === 'string' ? raw.seo.title : undefined,
+        description: typeof raw.seo?.description === 'string' ? raw.seo.description : undefined,
+        image: typeof raw.seo?.image === 'string' ? raw.seo.image : undefined,
+        canonical: typeof raw.seo?.canonical === 'string' ? raw.seo.canonical : undefined,
+      },
+      sections: raw.sections.slice(0, 40).filter(section =>
+        recordValue(section) && section.hidden !== true && catalog.get(section.name)?.kind === 'section',
+      ),
+    };
+  } catch {
+    return new Response('Could not load this draft.', { status: 400 });
+  }
+}
+
+const meta = shareMetadata(draft);
+const tokens = Astro.locals.tokens ?? DEFAULT_TOKENS;
+const style = toStyleAttribute(toCustomProperties(tokens));
+const responsiveCss = toResponsiveTypeCss(tokens);
+const record = Astro.locals.record;
+const rendered = [];
+if (preview) {
+  const chrome = (kind: string): Section[] => {
+    const matches = modules.filter(module => module.kind === kind);
+    return matches.length === 1 ? [{ id: '__' + kind, name: matches[0].name, fields: {} }] : [];
+  };
+  const sections = [...chrome('header'), ...draft.sections, ...chrome('footer')];
+  for (const [index, section] of sections.entries()) {
+    const entry = catalog.get(section.name)!;
+    const ref = appName + '/' + entry.name;
+    const boundary = { moduleRef: ref, detail: true };
+    try {
+      const loaded = await loaders[entry.name]();
+      const stored = materializeModuleFields(entry.fields, recordValue(section.fields) ? section.fields : {});
+      rendered.push({
+        kind: entry.kind,
+        Component: withModuleBoundary(loaded.default, boundary, entry),
+        props: {
+          fields: resolveFieldValues(entry.fields, stored, record),
+          rawFields: stored,
+          record,
+          page: Astro.locals.page,
+          company: Astro.locals.company,
+          module: { id: section.id ?? 'page-' + index, ref, kind: entry.kind },
+          editor: null,
+        },
+      });
+    } catch (error) {
+      rendered.push({ kind: entry.kind, error: renderModuleErrorHtml(boundary, error) });
+    }
+  }
+}
+---
+<!doctype html>
+<html lang="en" style={preview ? style : undefined}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{preview ? meta.title : 'Pages · ' + appName}</title>
+    {preview && responsiveCss && <style is:inline set:html={responsiveCss} />}
+    {preview && <>
+      {meta.canonical && <link rel="canonical" href={meta.canonical} />}
+      {meta.description && <meta name="description" content={meta.description} />}
+      <meta property="og:title" content={meta.title} />
+      {meta.description && <meta property="og:description" content={meta.description} />}
+      {meta.image && <meta property="og:image" content={meta.image} />}
+    </>}
+  </head>
+  <body>
+    {preview ? (
+      <>
+        {rendered.filter(module => module.kind === 'header').map(({ Component, props, error }) => error
+          ? <Fragment set:html={error} />
+          : <div data-caraer-module="__header" data-caraer-module-ref={props!.module.ref}><Component {...props} /></div>)}
+        <main id="main" tabindex="-1">
+          {draft.sections.length === 0 && <p class="empty">Add a module to start building this page.</p>}
+          {rendered.filter(module => module.kind === 'section').map(({ Component, props, error }) => error
+            ? <Fragment set:html={error} />
+            : <div data-caraer-module={props!.module.id} data-caraer-module-ref={props!.module.ref}><Component {...props} /></div>)}
+        </main>
+        {rendered.filter(module => module.kind === 'footer').map(({ Component, props, error }) => error
+          ? <Fragment set:html={error} />
+          : <div data-caraer-module="__footer" data-caraer-module-ref={props!.module.ref}><Component {...props} /></div>)}
+      </>
+    ) : (
+      <div id="page-workspace" data-app={appName} data-workspace={workspaceKey} data-library={JSON.stringify(library)}>
+        <header class="editor-bar">
+          <strong>{appName}</strong>
+          <nav aria-label="Editor">
+            <a href={`/pages${companyQuery}`} aria-current="page">Pages</a>
+            <a href={`/${companyQuery}`}>Modules</a>
+          </nav>
+          <span class="status" id="draft-status" role="status">Local draft</span>
+        </header>
+        <div class="editor-grid">
+          <aside aria-label="Page settings">
+            <div class="sidebar-content">
+              <label for="draft-picker">Page</label>
+              <div class="row"><select id="draft-picker"></select><button id="new-draft" type="button">New</button></div>
+              <label for="draft-title">Page title</label>
+              <input id="draft-title" maxlength="120" />
+              <label for="draft-slug">URL path</label>
+              <input id="draft-slug" maxlength="160" spellcheck="false" />
+              <h2>Sections</h2>
+              <ol id="sections"></ol>
+              <div class="row"><select id="module-picker" aria-label="Choose a module"></select><button id="add-section" type="button">Add</button></div>
+              <div class="row draft-actions">
+                <button type="submit" form="preview-form">Update preview</button>
+                <button id="export-draft" type="button">Export draft</button>
+              </div>
+            </div>
+            <p class="field-help preview-note">This is a local preview. Not connected to a live page.</p>
+            <details class="metadata">
+              <summary><strong>Metadata &amp; sharing</strong></summary>
+              <div class="metadata-fields">
+                <label class="field">Excerpt <textarea id="draft-excerpt" rows="3" maxlength="350" aria-describedby="excerpt-help"></textarea></label>
+                <p class="field-help" id="excerpt-help">Short summary for page listings.</p>
+                <label class="field">SEO title <input id="seo-title" maxlength="160" /></label>
+                <label class="field">Meta description <textarea id="seo-description" rows="3" maxlength="320"></textarea></label>
+                <label class="field">Canonical URL <input id="seo-canonical" type="url" spellcheck="false" aria-describedby="canonical-help" /></label>
+                <p class="field-help" id="canonical-help">Optional. Use the absolute URL the published page should prefer.</p>
+                <label class="field">Share image URL <input id="seo-image" type="url" spellcheck="false" /></label>
+                <label class="checkbox"><input id="seo-no-index" type="checkbox" /> Hide from search engines</label>
+                <button id="open-share-preview" type="button">Share preview</button>
+              </div>
+            </details>
+          </aside>
+          <section class="preview-pane" aria-label="Page preview">
+            <form id="preview-form" action={formAction} method="post" target="page-preview">
+              <input type="hidden" name="draft" />
+            </form>
+            <iframe id="page-preview" name="page-preview" title="Page preview"></iframe>
+          </section>
+        </div>
+        <dialog id="share-preview" aria-labelledby="share-preview-title">
+          <div class="dialog-heading">
+            <h2 id="share-preview-title">Share preview</h2>
+            <form method="dialog"><button aria-label="Close share preview">Close</button></form>
+          </div>
+          <label class="field">Platform
+            <select id="share-platform">
+              <option value="google">Google</option>
+              <option value="facebook">Facebook</option>
+              <option value="meta">Meta (Threads)</option>
+              <option value="x">X</option>
+              <option value="tiktok">TikTok</option>
+            </select>
+          </label>
+          <div id="share-card" class="share-card" data-platform="google">
+            <img id="share-card-image" alt="" hidden referrerpolicy="no-referrer" />
+            <div class="share-card-copy">
+              <p id="share-card-url"></p>
+              <h3 id="share-card-title"></h3>
+              <p id="share-card-description"></p>
+            </div>
+          </div>
+          <p id="share-preview-note" class="field-help" aria-live="polite"></p>
+        </dialog>
+      </div>
+    )}
+  </body>
+</html>
+
+<script>
+  import { mountPageEditor } from '../page-editor';
+  const workspace = document.querySelector<HTMLElement>('#page-workspace');
+  if (workspace) mountPageEditor(workspace);
+</script>
+
+<style>
+  :global(body) { margin: 0; }
+  #page-workspace { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100dvh; color: #edf0f5; background: #171a21; font: 14px/1.45 system-ui, sans-serif; }
+  .editor-bar { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; padding: 12px 18px; border-bottom: 1px solid #353b49; }
+  .editor-bar nav, .row { display: flex; gap: 6px; }
+  .editor-bar a { color: inherit; text-decoration: none; padding: 6px 12px; border-radius: 6px; }
+  .editor-bar a[aria-current] { background: #35435c; }
+  .status { margin-inline-start: auto; color: #c2c9d5; }
+  .editor-grid { display: grid; grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); }
+  aside { display: grid; grid-template-rows: minmax(0, 1fr) auto auto; min-width: 0; min-height: 0; }
+  .sidebar-content { overflow-y: auto; padding: 16px; }
+  .sidebar-content > label { display: block; margin-top: 9px; margin-bottom: 4px; }
+  h2 { font-size: 16px; margin-block: 20px 8px; }
+  ol { padding: 0; list-style: none; }
+  #page-workspace :global(input:not([type='checkbox'])), #page-workspace :global(select),
+  #page-workspace :global(textarea), #page-workspace :global(button) {
+    box-sizing: border-box; min-width: 0; padding: 7px 9px; border: 1px solid #4b5363;
+    border-radius: 6px; background: #222733; color: inherit; font: inherit;
+  }
+  .sidebar-content > input, .row > select { width: 100%; }
+  #page-workspace :global(button) { cursor: pointer; }
+  #page-workspace :global(button:disabled) { opacity: .45; cursor: default; }
+  #page-workspace :global(:focus-visible) { outline: 2px solid #afc9ff; outline-offset: 2px; }
+  #page-workspace :global(.section-row) { display: flex; gap: 4px; align-items: start; margin-bottom: 7px; }
+  #page-workspace :global(details) { flex: 1; min-width: 0; }
+  #page-workspace :global(summary) { cursor: pointer; padding-block: 6px; }
+  #page-workspace :global(.field) { display: grid; justify-items: start; gap: 4px; margin-bottom: 10px; }
+  #page-workspace :global(.field > :is(input:not([type='checkbox']), select, textarea)) { width: 100%; }
+  #page-workspace :global(fieldset) { margin: 0 0 12px; min-width: 0; border: 1px solid #4b5363; border-radius: 6px; }
+  .draft-actions { margin-top: 16px; flex-wrap: wrap; }
+  .metadata { border-top: 1px solid #4b5363; background: #1d222c; }
+  #page-workspace .metadata > summary { padding: 12px 16px; }
+  #page-workspace .metadata > summary:focus-visible { outline-offset: -3px; }
+  .metadata-fields { box-sizing: border-box; max-height: min(460px, 55dvh); padding: 4px 16px 16px; overflow-y: auto; }
+  #open-share-preview { width: 100%; }
+  .metadata :global(.field) { margin-bottom: 6px; }
+  .field-help { color: #c2c9d5; font-size: 12px; margin: 0 0 12px; }
+  .preview-note { margin: 0; padding: 8px 16px; }
+  .checkbox { display: flex; align-items: center; gap: 6px; margin: 12px 0; }
+  dialog { width: min(500px, calc(100vw - 32px)); max-height: 90dvh; box-sizing: border-box; padding: 20px; color: inherit; background: #171a21; border: 1px solid #4b5363; border-radius: 14px; }
+  dialog::backdrop { background: #080a10b8; }
+  .dialog-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 0 0 14px; }
+  .dialog-heading h2 { margin: 0; }
+  .share-card { overflow: hidden; margin-bottom: 12px; border: 1px solid #4b5363; border-radius: 12px; background: #f1f2f4; color: #161920; }
+  .share-card img:not([hidden]) { display: block; width: 100%; aspect-ratio: 1.91; object-fit: cover; }
+  .share-card-copy { padding: 14px; overflow-wrap: anywhere; }
+  .share-card h3, .share-card p { margin: 0; }
+  .share-card h3 { margin-block: 4px; font-size: 17px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  #share-card-url { font-size: 12px; opacity: .8; }
+  #share-card-description { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+  .share-card[data-platform="google"] { background: #fff; }
+  .share-card[data-platform="google"] h3 { color: #1a0dab; font-size: 20px; font-weight: 500; }
+  .share-card[data-platform="meta"] { background: #171717; color: #f7f7f7; }
+  .share-card[data-platform="x"] { background: #11161c; color: #f5f7f9; }
+  .share-card[data-platform="tiktok"] { background: #101012; color: #fff; border-top: 2px solid #25f4ee; }
+  .preview-pane { min-width: 0; min-height: 0; }
+  iframe { display: block; width: 100%; height: 100%; border: 0; background: #f8f7f3; }
+  .empty { margin: 0; padding: 48px 24px; text-align: center; background: #f8f7f3; color: #130b0b; font: 16px system-ui, sans-serif; }
+  @media (max-width: 720px) {
+    #page-workspace { height: auto; }
+    .editor-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: 48dvh 62dvh; }
+    .metadata-fields { max-height: 29dvh; }
+  }
+</style>
