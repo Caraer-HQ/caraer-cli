@@ -14,8 +14,11 @@ from __future__ import annotations
 
 import json
 import os
+import posixpath
+import re
 import shutil
 import subprocess
+import tarfile
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -271,13 +274,14 @@ def publish_package(
     dry_run: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     """Run `npm publish` against the Caraer registry."""
+    tarball = pack_tarball(staging)
     host = registry_url.split("://", 1)[-1].rstrip("/")
     (staging / ".npmrc").write_text(
         f"{PACKAGE_SCOPE}:registry={registry_url}\n//{host}/:_authToken={token}\n",
         encoding="utf-8",
     )
 
-    command = ["npm", "publish", "--registry", registry_url, "--access", "restricted"]
+    command = ["npm", "publish", str(tarball), "--registry", registry_url, "--access", "restricted"]
     if dry_run:
         command.append("--dry-run")
 
@@ -313,7 +317,46 @@ def pack_tarball(staging: Path) -> Path:
         if not matches:
             raise RuntimeError("npm pack did not produce a tarball.")
         packed = matches[0]
+    validate_packed_asset_imports(packed)
     return packed
+
+
+_STATIC_IMPORT = re.compile(
+    r"""^[ \t]*(?:import[ \t]*[^"';]*?\bfrom\s+|import\s*|"""
+    r"""export[ \t]+[^"';]*?\bfrom\s+)(["'])(\.{1,2}/[^"'\r\n]+)\1""",
+    re.MULTILINE,
+)
+_CSS_IMPORT = re.compile(r"""@import\s+(?:url\(\s*)?(["'])(\.{1,2}/[^"'\r\n]+)\1""")
+_SOURCE_SUFFIXES = {".astro", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx",
+                    ".mts", ".cts", ".vue", ".svelte", ".css", ".scss", ".sass"}
+
+
+def validate_packed_asset_imports(tarball: Path) -> None:
+    """Check static relative assets against the npm pack result before upload."""
+    with tarfile.open(tarball, "r:gz") as archive:
+        packed = {member.name for member in archive.getmembers() if member.isfile()}
+        for name in sorted(packed):
+            if not name.startswith("package/modules/") or Path(name).suffix not in _SOURCE_SUFFIXES:
+                continue
+            source = archive.extractfile(name)
+            if source is None:
+                continue
+            content = source.read().decode("utf-8")
+            for specifier in (
+                match.group(2)
+                for pattern in (_STATIC_IMPORT, _CSS_IMPORT)
+                for match in pattern.finditer(content)
+            ):
+                path = re.split(r"[?#]", specifier, maxsplit=1)[0]
+                suffix = Path(path).suffix.lower()
+                if not suffix or suffix in _SOURCE_SUFFIXES:
+                    continue
+                resolved = posixpath.normpath(posixpath.join(posixpath.dirname(name), path))
+                if not resolved.startswith("package/") or resolved not in packed:
+                    raise ValueError(
+                        f"Missing asset {specifier!r} imported by {name.removeprefix('package/')} "
+                        "in the packed CMS module archive."
+                    )
 
 
 def publish_modules(
@@ -366,6 +409,7 @@ def publish_modules(
         }
 
         if dry_run:
+            pack_tarball(staging)
             summary["published"] = False
             summary["dryRun"] = True
             return summary

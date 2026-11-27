@@ -128,7 +128,8 @@ build, publishes CMS modules, and installs the app on the selected company.
 
 ```bash
 caraer apps push --dry-run
-caraer apps push                # add --wait to block until the runtime is READY
+caraer apps push                # add --wait to block until the app runtime is READY
+caraer apps push --wait-for-website  # wait for the module release on the selected website
 caraer apps status
 caraer apps local logs          # the only local function, or a prompt
 caraer apps local logs --all
@@ -138,6 +139,13 @@ caraer apps local logs --all
 with `--dry-run` and `--no-deploy`. Validation errors cancel the command with a
 non-zero exit code; fix the reported issues before retrying. Warnings are shown
 and allow the push to continue, as with `caraer apps validate`.
+
+Module package publication, app-runtime readiness, and website deployment are
+reported separately. For a CMS module push to the selected company,
+`--wait-for-website` waits up to 15 minutes for the matching package on the live
+site. A failed build or a timeout exits nonzero. A timeout reports Pending and
+includes the build ID when available. Package validation checks static relative
+asset imports against the packed archive before upload.
 
 Only the company that created the app (or a super-admin) can push builds.
 

@@ -305,3 +305,75 @@ def test_push_validates_before_a_successful_dry_run(tmp_path):
     assert "Review optional branding" in result.output
     assert "✓ Validating local app" in result.output
     push.assert_not_called()
+
+
+@pytest.mark.parametrize("terminal_status", ["failed", "live"])
+def test_website_wait_uses_the_matching_package_only(terminal_status):
+    from caraer_cli.api.modules import website_build_status
+
+    client = MagicMock()
+    old = {"appUuid": "app-1", "packageVersion": "1.0.0", "status": "live"}
+    pending = {"appUuid": "app-1", "packageVersion": "2.0.0", "status": "pending", "buildId": "dpl_2"}
+    terminal = {**pending, "status": terminal_status}
+    client.request.side_effect = [
+        {"data": {"moduleBuilds": [old, pending]}},
+        {"data": {"moduleBuilds": [old, terminal]}},
+    ]
+    with patch("time.sleep") as sleep:
+        assert website_build_status(client, "app-1", "2.0.0", wait=True) == terminal
+        sleep.assert_called_once()
+    assert client.request.call_args.kwargs["params"] == {
+        "appUuid": "app-1", "packageVersion": "2.0.0",
+    }
+
+
+def test_website_wait_returns_pending_with_the_build_reference_on_timeout():
+    from caraer_cli.api.modules import website_build_status
+
+    client = MagicMock()
+    client.request.return_value = {"data": {"moduleBuilds": [{
+        "appUuid": "app-1", "packageVersion": "2.0.0", "status": "deploying", "buildId": "dpl_2",
+    }]}}
+    with patch("time.monotonic", side_effect=[0, 901]):
+        status = website_build_status(client, "app-1", "2.0.0", wait=True)
+    assert status["status"] == "pending"
+    assert status["buildId"] == "dpl_2"
+
+
+@pytest.mark.parametrize(("status", "exit_code"), [("live", 0), ("failed", 1), ("pending", 1)])
+def test_push_website_wait_controls_exit_code(tmp_path, monkeypatch, status, exit_code):
+    root = tmp_path / "demo"
+    scaffold_app_project(
+        root,
+        app_payload=build_public_app_placeholder(label="Demo", name="demo"),
+        app_uuid="app-1",
+        sample_function=None,
+        force=True,
+    )
+    module = root / "src/app/modules/hero/hero.astro"
+    module.parent.mkdir(parents=True, exist_ok=True)
+    module.write_text(
+        "---\nexport const manifest = { name: 'hero', kind: 'section', "
+        "label: 'Hero', category: 'content' };\n---\n<div></div>\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(root)
+    with (
+        patch("caraer_cli.commands.apps._confirm_push_plan", return_value=True),
+        patch("caraer_cli.commands.apps._run_push", return_value={
+            "appUuid": "app-1", "cmsModules": {"published": True, "version": "2.0.0"},
+        }),
+        patch("caraer_cli.app_install.install_app_on_company", return_value={}),
+        patch("caraer_cli.api.modules.website_build_status", return_value={
+            "status": status, "buildId": "dpl_2",
+        }) as website_status,
+    ):
+        result = _invoke_push(
+            _app_ctx(company_uuid="company-1"),
+            ["--yes", "--version", "2.0.0", "--notes", "second", "--wait-for-website"],
+        )
+    assert result.exit_code == exit_code, result.output
+    assert "dpl_2" in result.output
+    website_status.assert_called_once()
+    assert website_status.call_args.args[1:] == ("app-1", "2.0.0")
+    assert website_status.call_args.kwargs == {"wait": True}

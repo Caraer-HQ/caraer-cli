@@ -187,3 +187,24 @@ def test_read_app_dependencies_skips_missing_package_json(tmp_path: Path) -> Non
 def test_build_package_json_omits_empty_dependencies() -> None:
     payload = build_package_json("demo", "1.0.0", [])
     assert "dependencies" not in payload
+
+
+def test_packed_asset_validation_reports_the_importer(tmp_path: Path) -> None:
+    import tarfile
+
+    from caraer_cli.project.modules_publish import validate_packed_asset_imports
+
+    source = tmp_path / "index.astro"
+    source.write_text("---\nimport cloud from '../_shared/cloud.webp';\n---\n", encoding="utf-8")
+    archive = tmp_path / "modules.tgz"
+    with tarfile.open(archive, "w:gz") as packed:
+        packed.add(source, arcname="package/modules/hero/index.astro")
+    with pytest.raises(ValueError, match=r"cloud\.webp.*modules/hero/index\.astro"):
+        validate_packed_asset_imports(archive)
+
+    cloud = tmp_path / "cloud.webp"
+    cloud.write_bytes(b"webp-fixture")
+    with tarfile.open(archive, "w:gz") as packed:
+        packed.add(source, arcname="package/modules/hero/index.astro")
+        packed.add(cloud, arcname="package/modules/_shared/cloud.webp")
+    validate_packed_asset_imports(archive)

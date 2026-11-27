@@ -914,6 +914,10 @@ def push_public(
             "publishing CMS modules. Default: skip wait and continue."
         ),
     ),
+    wait_for_website: bool = typer.Option(
+        False, "--wait-for-website",
+        help="Wait up to 15 minutes for this release on the selected company's live website.",
+    ),
     version: str | None = typer.Option(
         None,
         "--version",
@@ -1033,6 +1037,15 @@ def push_public(
             extra = "Would make the CMS release pending review for all installed companies."
         elif company:
             extra = f"Would install on company {company}."
+    if wait_for_website and (not company or not deploy or legacy_functions or
+                             target != "production" or app_ctx.profile.sandbox_uuid or publish_to_all):
+        raise typer.BadParameter(
+            "--wait-for-website requires a selected company and a production push of its CMS modules."
+        )
+    if wait_for_website:
+        config = load_workspace(root)
+        if not any(module.config and module.entry.is_file() for module in discover_local_modules(root, config)):
+            raise typer.BadParameter("--wait-for-website requires CMS modules in the app.")
     if not _confirm_push_plan(
         app_ctx,
         client,
@@ -1082,6 +1095,31 @@ def push_public(
                 "Skipped company install. Select a company with "
                 "'caraer company select <uuid>'."
             )
+    cms_modules = result.get("cmsModules") or {}
+    if company and installed_uuid and not publish_to_all and cms_modules.get("published"):
+        from caraer_cli.api.modules import website_build_status
+
+        try:
+            website = website_build_status(
+                client, installed_uuid, cms_modules["version"], wait=wait_for_website,
+            )
+        except Exception as error:
+            if wait_for_website:
+                print_warning(f"Website build status unavailable ({type(error).__name__}).")
+                raise typer.Exit(code=1) from None
+            print_warning("Website build status unavailable.")
+        else:
+            result["websiteBuild"] = website
+            status = website["status"]
+            print_data(result, app_ctx.output)
+            if wait_for_website and status != "live":
+                build = website.get("buildId") or "not yet assigned"
+                print_warning(f"Website build {status.capitalize()} (build {build}).")
+                raise typer.Exit(code=1)
+            return
+    if wait_for_website:
+        print_warning("No CMS module package was published for the website to build.")
+        raise typer.Exit(code=1)
     print_data(result, app_ctx.output)
 
 

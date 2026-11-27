@@ -50,3 +50,29 @@ def publish_module_catalog(
 def list_module_catalog(client: CaraerApiClient, app_uuid: str) -> dict[str, Any]:
     """Read the modules currently registered for an app."""
     return client.request("GET", f"/api/v2/apps/{app_uuid}/cms-modules")
+
+
+def website_build_status(
+    client: CaraerApiClient, app_uuid: str, version: str, *, wait: bool,
+) -> dict[str, Any]:
+    """Read only the website build tied to the pushed module version."""
+    import time
+
+    deadline = time.monotonic() + (15 * 60 if wait else 0)
+    last = {"appUuid": app_uuid, "packageVersion": version, "status": "pending"}
+    while True:
+        response = client.request(
+            "GET", "/api/v2/webpages/v2/deployment-status",
+            params={"appUuid": app_uuid, "packageVersion": version},
+        )
+        data = response.get("data") or {}
+        for build in data.get("moduleBuilds") or []:
+            if build.get("appUuid") == app_uuid and build.get("packageVersion") == version:
+                last = build
+                break
+        if not wait or last["status"] in {"live", "failed", "cancelled", "blocked"}:
+            return last
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return {**last, "status": "pending"}
+        time.sleep(min(5, remaining))
